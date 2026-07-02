@@ -262,9 +262,9 @@ export default function MerchantDashboard({
   }, 0);
 
   // First steps progress tracking
-  const step1Done = clients.length > 2; // Default mock has some, so if they add more or have clients
-  const step2Done = appointments.length > 3; // Initial mock has some appointments
-  const step3Done = services.length > 4; // Check if custom services listed
+  const step1Done = merchant ? clients.length >= 1 : clients.length > 2;
+  const step2Done = merchant ? appointments.length >= 1 : appointments.length > 3;
+  const step3Done = merchant ? (services.length > 4 || services.some(s => s.id.startsWith('serv-') && !['serv-1', 'serv-2', 'serv-3', 'serv-4'].includes(s.id))) : services.length > 4;
 
   // Handlers
   const handleCreateService = (e: React.FormEvent) => {

@@ -104,31 +104,28 @@ export default function App() {
           if (merchant) {
             setCurrentMerchant(merchant);
             
-            // Sync database connection
-            const connected = await firebaseService.checkConnection();
-            setFirebaseConnected(connected);
+            // Since we successfully retrieved the merchant profile, we are connected!
+            setFirebaseConnected(true);
 
-            if (connected) {
-              if (merchant.onboardingCompleted) {
-                // Fetch isolated data
-                const fbServices = await firebaseService.getServices(fbUser.uid);
-                if (fbServices.length > 0) setServices(fbServices);
+            if (merchant.onboardingCompleted) {
+              // Fetch isolated data in parallel to maximize speed and bypass sequential lag
+              const [fbServices, fbBarbers, fbClients, fbAppointments] = await Promise.all([
+                firebaseService.getServices(fbUser.uid),
+                firebaseService.getBarbers(fbUser.uid),
+                firebaseService.getClients(fbUser.uid),
+                firebaseService.getAppointments(fbUser.uid)
+              ]);
 
-                const fbBarbers = await firebaseService.getBarbers(fbUser.uid);
-                if (fbBarbers.length > 0) setBarbers(fbBarbers);
-
-                const fbClients = await firebaseService.getClients(fbUser.uid);
-                setClients(fbClients);
-
-                const fbAppointments = await firebaseService.getAppointments(fbUser.uid);
-                setAppointments(fbAppointments);
-              } else {
-                // Keep clean/empty for new users who are about to start onboarding
-                setServices([]);
-                setBarbers([]);
-                setClients([]);
-                setAppointments([]);
-              }
+              if (fbServices.length > 0) setServices(fbServices);
+              if (fbBarbers.length > 0) setBarbers(fbBarbers);
+              setClients(fbClients);
+              setAppointments(fbAppointments);
+            } else {
+              // Keep clean/empty for new users who are about to start onboarding
+              setServices([]);
+              setBarbers([]);
+              setClients([]);
+              setAppointments([]);
             }
             
             // If trial has expired, stay on landing (blocker will catch it)
@@ -152,9 +149,11 @@ export default function App() {
           setBarbers(defaultBarbers);
           setClients(defaultClients);
           setAppointments(defaultAppointments);
+          setFirebaseConnected(true);
         }
       } catch (err) {
         console.error("Auth listener error:", err);
+        setFirebaseConnected(false);
       } finally {
         setIsLoading(false);
       }
