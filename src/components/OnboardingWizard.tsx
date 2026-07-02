@@ -22,6 +22,7 @@ import {
   BadgeAlert
 } from 'lucide-react';
 import { OnboardingData } from '../types';
+import { notificationService } from '../services/notificationService';
 
 interface OnboardingWizardProps {
   initialData?: Partial<OnboardingData>;
@@ -69,9 +70,20 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
       const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
       setSmsCode(generatedCode);
       
+      // Request notification permission automatically on step 4
+      if (notificationService.isSupported() && notificationService.getPermissionStatus() === 'default') {
+        notificationService.requestPermission();
+      }
+      
       // Delay simulated SMS notification for extreme delight
       const timer = setTimeout(() => {
-        setSmsNotification(`[SMS] Cortestime: Seu código de ativação é ${generatedCode}. Digite-o para ativar sua barbearia!`);
+        const textMsg = `Seu código de ativação é ${generatedCode}. Digite-o para ativar sua barbearia!`;
+        setSmsNotification(`[SMS] Cortestime: ${textMsg}`);
+        
+        // Trigger a real system notification that will show in the mobile phone notifications!
+        if (notificationService.isSupported() && notificationService.getPermissionStatus() === 'granted') {
+          notificationService.triggerNotification('💬 SMS Recebido', `Cortestime: ${textMsg}`);
+        }
       }, 1500);
 
       // Countdown timer

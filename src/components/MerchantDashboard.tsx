@@ -25,7 +25,8 @@ import {
   Users,
   Check,
   CreditCard,
-  Building
+  Building,
+  Undo
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -119,9 +120,10 @@ export default function MerchantDashboard({
   const [newWaitService, setNewWaitService] = useState('Corte Social');
 
   // WhatsApp template notification alert
-  const [whatsappAlert, setWhatsappAlert] = useState<{isOpen: boolean, clientName: string, message: string}>({
+  const [whatsappAlert, setWhatsappAlert] = useState<{isOpen: boolean, clientName: string, clientPhone: string, message: string}>({
     isOpen: false,
     clientName: '',
+    clientPhone: '',
     message: ''
   });
 
@@ -330,13 +332,58 @@ export default function MerchantDashboard({
     setNewWaitPhone('');
   };
 
+  const formatAppointmentDateForWhatsApp = (dateStr: string) => {
+    try {
+      if (!dateStr) return '';
+      let dateObj: Date;
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        dateObj = new Date(year, month, day);
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        dateObj = new Date(year, month, day);
+      } else {
+        dateObj = new Date(dateStr);
+      }
+      
+      const weekdays = [
+        'domingo',
+        'segunda-feira',
+        'terça-feira',
+        'quarta-feira',
+        'quinta-feira',
+        'sexta-feira',
+        'sábado'
+      ];
+      const weekday = weekdays[dateObj.getDay()];
+      return `${weekday}, ${dateObj.getDate()}/${dateObj.getMonth() + 1}/${dateObj.getFullYear()}`;
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
+  const getFormattedPhoneForWhatsApp = (phoneStr: string) => {
+    let cleaned = phoneStr.replace(/\D/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 11 && !cleaned.startsWith('55')) {
+      cleaned = '55' + cleaned;
+    }
+    return cleaned;
+  };
+
   const triggerWhatsappAlert = (app: Appointment) => {
-    const service = services.find(s => s.id === app.serviceId);
-    const barber = barbers.find(b => b.id === app.barberId);
-    const text = `Olá, ${app.clientName}! Confirmamos o seu agendamento de ${service?.name || 'Corte'} com o barbeiro ${barber?.name || 'profissional'} no dia ${app.date} às ${app.time}. Esperamos você! 💈`;
+    const formattedDate = formatAppointmentDateForWhatsApp(app.date);
+    const text = `Agendamento realizado com sucesso pelo estabelecimento!\n\nOlá ${app.clientName}, tudo bem?\n\nSeu horário ${formattedDate} às ${app.time} está confirmado!\n\nEm caso de dúvidas, responda a essa mensagem!`;
     setWhatsappAlert({
       isOpen: true,
       clientName: app.clientName,
+      clientPhone: app.clientPhone || '',
       message: text
     });
   };
@@ -611,8 +658,12 @@ export default function MerchantDashboard({
                       <p className="text-[10px] text-gray-500">{clients.length} clientes cadastrados</p>
                     </div>
                   </div>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${step1Done ? 'bg-brand-lime text-brand-dark' : 'bg-gray-100'}`}>
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                    step1Done 
+                      ? 'bg-brand-lime border-brand-lime text-brand-dark' 
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {step1Done && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -629,8 +680,12 @@ export default function MerchantDashboard({
                       <p className="text-[10px] text-gray-500">{appointments.length} horários marcados</p>
                     </div>
                   </div>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${step2Done ? 'bg-brand-lime text-brand-dark' : 'bg-gray-100'}`}>
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                    step2Done 
+                      ? 'bg-brand-lime border-brand-lime text-brand-dark' 
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {step2Done && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -647,8 +702,12 @@ export default function MerchantDashboard({
                       <p className="text-[10px] text-gray-500">{services.length} serviços listados</p>
                     </div>
                   </div>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${step3Done ? 'bg-brand-lime text-brand-dark' : 'bg-gray-100'}`}>
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                    step3Done 
+                      ? 'bg-brand-lime border-brand-lime text-brand-dark' 
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {step3Done && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
                 </div>
               </div>
@@ -749,13 +808,21 @@ export default function MerchantDashboard({
                             {app.status === 'completed' ? 'Fechado' : app.status === 'cancelled' ? 'Cancelado' : 'Agendado'}
                           </span>
                           
-                          {app.status === 'pending' && (
+                          {app.status === 'pending' ? (
                             <button 
                               onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
                               className="p-1 bg-brand-lime hover:bg-brand-lime-dark text-brand-dark rounded-lg transition-colors"
                               title="Finalizar serviço e fechar caixa"
                             >
                               <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => onUpdateAppointmentStatus(app.id, 'pending')}
+                              className="p-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-brand-blue rounded-lg transition-colors"
+                              title="Desfazer / Reabrir agendamento"
+                            >
+                              <Undo className="w-3.5 h-3.5" />
                             </button>
                           )}
                           
@@ -884,13 +951,21 @@ export default function MerchantDashboard({
                                 <div className="flex justify-between items-center mt-1 pt-1 border-t border-black/5">
                                   <span className="font-mono text-[8px] text-gray-400">{app.time}</span>
                                   <div className="flex gap-1">
-                                    {app.status === 'pending' && (
+                                    {app.status === 'pending' ? (
                                       <button 
                                         onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
                                         className="p-0.5 bg-brand-lime hover:bg-brand-lime-dark text-brand-dark rounded transition-colors"
                                         title="Finalizar"
                                       >
                                         <Check className="w-2.5 h-2.5" />
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        onClick={() => onUpdateAppointmentStatus(app.id, 'pending')}
+                                        className="p-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-brand-blue rounded transition-colors"
+                                        title="Desfazer / Reabrir"
+                                      >
+                                        <Undo className="w-2.5 h-2.5" />
                                       </button>
                                     )}
                                     <button 
@@ -1501,7 +1576,7 @@ export default function MerchantDashboard({
               className="bg-white rounded-3xl max-w-sm w-full p-6 text-left space-y-4 shadow-2xl relative"
             >
               <button 
-                onClick={() => setWhatsappAlert({isOpen: false, clientName: '', message: ''})}
+                onClick={() => setWhatsappAlert({isOpen: false, clientName: '', clientPhone: '', message: ''})}
                 className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-400"
               >
                 <X className="w-5 h-5" />
@@ -1523,15 +1598,16 @@ export default function MerchantDashboard({
               <div className="flex gap-2 pt-2">
                 <button 
                   onClick={() => {
-                    alert('Simulação de envio bem-sucedida! Notificação despachada.');
-                    setWhatsappAlert({isOpen: false, clientName: '', message: ''});
+                    const formattedPhone = getFormattedPhoneForWhatsApp(whatsappAlert.clientPhone);
+                    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(whatsappAlert.message)}`, '_blank');
+                    setWhatsappAlert({isOpen: false, clientName: '', clientPhone: '', message: ''});
                   }}
                   className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors"
                 >
                   Enviar por WhatsApp
                 </button>
                 <button 
-                  onClick={() => setWhatsappAlert({isOpen: false, clientName: '', message: ''})}
+                  onClick={() => setWhatsappAlert({isOpen: false, clientName: '', clientPhone: '', message: ''})}
                   className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors"
                 >
                   Cancelar

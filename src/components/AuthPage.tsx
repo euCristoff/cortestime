@@ -84,6 +84,42 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
       );
     }
 
+    if (
+      errStr.toLowerCase().includes("offline") || 
+      errStr.toLowerCase().includes("could not reach") || 
+      errStr.toLowerCase().includes("unavailable") ||
+      errStr.toLowerCase().includes("network-request-failed")
+    ) {
+      return (
+        <div className="p-4 bg-orange-50 text-orange-950 rounded-2xl text-xs space-y-3 border border-orange-200">
+          <div className="flex items-center gap-2 font-bold text-orange-800">
+            <BadgeAlert className="w-4.5 h-4.5 shrink-0" />
+            <span>Banco de Dados Não Configurado ou Sem Conexão</span>
+          </div>
+          <p className="text-gray-700 leading-relaxed text-left font-normal">
+            Esse erro ocorre porque o banco de dados do <strong>Firestore Database</strong> ou os métodos de login ainda não foram ativados no console do Firebase do seu projeto de produção (<strong>cortestimey</strong>).
+          </p>
+          <div className="text-left space-y-2 text-gray-700 font-normal leading-relaxed">
+            <p className="font-bold text-orange-800">Siga estes passos para ativar no seu Firebase:</p>
+            <ol className="list-decimal list-inside space-y-2 text-[11px] pl-1">
+              <li>
+                Acesse o <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="underline font-bold text-orange-800 hover:text-orange-900">Console do Firebase</a> e selecione seu projeto <strong>cortestimey</strong>.
+              </li>
+              <li>
+                No menu lateral esquerdo, vá em <strong>Build</strong> &gt; <strong>Firestore Database</strong>.
+              </li>
+              <li>
+                Clique em <strong>Criar Banco de Dados</strong> (se ainda não existir). Escolha a localização (ex: <code>southamerica-east1</code>) e selecione iniciar em <strong>Modo de Teste</strong> para liberar as permissões de leitura/escrita temporariamente.
+              </li>
+              <li>
+                No menu esquerdo, vá em <strong>Build</strong> &gt; <strong>Authentication</strong>. Se for o primeiro acesso, clique em "Começar". Na aba <strong>Sign-in method</strong>, certifique-se de que o provedor <strong>E-mail/Senha</strong> está <strong>Ativado</strong>.
+              </li>
+            </ol>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="p-3.5 bg-red-50 text-red-600 rounded-xl text-xs font-semibold flex items-start gap-2 border border-red-100">
         <BadgeAlert className="w-4 h-4 shrink-0 mt-0.5" />

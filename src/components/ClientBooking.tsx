@@ -139,55 +139,110 @@ export default function ClientBooking({
               key="confirmed"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white rounded-3xl p-8 border border-gray-100 shadow-xl text-center space-y-6"
+              className="bg-[#1e1f22] rounded-3xl overflow-hidden shadow-2xl text-center border border-gray-800"
             >
-              <div className="w-16 h-16 bg-brand-lime/20 text-brand-lime-dark rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="font-display font-bold text-2xl text-brand-dark">Agendamento Confirmado!</h3>
-                <p className="text-xs text-gray-500">
-                  Seu horário foi reservado com sucesso no sistema da barbearia.
-                </p>
+              {/* GREEN TOP BAR */}
+              <div className="bg-gradient-to-b from-[#1E5D3C] to-[#123E25] py-8 text-white flex flex-col items-center justify-center space-y-2">
+                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center border-2 border-white/40">
+                  <CheckCircle2 className="w-7 h-7 text-white stroke-[2.5]" />
+                </div>
+                <span className="text-[10px] tracking-wider uppercase font-bold text-gray-200">Agendamento realizado</span>
               </div>
 
-              <div className="bg-gray-50 p-4 rounded-2xl text-left text-xs space-y-2 border border-gray-100">
-                <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                  <span className="text-gray-400">Serviço</span>
-                  <span className="font-bold text-brand-dark">{selectedService?.name}</span>
+              {/* TICKET DETAILS IN DARK SLATE */}
+              <div className="p-6 space-y-6 bg-[#18191b] text-left">
+                <div className="space-y-4">
+                  {/* Date */}
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-white tracking-wide">
+                      {(() => {
+                        const capitalized = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+                        return capitalized(selectedDate.toLocaleDateString('pt-BR', { 
+                          weekday: 'long', 
+                          day: 'numeric', 
+                          month: 'long', 
+                          year: 'numeric' 
+                        }));
+                      })()}
+                    </p>
+                  </div>
+
+                  {/* Time separator */}
+                  <div className="flex items-center justify-between text-xs font-mono text-gray-400">
+                    <span className="text-sm font-bold text-white bg-white/5 px-2.5 py-1 rounded-lg">{selectedTime}</span>
+                    <span className="text-gray-600 tracking-widest flex-1 text-center px-4">------------------</span>
+                    <span className="text-sm font-bold text-white bg-white/5 px-2.5 py-1 rounded-lg">
+                      {(() => {
+                        const [hours, minutes] = selectedTime.split(':').map(Number);
+                        const duration = selectedService?.durationMin || 30;
+                        const endMinutes = (hours * 60 + minutes + duration);
+                        const endHours = Math.floor(endMinutes / 60) % 24;
+                        const endMins = endMinutes % 60;
+                        return `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
+                      })()}
+                    </span>
+                  </div>
+
+                  {/* Client name */}
+                  <div className="text-center py-2">
+                    <h4 className="text-2xl font-display font-extrabold text-[#D59B6C] tracking-wide uppercase">
+                      {clientName}
+                    </h4>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Cliente</p>
+                  </div>
+
+                  {/* Service details and price */}
+                  <div className="bg-white/5 p-4 rounded-2xl flex justify-between items-center border border-white/5">
+                    <div>
+                      <p className="text-xs font-extrabold text-white uppercase tracking-wider">{selectedService?.name}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Profissional: {selectedBarber?.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-extrabold text-[#D59B6C]">R$ {selectedService?.price.toFixed(2)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                  <span className="text-gray-400">Profissional</span>
-                  <span className="font-bold text-brand-dark">{selectedBarber?.name}</span>
-                </div>
-                <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                  <span className="text-gray-400">Data</span>
-                  <span className="font-bold text-brand-dark">
-                    {selectedDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                  <span className="text-gray-400">Horário</span>
-                  <span className="font-bold text-brand-dark">{selectedTime}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Preço</span>
-                  <span className="font-bold text-brand-blue">R$ {selectedService?.price.toFixed(2)}</span>
+
+                {/* Buttons */}
+                <div className="space-y-3 pt-2">
+                  <button 
+                    onClick={onClose}
+                    className="w-full bg-[#B36B42] hover:bg-[#995832] active:bg-[#B36B42] text-white font-extrabold py-3.5 px-4 rounded-2xl shadow-lg uppercase text-xs tracking-wider transition-all"
+                  >
+                    OK
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      const weekdays = [
+                        'domingo',
+                        'segunda-feira',
+                        'terça-feira',
+                        'quarta-feira',
+                        'quinta-feira',
+                        'sexta-feira',
+                        'sábado'
+                      ];
+                      const weekday = weekdays[selectedDate.getDay()];
+                      const formattedMsgDate = `${weekday}, ${selectedDate.getDate()}/${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}`;
+                      
+                      const text = `Agendamento realizado com sucesso pelo estabelecimento!\n\nOlá ${clientName}, tudo bem?\n\nSeu horário ${formattedMsgDate} às ${selectedTime} está confirmado!\n\nEm caso de dúvidas, responda a essa mensagem!`;
+                      
+                      let cleanedPhone = clientPhone.replace(/\D/g, '');
+                      if (cleanedPhone.length <= 11 && !cleanedPhone.startsWith('55')) {
+                        cleanedPhone = '55' + cleanedPhone;
+                      }
+                      window.open(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(text)}`, '_blank');
+                    }}
+                    className="w-full border border-green-600 hover:bg-green-950/20 active:border-green-500 text-green-500 hover:text-green-400 font-extrabold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-xs tracking-wider transition-all cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.858.002-2.634-1.019-5.11-2.875-6.97C16.59 1.905 14.12 1.88 11.99 1.88 6.562 1.88 2.135 6.298 2.13 11.734c-.001 1.687.447 3.328 1.3 4.773l-1.094 4.00 4.103-1.077c1.47.8 3.102 1.22 4.718 1.222zM17.66 14.25c-.312-.156-1.848-.91-2.127-1.012-.279-.102-.483-.153-.686.153-.203.306-.787 1.013-.965 1.217-.178.204-.355.23-.667.073-.313-.155-1.317-.486-2.51-1.549-.928-.827-1.554-1.85-1.737-2.157-.183-.306-.02-.472.136-.627.14-.14.313-.365.47-.55.156-.182.208-.312.312-.52.105-.208.052-.39-.026-.547-.078-.156-.686-1.65-.94-2.261-.247-.594-.5-.513-.686-.523-.178-.008-.38-.01-.583-.01-.203 0-.533.076-.812.38-.28.305-1.066 1.042-1.066 2.54 0 1.498 1.09 2.946 1.242 3.15.152.203 2.146 3.277 5.198 4.593.726.313 1.293.5 1.736.64.73.232 1.393.199 1.918.12.585-.087 1.848-.755 2.11-1.448.263-.693.263-1.286.183-1.411-.078-.125-.285-.203-.597-.36z"/>
+                    </svg>
+                    <span>Enviar alerta para cliente</span>
+                  </button>
                 </div>
               </div>
-
-              <div className="p-3 bg-brand-blue/5 text-brand-blue rounded-xl text-[11px] font-semibold flex items-center gap-2 justify-center">
-                <Sparkles className="w-4 h-4" />
-                <span>Enviamos um link de confirmação para seu WhatsApp!</span>
-              </div>
-
-              <button 
-                onClick={onClose}
-                className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3 px-4 rounded-xl shadow-md"
-              >
-                Voltar ao Início
-              </button>
             </motion.div>
           ) : (
             <div className="space-y-4">
