@@ -24,11 +24,38 @@ function isTrialActive(trialFimStr: string): boolean {
 }
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<'landing' | 'auth' | 'onboarding' | 'dashboard' | 'clientBooking'>('landing');
+  const [currentMerchant, setCurrentMerchant] = useState<MerchantUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('cortestime_merchant_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [viewMode, setViewMode] = useState<'landing' | 'auth' | 'onboarding' | 'dashboard' | 'clientBooking'>(() => {
+    try {
+      const saved = localStorage.getItem('cortestime_merchant_session');
+      if (saved) {
+        const merchant = JSON.parse(saved) as MerchantUser;
+        if (isTrialActive(merchant.trialFim)) {
+          return merchant.onboardingCompleted ? 'dashboard' : 'onboarding';
+        }
+      }
+    } catch (e) {}
+    return 'landing';
+  });
+
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [currentMerchant, setCurrentMerchant] = useState<MerchantUser | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('cortestime_merchant_session');
+      return !saved; // No long full-screen spinner if we can mount straight to the dashboard
+    } catch (e) {
+      return true;
+    }
+  });
 
   // Initial registered business info (Onboarding defaults)
   const defaultOnboarding: OnboardingData = {
@@ -94,7 +121,7 @@ export default function App() {
     complement: ''
   } : defaultOnboarding;
 
-  // Listen to Auth State Changes
+  // Listen to Auth State Changes (with LocalStorage session persistence)
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthChanged(async (fbUser) => {
       try {
@@ -103,31 +130,9 @@ export default function App() {
           const merchant = await firebaseService.getMerchant(fbUser.uid);
           if (merchant) {
             setCurrentMerchant(merchant);
-            
-            // Since we successfully retrieved the merchant profile, we are connected!
+            localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
             setFirebaseConnected(true);
 
-            if (merchant.onboardingCompleted) {
-              // Fetch isolated data in parallel to maximize speed and bypass sequential lag
-              const [fbServices, fbBarbers, fbClients, fbAppointments] = await Promise.all([
-                firebaseService.getServices(fbUser.uid),
-                firebaseService.getBarbers(fbUser.uid),
-                firebaseService.getClients(fbUser.uid),
-                firebaseService.getAppointments(fbUser.uid)
-              ]);
-
-              if (fbServices.length > 0) setServices(fbServices);
-              if (fbBarbers.length > 0) setBarbers(fbBarbers);
-              setClients(fbClients);
-              setAppointments(fbAppointments);
-            } else {
-              // Keep clean/empty for new users who are about to start onboarding
-              setServices([]);
-              setBarbers([]);
-              setClients([]);
-              setAppointments([]);
-            }
-            
             // If trial has expired, stay on landing (blocker will catch it)
             if (isTrialActive(merchant.trialFim)) {
               if (merchant.onboardingCompleted) {
@@ -139,17 +144,38 @@ export default function App() {
               setViewMode('landing');
             }
           } else {
-            setCurrentMerchant(null);
-            setViewMode('landing');
+            const saved = localStorage.getItem('cortestime_merchant_session');
+            if (!saved) {
+              setCurrentMerchant(null);
+              setViewMode('landing');
+            }
           }
         } else {
-          setCurrentMerchant(null);
-          // Fallback to static defaults when logged out (so the client booking doesn't crash)
-          setServices(defaultServices);
-          setBarbers(defaultBarbers);
-          setClients(defaultClients);
-          setAppointments(defaultAppointments);
-          setFirebaseConnected(true);
+          // fbUser is null. Check if we have a persistent fallback session
+          const saved = localStorage.getItem('cortestime_merchant_session');
+          if (saved) {
+            const merchant = JSON.parse(saved) as MerchantUser;
+            setCurrentMerchant(merchant);
+            setFirebaseConnected(true);
+            
+            if (isTrialActive(merchant.trialFim)) {
+              if (merchant.onboardingCompleted) {
+                setViewMode('dashboard');
+              } else {
+                setViewMode('onboarding');
+              }
+            } else {
+              setViewMode('landing');
+            }
+          } else {
+            setCurrentMerchant(null);
+            // Fallback to static defaults when logged out (so the client booking doesn't crash)
+            setServices(defaultServices);
+            setBarbers(defaultBarbers);
+            setClients(defaultClients);
+            setAppointments(defaultAppointments);
+            setFirebaseConnected(true);
+          }
         }
       } catch (err) {
         console.error("Auth listener error:", err);
@@ -161,6 +187,46 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch and load merchant data from Firestore whenever currentMerchant changes
+  useEffect(() => {
+    if (!currentMerchant) return;
+    
+    let isMounted = true;
+    const loadMerchantData = async () => {
+      try {
+        if (currentMerchant.onboardingCompleted) {
+          const [fbServices, fbBarbers, fbClients, fbAppointments] = await Promise.all([
+            firebaseService.getServices(currentMerchant.uid),
+            firebaseService.getBarbers(currentMerchant.uid),
+            firebaseService.getClients(currentMerchant.uid),
+            firebaseService.getAppointments(currentMerchant.uid)
+          ]);
+
+          if (isMounted) {
+            if (fbServices.length > 0) setServices(fbServices);
+            if (fbBarbers.length > 0) setBarbers(fbBarbers);
+            setClients(fbClients);
+            setAppointments(fbAppointments);
+            setFirebaseConnected(true);
+          }
+        } else {
+          // Keep clean/empty for new users who are about to start onboarding
+          setServices([]);
+          setBarbers([]);
+          setClients([]);
+          setAppointments([]);
+        }
+      } catch (err) {
+        console.error("Error loading merchant data:", err);
+      }
+    };
+
+    loadMerchantData();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMerchant]);
 
   // Automated background notifications scanning
   useEffect(() => {
@@ -232,6 +298,7 @@ export default function App() {
     } catch (e) {
       console.error("Logout error:", e);
     }
+    localStorage.removeItem('cortestime_merchant_session');
     setCurrentMerchant(null);
     setViewMode('landing');
     setIsLoading(false);
@@ -239,6 +306,7 @@ export default function App() {
 
   const handleAuthSuccess = (merchant: MerchantUser) => {
     setCurrentMerchant(merchant);
+    localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
     if (isTrialActive(merchant.trialFim)) {
       if (merchant.onboardingCompleted) {
         setViewMode('dashboard');
@@ -309,6 +377,7 @@ export default function App() {
                 const updatedMerchant = await firebaseService.getMerchant(currentMerchant.uid);
                 if (updatedMerchant) {
                   setCurrentMerchant(updatedMerchant);
+                  localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
                 }
 
                 // 3. Fornece apenas serviços e barbeiros modelo, mantendo clientes e agendamentos zerados
