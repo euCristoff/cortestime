@@ -15,6 +15,7 @@ import {
   Smartphone, 
   DollarSign, 
   ChevronRight, 
+  ChevronDown,
   MapPin, 
   Award, 
   AlertCircle,
@@ -26,6 +27,7 @@ import {
   Check,
   CreditCard,
   Building,
+  ArrowLeft,
   Undo
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
@@ -109,6 +111,29 @@ export default function MerchantDashboard({
   const [appBarberId, setAppBarberId] = useState(barbers[0]?.id || '');
   const [appDate, setAppDate] = useState(new Date().toISOString().split('T')[0]);
   const [appTime, setAppTime] = useState('10:00');
+
+  // Custom scheduling layout state variables (as seen in screenshots)
+  const [isServiceSheetOpen, setIsServiceSheetOpen] = useState(false);
+  const [tempSelectedServiceId, setTempSelectedServiceId] = useState('');
+  const [repeatAppointment, setRepeatAppointment] = useState(false);
+  const [showInlineAddServiceForm, setShowInlineAddServiceForm] = useState(false);
+
+  // Free Mode / Modo Livre state
+  const [isFreeModeSheetOpen, setIsFreeModeSheetOpen] = useState(false);
+  const [freeModeInterval, setFreeModeInterval] = useState('13:00 - 23:59');
+  const [startMinutes, setStartMinutes] = useState(780); // 13:00
+  const [endMinutes, setEndMinutes] = useState(1295); // 21:35
+
+  const timeToMinutes = (t: string): number => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const minutesToTime = (min: number): string => {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 
   // Interactive waitlist array (in-memory state)
   const [waitlist, setWaitlist] = useState<{name: string, phone: string, service: string}[]>([
@@ -226,6 +251,19 @@ export default function MerchantDashboard({
     localStorage.setItem('read-system-milestones', JSON.stringify(allIds));
   };
 
+  // Synchronize selected service id for appointment form and bottom sheet
+  useEffect(() => {
+    if (isAppointmentModalOpen) {
+      setTempSelectedServiceId(appServiceId || services[0]?.id || '');
+    }
+  }, [isAppointmentModalOpen, appServiceId, services]);
+
+  useEffect(() => {
+    if (!appServiceId && services.length > 0) {
+      setAppServiceId(services[0].id);
+    }
+  }, [services, appServiceId]);
+
   // Last day of trial push notifier
   useEffect(() => {
     const daysLeft = getTrialDaysLeft();
@@ -262,9 +300,9 @@ export default function MerchantDashboard({
   }, 0);
 
   // First steps progress tracking
-  const step1Done = merchant ? clients.length >= 1 : clients.length > 2;
-  const step2Done = merchant ? appointments.length >= 1 : appointments.length > 3;
-  const step3Done = merchant ? (services.length > 4 || services.some(s => s.id.startsWith('serv-') && !['serv-1', 'serv-2', 'serv-3', 'serv-4'].includes(s.id))) : services.length > 4;
+  const step1Done = merchant ? (clients.length >= 1) : (clients.length > 3);
+  const step2Done = merchant ? (appointments.length >= 1) : (appointments.length > 5);
+  const step3Done = merchant ? (services.length > 4 || services.some(s => !['serv-1', 'serv-2', 'serv-3', 'serv-4'].includes(s.id))) : (services.length > 4);
 
   // Handlers
   const handleCreateService = (e: React.FormEvent) => {
@@ -1719,57 +1757,491 @@ export default function MerchantDashboard({
       {/* MODAL: NEW APPOINTMENT */}
       <AnimatePresence>
         {isAppointmentModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-sm w-full p-6 text-left space-y-4 shadow-2xl relative"
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-white text-brand-dark rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl relative transition-all duration-300"
             >
-              <button onClick={() => setIsAppointmentModalOpen(false)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
-              <h3 className="font-display font-bold text-lg text-brand-dark">Marcar Horário na Agenda</h3>
-              <form onSubmit={handleCreateAppointment} className="space-y-4 text-xs">
-                <div className="space-y-1">
-                  <label className="font-bold text-gray-600">Nome do Cliente</label>
-                  <input type="text" required placeholder="Ex: André Silva" value={appClientName} onChange={e => setAppClientName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-gray-600">Celular (WhatsApp)</label>
-                  <input type="tel" required placeholder="Ex: (82) 98877-6655" value={appClientPhone} onChange={e => setAppClientPhone(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-gray-600">Serviço</label>
-                    <select value={appServiceId} onChange={e => setAppServiceId(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-white">
-                      {services.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} - R$ {s.price}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-bold text-gray-600">Barbeiro</label>
-                    <select value={appBarberId} onChange={e => setAppBarberId(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 bg-white">
-                      {barbers.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+              {/* IF SERVICE SELECTION SHEET IS OPEN */}
+              {isServiceSheetOpen ? (
+                <div className="p-6 space-y-6 relative flex flex-col justify-between min-h-[500px]">
+                  
+                  {/* INLINE SERVICE CREATION FLOW */}
+                  {showInlineAddServiceForm && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 15 }}
+                      className="absolute inset-0 bg-white z-50 p-6 rounded-3xl flex flex-col justify-between text-left"
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-display font-extrabold text-base text-gray-900 uppercase tracking-wide">Novo Serviço</h4>
+                          <button 
+                            type="button" 
+                            onClick={() => setShowInlineAddServiceForm(false)} 
+                            className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 transition-colors"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3.5 text-xs text-left">
+                          <div className="space-y-1">
+                            <label className="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Nome do Serviço</label>
+                            <input 
+                              type="text" 
+                              placeholder="Ex: Sobrancelha com Navalha" 
+                              value={newServiceName} 
+                              onChange={e => setNewServiceName(e.target.value)}
+                              className="w-full p-3 rounded-xl border border-gray-200 text-gray-800 bg-gray-50 font-medium text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue focus:bg-white transition-all"
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Preço (R$)</label>
+                              <input 
+                                type="number" 
+                                placeholder="25.00" 
+                                value={newServicePrice} 
+                                onChange={e => setNewServicePrice(e.target.value)}
+                                className="w-full p-3 rounded-xl border border-gray-200 text-gray-800 bg-gray-50 font-medium text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue focus:bg-white transition-all"
+                              />
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <label className="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Duração (Minutos)</label>
+                              <input 
+                                type="number" 
+                                placeholder="30" 
+                                value={newServiceDuration} 
+                                onChange={e => setNewServiceDuration(e.target.value)}
+                                className="w-full p-3 rounded-xl border border-gray-200 text-gray-800 bg-gray-50 font-medium text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue focus:bg-white transition-all"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-gray-600">Data</label>
-                    <input type="date" required value={appDate} onChange={e => setAppDate(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-bold text-gray-600">Horário</label>
-                    <input type="time" required value={appTime} onChange={e => setAppTime(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
-                  </div>
-                </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (!newServiceName || !newServicePrice) {
+                            alert("Por favor, preencha o nome e preço do serviço.");
+                            return;
+                          }
+                          const priceVal = parseFloat(newServicePrice);
+                          const durationVal = parseInt(newServiceDuration) || 30;
+                          
+                          // Call actual prop handler
+                          onAddService({
+                            name: newServiceName,
+                            price: priceVal,
+                            durationMin: durationVal,
+                            commissionPercent: 10
+                          });
+                          
+                          // Clear states and close
+                          setNewServiceName('');
+                          setNewServicePrice('');
+                          setNewServiceDuration('30');
+                          setShowInlineAddServiceForm(false);
+                        }}
+                        className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3.5 rounded-xl uppercase tracking-wider text-xs shadow-md shadow-brand-blue/15 transition-all mt-4"
+                      >
+                        Salvar Serviço
+                      </button>
+                    </motion.div>
+                  )}
 
-                <button type="submit" className="w-full bg-brand-blue text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs">Marcar Horário</button>
-              </form>
+                  {/* HEADER */}
+                  <div className="space-y-1.5 text-left">
+                    <div className="flex items-center gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsServiceSheetOpen(false)} 
+                        className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+                      >
+                        <ArrowLeft className="w-5 h-5 text-gray-700" />
+                      </button>
+                      <h3 className="font-display font-extrabold text-xl text-gray-900 tracking-tight">Lista de serviços</h3>
+                    </div>
+                    <p className="text-xs text-gray-500 font-medium pl-8">Selecione os serviços necessários</p>
+                  </div>
+
+                  {/* HORIZONTAL SWIPE CAROUSEL */}
+                  <div className="flex gap-4.5 overflow-x-auto py-5 px-1 scrollbar-none snap-x snap-mandatory">
+                    {services.map((service) => {
+                      const isSelected = tempSelectedServiceId === service.id;
+                      return (
+                        <div 
+                          key={service.id}
+                          onClick={() => setTempSelectedServiceId(service.id)}
+                          className={`snap-center shrink-0 w-[165px] h-[210px] rounded-3xl p-4.5 flex flex-col justify-between cursor-pointer transition-all duration-300 relative select-none ${
+                            isSelected 
+                              ? 'bg-brand-blue text-white shadow-xl shadow-brand-blue/20 scale-[1.03]' 
+                              : 'bg-gray-50 hover:bg-gray-100 text-brand-dark border border-gray-200'
+                          }`}
+                        >
+                          {/* Top checkbox */}
+                          <div className="flex justify-end w-full">
+                            <div className={`w-5.5 h-5.5 rounded-lg flex items-center justify-center transition-all ${
+                              isSelected 
+                                ? 'bg-white border-transparent text-brand-blue' 
+                                : 'border-2 border-gray-300 bg-transparent'
+                            }`}>
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                          </div>
+
+                          {/* Bottom info */}
+                          <div className="text-left space-y-1">
+                            <h4 className={`font-bold text-sm tracking-tight leading-snug line-clamp-2 truncate ${isSelected ? 'text-white' : 'text-brand-dark'}`}>
+                              {service.name}
+                            </h4>
+                            <div className="flex justify-between items-end pt-1">
+                              <span className={`text-xs font-bold font-mono ${isSelected ? 'text-white' : 'text-brand-blue'}`}>
+                                R$ {service.price.toFixed(0)}
+                              </span>
+                              <span className={`text-[10px] font-medium ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                {service.durationMin} min
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Dotted border New Service card */}
+                    <div 
+                      onClick={() => setShowInlineAddServiceForm(true)}
+                      className="snap-center shrink-0 w-[165px] h-[210px] rounded-3xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-brand-blue hover:bg-gray-50 transition-all text-gray-400 hover:text-brand-blue"
+                    >
+                      <Plus className="w-8 h-8 mb-2.5 stroke-[1.5]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Novo Serviço</span>
+                    </div>
+                  </div>
+
+                  {/* Swipe Help Note */}
+                  <div className="text-center py-1">
+                    <p className="text-[9px] font-extrabold tracking-wider text-gray-400 uppercase flex items-center justify-center gap-1">
+                      <span>Arraste para o lado para ver mais</span>
+                      <ChevronRight className="w-3 h-3 text-gray-400" />
+                    </p>
+                  </div>
+
+                  {/* FOOTER ACTIONS */}
+                  <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsServiceSheetOpen(false)}
+                      className="border border-gray-200 text-gray-600 font-bold py-3.5 rounded-2xl uppercase tracking-widest text-[10px] hover:bg-gray-50 transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if (tempSelectedServiceId) {
+                          setAppServiceId(tempSelectedServiceId);
+                        }
+                        setIsServiceSheetOpen(false);
+                      }}
+                      className="bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3.5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-brand-blue/15 transition-colors"
+                    >
+                      Ok
+                    </button>
+                  </div>
+
+                </div>
+              ) : isFreeModeSheetOpen ? (
+                /* MODO LIVRE CONFIGURATION SHEET */
+                <div className="p-6 space-y-6 text-left">
+                  {/* HEADER */}
+                  <div className="space-y-1 text-center">
+                    <h3 className="font-display font-extrabold text-2xl text-brand-dark tracking-tight">Modo livre</h3>
+                    <p className="text-xs text-gray-500 font-medium">Agendamento com horário livre</p>
+                  </div>
+
+                  {/* INTERVAL SELECT DROPDOWN */}
+                  <div className="relative bg-gray-50 rounded-2xl px-4 h-14 flex items-center border border-gray-200">
+                    <select 
+                      value={freeModeInterval}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFreeModeInterval(val);
+                        const [start, end] = val.split(' - ');
+                        setStartMinutes(timeToMinutes(start));
+                        setEndMinutes(timeToMinutes(end));
+                      }}
+                      className="w-full bg-transparent text-brand-dark border-none focus:outline-none focus:ring-0 text-sm font-medium appearance-none cursor-pointer pr-10"
+                    >
+                      <option value="13:00 - 23:59">13:00 - 23:59</option>
+                      <option value="08:00 - 12:00">08:00 - 12:00</option>
+                      <option value="14:00 - 18:00">14:00 - 18:00</option>
+                      <option value="08:00 - 18:00">08:00 - 18:00</option>
+                    </select>
+                    <div className="absolute right-4 pointer-events-none">
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    </div>
+                  </div>
+
+                  {/* DYNAMIC TIMES DISPLAY */}
+                  {(() => {
+                    const [intStart, intEnd] = freeModeInterval.split(' - ');
+                    const minMinutes = timeToMinutes(intStart);
+                    const maxMinutes = timeToMinutes(intEnd);
+                    
+                    const actualStartMin = Math.max(startMinutes, minMinutes);
+                    const actualEndMin = Math.min(endMinutes, maxMinutes);
+                    
+                    const displayStart = minutesToTime(actualStartMin);
+                    const displayEnd = minutesToTime(actualEndMin);
+
+                    return (
+                      <>
+                        <div className="text-center space-y-1 py-4">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">Serviço das:</span>
+                          <h4 className="font-sans font-bold text-2xl text-brand-dark">
+                            {displayStart} às {displayEnd}
+                          </h4>
+                        </div>
+
+                        {/* DUAL RANGE SLIDER */}
+                        <div className="relative w-full h-12 flex items-center px-2">
+                          <input
+                            type="range"
+                            min={minMinutes}
+                            max={maxMinutes}
+                            step={15}
+                            value={actualStartMin}
+                            onChange={(e) => {
+                              const val = Math.min(Number(e.target.value), actualEndMin - 15);
+                              setStartMinutes(val);
+                            }}
+                            className="absolute left-0 right-0 pointer-events-none appearance-none z-30 w-full h-2 bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-200 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-200 [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:cursor-pointer"
+                          />
+                          <input
+                            type="range"
+                            min={minMinutes}
+                            max={maxMinutes}
+                            step={15}
+                            value={actualEndMin}
+                            onChange={(e) => {
+                              const val = Math.max(Number(e.target.value), actualStartMin + 15);
+                              setEndMinutes(val);
+                            }}
+                            className="absolute left-0 right-0 pointer-events-none appearance-none z-30 w-full h-2 bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-200 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-gray-200 [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:cursor-pointer"
+                          />
+                          {/* Backing Track */}
+                          <div className="w-full h-2 bg-gray-200 rounded-full absolute pointer-events-none">
+                            <div 
+                              className="h-full bg-brand-blue rounded-full absolute"
+                              style={{
+                                left: `${((actualStartMin - minMinutes) / (maxMinutes - minMinutes)) * 100}%`,
+                                width: `${((actualEndMin - actualStartMin) / (maxMinutes - minMinutes)) * 100}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* HELP NOTE */}
+                        <p className="text-[10px] font-medium text-gray-400 text-center leading-relaxed">
+                          Mova a barra para selecionar o inicio e o fim do serviço.
+                        </p>
+
+                        {/* ACTIONS */}
+                        <div className="grid grid-cols-2 gap-3 w-full pt-4">
+                          <button 
+                            type="button" 
+                            onClick={() => setIsFreeModeSheetOpen(false)}
+                            className="border border-gray-200 text-gray-600 font-bold py-3.5 rounded-2xl uppercase tracking-wider text-xs hover:bg-gray-50 transition-colors"
+                          >
+                            Voltar
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              setAppTime(displayStart);
+                              setIsFreeModeSheetOpen(false);
+                            }}
+                            className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3.5 rounded-2xl uppercase tracking-wider text-xs shadow-lg shadow-brand-blue/15 transition-colors"
+                          >
+                            Ok
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                /* MAIN NOVO AGENDAMENTO FORM */
+                <div className="p-6 space-y-6">
+                  
+                  {/* HEADER */}
+                  <div className="relative flex items-start gap-3 text-left">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsAppointmentModalOpen(false)} 
+                      className="mt-1 text-brand-dark hover:text-gray-700 transition-colors"
+                    >
+                      <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                    <div className="space-y-1">
+                      <h3 className="font-display font-extrabold text-2xl text-brand-dark tracking-tight">Novo agendamento</h3>
+                      <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                        Preencha todos os campos para realizar um novo agendamento.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* FORM BODY */}
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleCreateAppointment(e);
+                    }} 
+                    className="space-y-4 text-left"
+                  >
+                    
+                    {/* Client Name input */}
+                    <div className="space-y-1">
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Nome do cliente" 
+                        value={appClientName} 
+                        onChange={e => setAppClientName(e.target.value)} 
+                        className="w-full bg-gray-50 text-brand-dark placeholder-gray-400 border border-gray-200 focus:outline-none focus:ring-1 focus:ring-brand-blue rounded-2xl p-4 h-14 text-sm font-medium transition-all"
+                      />
+                    </div>
+
+                    {/* Brazil Flag Phone input */}
+                    <div className="flex gap-2 items-center bg-gray-50 rounded-2xl px-4 h-14 border border-gray-200 focus-within:border-brand-blue focus-within:bg-white transition-all">
+                      <div className="flex items-center gap-1 text-brand-dark pr-2 border-r border-gray-200">
+                        <span className="text-base select-none">🇧🇷</span>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                      </div>
+                      <input 
+                        type="tel" 
+                        required 
+                        placeholder="Telefone" 
+                        value={appClientPhone} 
+                        onChange={e => setAppClientPhone(e.target.value)} 
+                        className="flex-1 bg-transparent text-brand-dark border-none focus:outline-none focus:ring-0 placeholder-gray-400 text-sm font-medium h-full"
+                      />
+                    </div>
+
+                    {/* SERVICE SELECT TRIGGER BUTTON */}
+                    <div 
+                      onClick={() => {
+                        setTempSelectedServiceId(appServiceId);
+                        setIsServiceSheetOpen(true);
+                      }}
+                      className="flex justify-between items-center bg-gray-50 hover:bg-gray-100 border border-gray-200 cursor-pointer rounded-2xl px-4 h-14 transition-colors select-none group"
+                    >
+                      <span className={appServiceId ? "text-brand-dark text-sm font-medium" : "text-gray-400 text-sm font-medium"}>
+                        {(() => {
+                          const sObj = services.find(s => s.id === appServiceId);
+                          return sObj ? `${sObj.name}` : "Selecione um serviço";
+                        })()}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-brand-blue transition-colors" />
+                    </div>
+
+                    {/* BARBER SELECTOR DROPDOWN */}
+                    <div className="relative">
+                      <select 
+                        value={appBarberId} 
+                        onChange={e => setAppBarberId(e.target.value)} 
+                        className="w-full bg-gray-50 text-brand-dark border border-gray-200 focus:outline-none focus:ring-1 focus:ring-brand-blue rounded-2xl pl-4 pr-10 h-14 text-sm font-medium appearance-none cursor-pointer transition-all"
+                      >
+                        {barbers.map(b => (
+                          <option key={b.id} value={b.id} className="bg-white text-brand-dark">
+                            {b.name} ({b.specialty})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </div>
+
+                    {/* DATE SELECTOR */}
+                    <div className="relative bg-gray-50 rounded-2xl px-4 h-14 flex items-center border border-gray-200 focus-within:border-brand-blue focus-within:bg-white transition-all">
+                      <CalendarIcon className="w-4 h-4 text-gray-400 mr-2.5 pointer-events-none" />
+                      <input 
+                        type="date" 
+                        required 
+                        value={appDate} 
+                        onChange={e => setAppDate(e.target.value)} 
+                        className="w-full bg-transparent text-brand-dark border-none focus:outline-none focus:ring-0 text-sm font-medium [color-scheme:light]"
+                      />
+                    </div>
+
+                    {/* TIME SELECTOR + LIVRE BADGE */}
+                    <div className="grid grid-cols-12 gap-3">
+                      <div className="col-span-8 bg-gray-50 rounded-2xl px-4 h-14 flex items-center relative border border-gray-200 focus-within:border-brand-blue focus-within:bg-white transition-all">
+                        <Clock className="w-4 h-4 text-gray-400 mr-2.5 pointer-events-none" />
+                        <input 
+                          type="time" 
+                          required 
+                          value={appTime} 
+                          onChange={e => setAppTime(e.target.value)} 
+                          className="w-full bg-transparent text-brand-dark border-none focus:outline-none focus:ring-0 text-sm font-medium [color-scheme:light]"
+                        />
+                      </div>
+                      
+                      <div 
+                        onClick={() => {
+                          // Initialize range sliders with current time if valid
+                          try {
+                            const [start, end] = freeModeInterval.split(' - ');
+                            setStartMinutes(timeToMinutes(start));
+                            setEndMinutes(timeToMinutes(end));
+                          } catch (e) {}
+                          setIsFreeModeSheetOpen(true);
+                        }}
+                        className="col-span-4 bg-brand-lime/20 border border-brand-lime/40 rounded-2xl flex items-center justify-center text-xs font-extrabold text-brand-lime-dark h-14 uppercase tracking-wider cursor-pointer hover:bg-brand-lime/30 active:scale-95 transition-all select-none shadow-xs"
+                      >
+                        Livre
+                      </div>
+                    </div>
+
+                    {/* REPEAT APPOINTMENT SWITCH TOGGLE */}
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl p-4 h-14 select-none">
+                      <span className="text-xs text-brand-dark font-bold">Repetir este agendamento</span>
+                      <div 
+                        onClick={() => setRepeatAppointment(!repeatAppointment)}
+                        className={`w-11 h-6 rounded-full transition-all relative cursor-pointer ${
+                          repeatAppointment ? 'bg-brand-blue' : 'bg-gray-300'
+                        }`}
+                      >
+                        <motion.div 
+                          animate={{ x: repeatAppointment ? 22 : 2 }}
+                          className="w-4 h-4 rounded-full bg-white absolute top-1"
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* SUBMIT BUTTON */}
+                    <div className="pt-3">
+                      <button 
+                        type="submit" 
+                        className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-extrabold py-4 rounded-2xl uppercase tracking-widest text-xs shadow-md transition-all"
+                      >
+                        Agendar
+                      </button>
+                    </div>
+
+                  </form>
+                </div>
+              )}
+
             </motion.div>
           </div>
         )}
