@@ -126,29 +126,49 @@ export default function App() {
     const unsubscribe = firebaseService.onAuthChanged(async (fbUser) => {
       try {
         if (fbUser) {
-          // Fetch authenticated merchant details
-          const merchant = await firebaseService.getMerchant(fbUser.uid);
-          if (merchant) {
-            setCurrentMerchant(merchant);
-            localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
-            setFirebaseConnected(true);
+          // 1. Immediately check if we have a locally cached session to load instantly
+          const cachedSession = localStorage.getItem('cortestime_merchant_session');
+          if (cachedSession) {
+            try {
+              const cachedMerchant = JSON.parse(cachedSession) as MerchantUser;
+              if (cachedMerchant.uid === fbUser.uid) {
+                setCurrentMerchant(cachedMerchant);
+                setFirebaseConnected(true);
+                setIsLoading(false); // Stop loading immediately
+                if (isTrialActive(cachedMerchant.trialFim)) {
+                  setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+                }
+              }
+            } catch (e) {}
+          }
 
-            // If trial has expired, stay on landing (blocker will catch it)
-            if (isTrialActive(merchant.trialFim)) {
-              if (merchant.onboardingCompleted) {
-                setViewMode('dashboard');
+          // 2. Fetch fresh profile from Firebase in the background
+          try {
+            const merchant = await firebaseService.getMerchant(fbUser.uid);
+            if (merchant) {
+              setCurrentMerchant(merchant);
+              localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
+              setFirebaseConnected(true);
+
+              if (isTrialActive(merchant.trialFim)) {
+                if (merchant.onboardingCompleted) {
+                  setViewMode('dashboard');
+                } else {
+                  setViewMode('onboarding');
+                }
               } else {
-                setViewMode('onboarding');
+                setViewMode('landing');
               }
             } else {
-              setViewMode('landing');
+              const saved = localStorage.getItem('cortestime_merchant_session');
+              if (!saved) {
+                setCurrentMerchant(null);
+                setViewMode('landing');
+              }
             }
-          } else {
-            const saved = localStorage.getItem('cortestime_merchant_session');
-            if (!saved) {
-              setCurrentMerchant(null);
-              setViewMode('landing');
-            }
+          } catch (fetchErr) {
+            console.warn("Background merchant fetch failed, using offline cache.", fetchErr);
+            setFirebaseConnected(true); // Don't block user since we have local storage
           }
         } else {
           // fbUser is null. Check if we have a persistent fallback session
@@ -188,7 +208,33 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch and load merchant data from Firestore whenever currentMerchant changes
+  // Load cached lists from localStorage instantly to bypass Firestore network lag
+  useEffect(() => {
+    if (!currentMerchant) {
+      setServices(defaultServices);
+      setBarbers(defaultBarbers);
+      setClients(defaultClients);
+      setAppointments(defaultAppointments);
+      return;
+    }
+
+    const uid = currentMerchant.uid;
+    try {
+      const cachedServices = localStorage.getItem(`cortestime_services_${uid}`);
+      const cachedBarbers = localStorage.getItem(`cortestime_barbers_${uid}`);
+      const cachedClients = localStorage.getItem(`cortestime_clients_${uid}`);
+      const cachedAppointments = localStorage.getItem(`cortestime_appointments_${uid}`);
+
+      if (cachedServices) setServices(JSON.parse(cachedServices));
+      if (cachedBarbers) setBarbers(JSON.parse(cachedBarbers));
+      if (cachedClients) setClients(JSON.parse(cachedClients));
+      if (cachedAppointments) setAppointments(JSON.parse(cachedAppointments));
+    } catch (e) {
+      console.error("Error loading cached lists:", e);
+    }
+  }, [currentMerchant]);
+
+  // Fetch and load merchant data from Firestore in the background
   useEffect(() => {
     if (!currentMerchant) return;
     
@@ -204,10 +250,23 @@ export default function App() {
           ]);
 
           if (isMounted) {
-            if (fbServices.length > 0) setServices(fbServices);
-            if (fbBarbers.length > 0) setBarbers(fbBarbers);
+            const uid = currentMerchant.uid;
+            
+            if (fbServices.length > 0) {
+              setServices(fbServices);
+              localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(fbServices));
+            }
+            if (fbBarbers.length > 0) {
+              setBarbers(fbBarbers);
+              localStorage.setItem(`cortestime_barbers_${uid}`, JSON.stringify(fbBarbers));
+            }
+            
             setClients(fbClients);
+            localStorage.setItem(`cortestime_clients_${uid}`, JSON.stringify(fbClients));
+            
             setAppointments(fbAppointments);
+            localStorage.setItem(`cortestime_appointments_${uid}`, JSON.stringify(fbAppointments));
+            
             setFirebaseConnected(true);
           }
         } else {
@@ -218,7 +277,7 @@ export default function App() {
           setAppointments([]);
         }
       } catch (err) {
-        console.error("Error loading merchant data:", err);
+        console.error("Error loading merchant data in background:", err);
       }
     };
 

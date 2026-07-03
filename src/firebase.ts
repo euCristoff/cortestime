@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 // Configuração para o ambiente de Preview do AI Studio (Banco de testes integrado)
@@ -41,6 +41,17 @@ const app = initializeApp(activeConfig);
 export const db = isPreview 
   ? getFirestore(app, "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2")
   : getFirestore(app);
+
+// Ativa a persistência offline para carregar os dados instantaneamente, mesmo com internet instável
+if (typeof window !== "undefined") {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn("Múltiplas abas abertas: persistência offline ativa em apenas uma aba.");
+    } else if (err.code === 'unimplemented') {
+      console.warn("O navegador não suporta persistência offline do Firestore.");
+    }
+  });
+}
 
 // Inicializa o Auth com a instância ativa
 export const auth = getAuth(app);

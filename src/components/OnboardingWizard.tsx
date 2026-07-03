@@ -483,12 +483,29 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
               animate={{ opacity: 1, x: 0 }}
               className="space-y-6 text-center"
             >
-              <div className="text-left">
-                <h2 className="font-display font-bold text-2xl text-brand-dark">Sua segurança é nossa prioridade</h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Por isso, precisamos confirmar algumas informações sobre você para validarmos o cadastro. São apenas duas etapas.
-                </p>
-                <p className="text-xs text-gray-700 font-semibold mt-4">
+              <div className="text-left space-y-3">
+                <div>
+                  <h2 className="font-display font-bold text-2xl text-brand-dark">Sua segurança é nossa prioridade</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Por isso, precisamos confirmar algumas informações sobre você para validarmos o cadastro. São apenas duas etapas.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-amber-50/80 text-amber-900 border border-amber-200/60 rounded-2xl text-[11px] leading-relaxed text-left space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                    <span className="text-xs">💡</span>
+                    <span>Aviso Importante (Simulação)</span>
+                  </div>
+                  <p className="text-gray-600 font-medium">
+                    Como esta é uma <strong>versão de demonstração comercial</strong>, o envio de SMS real está desativado. 
+                    O código foi gerado e enviado na forma de um <strong>balão de notificação preta no topo desta página</strong>.
+                  </p>
+                  <p className="text-brand-blue font-bold">
+                    👉 Toque ou clique no balão preto do topo para preencher os 6 dígitos automaticamente!
+                  </p>
+                </div>
+
+                <p className="text-xs text-gray-700 font-semibold pt-1">
                   Digite o código de 6 dígitos que enviamos para o número <span className="text-brand-blue font-bold font-mono">{formData.cellphone || '(82) 98724-3506'}</span>.
                 </p>
               </div>
