@@ -208,6 +208,29 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Safety timeout to prevent getting stuck on the loading spinner if Firebase is slow/offline
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        console.warn("Loading safety timeout triggered - taking too long to connect to Firebase.");
+        setIsLoading(false);
+        // Fallback: search for local merchant session and load it instantly in offline/cached mode
+        const cachedSession = localStorage.getItem('cortestime_merchant_session');
+        if (cachedSession) {
+          try {
+            const cachedMerchant = JSON.parse(cachedSession) as MerchantUser;
+            setCurrentMerchant(cachedMerchant);
+            setFirebaseConnected(false); // Flagged as offline/cache-fallback
+            if (isTrialActive(cachedMerchant.trialFim)) {
+              setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+            }
+          } catch (e) {}
+        }
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
+
   // Load cached lists from localStorage instantly to bypass Firestore network lag
   useEffect(() => {
     if (!currentMerchant) {
