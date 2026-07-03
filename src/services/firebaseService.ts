@@ -31,7 +31,7 @@ const COLL_APPOINTMENTS = "appointments";
 // Auxiliar de Timeout para requisições do Firebase (previne carregamento infinito em conexões instáveis)
 function withTimeout<T>(
   promise: Promise<T>, 
-  ms: number = 3500, 
+  ms: number = 15000, 
   errorMsg: string = "Tempo limite de conexão excedido. Verifique sua conexão de internet ou se o banco de dados do Firebase está ativo."
 ): Promise<T> {
   return Promise.race([
@@ -45,7 +45,7 @@ export const firebaseService = {
   async checkConnection(): Promise<boolean> {
     try {
       const testDoc = doc(db, "connection_test", "status");
-      await withTimeout(setDoc(testDoc, { connected: true, timestamp: Date.now() }, { merge: true }), 3000);
+      await withTimeout(setDoc(testDoc, { connected: true, timestamp: Date.now() }, { merge: true }), 15000);
       return true;
     } catch (e) {
       console.error("Firebase connection error:", e);
@@ -57,7 +57,7 @@ export const firebaseService = {
   async signUp(email: string, password: string, nomeBarbearia: string, nomeProprietario: string, whatsapp: string): Promise<MerchantUser> {
     const userCredential = await withTimeout(
       createUserWithEmailAndPassword(auth, email, password), 
-      4500, 
+      30000, 
       "O servidor de cadastro do Firebase demorou muito para responder. Verifique sua conexão com a internet."
     );
     const user = userCredential.user;
@@ -94,7 +94,7 @@ export const firebaseService = {
     // Save to Firestore 'users' collection
     await withTimeout(
       setDoc(doc(db, "users", user.uid), merchant), 
-      3500, 
+      15000, 
       "Não foi possível salvar o perfil no banco de dados. Tempo limite esgotado."
     );
     return merchant;
@@ -103,7 +103,7 @@ export const firebaseService = {
   async signIn(email: string, password: string): Promise<MerchantUser> {
     const userCredential = await withTimeout(
       signInWithEmailAndPassword(auth, email, password), 
-      4500, 
+      30000, 
       "O servidor de login demorou muito para responder. Verifique sua conexão de internet."
     );
     const user = userCredential.user;
@@ -111,7 +111,7 @@ export const firebaseService = {
     const docRef = doc(db, "users", user.uid);
     const snap = await withTimeout(
       getDoc(docRef), 
-      3500, 
+      15000, 
       "Não foi possível ler as informações de cadastro do banco de dados (Tempo esgotado)."
     );
     if (!snap.exists()) {
@@ -129,7 +129,7 @@ export const firebaseService = {
     const provider = new GoogleAuthProvider();
     const userCredential = await withTimeout(
       signInWithPopup(auth, provider),
-      5000,
+      60000,
       "O popup do Google demorou muito para responder. Tente novamente."
     );
     const user = userCredential.user;
@@ -137,7 +137,7 @@ export const firebaseService = {
     const docRef = doc(db, "users", user.uid);
     const snap = await withTimeout(
       getDoc(docRef),
-      3500,
+      15000,
       "Tempo limite esgotado ao buscar perfil do usuário no banco de dados."
     );
     if (snap.exists()) {
@@ -150,16 +150,19 @@ export const firebaseService = {
   async handleRedirectResult(): Promise<{ user: FirebaseUser; isNew: boolean; merchant?: MerchantUser } | null> {
     const userCredential = await withTimeout(
       getRedirectResult(auth),
-      4000,
+      15000,
       "Tempo limite esgotado ao processar retorno do Google."
-    );
+    ).catch(err => {
+      console.warn("getRedirectResult timeout/error, ignoring:", err);
+      return null;
+    });
     if (!userCredential) return null;
     const user = userCredential.user;
     
     const docRef = doc(db, "users", user.uid);
     const snap = await withTimeout(
       getDoc(docRef),
-      3500,
+      15000,
       "Tempo esgotado ao buscar perfil do usuário após redirecionamento."
     );
     if (snap.exists()) {
@@ -200,7 +203,7 @@ export const firebaseService = {
     
     await withTimeout(
       setDoc(doc(db, "users", user.uid), merchant),
-      3500,
+      15000,
       "Tempo limite excedido ao salvar perfil do Google."
     );
     return merchant;
@@ -214,7 +217,7 @@ export const firebaseService = {
     const docRef = doc(db, "users", uid);
     const snap = await withTimeout(
       getDoc(docRef), 
-      3000, 
+      15000, 
       "Não foi possível carregar o perfil da barbearia (tempo esgotado)."
     );
     if (snap.exists()) {
@@ -233,7 +236,7 @@ export const firebaseService = {
         whatsapp: data.cellphone,
         onboardingData: data
       }),
-      3500,
+      15000,
       "Tempo limite esgotado ao salvar onboarding."
     );
   },
@@ -247,7 +250,7 @@ export const firebaseService = {
     const docRef = doc(db, COLL_SERVICES, service.id);
     await withTimeout(
       setDoc(docRef, { ...service, ownerId }),
-      3000,
+      15000,
       "Tempo esgotado ao salvar serviço."
     );
   },
@@ -256,7 +259,7 @@ export const firebaseService = {
     const q = query(collection(db, COLL_SERVICES), where("ownerId", "==", ownerId));
     const querySnapshot = await withTimeout(
       getDocs(q),
-      3000,
+      15000,
       "Tempo limite excedido ao buscar lista de serviços."
     );
     const list: Service[] = [];
@@ -271,7 +274,7 @@ export const firebaseService = {
     const docRef = doc(db, COLL_BARBERS, barber.id);
     await withTimeout(
       setDoc(docRef, { ...barber, ownerId }),
-      3000,
+      15000,
       "Tempo esgotado ao salvar profissional."
     );
   },
@@ -280,7 +283,7 @@ export const firebaseService = {
     const q = query(collection(db, COLL_BARBERS), where("ownerId", "==", ownerId));
     const querySnapshot = await withTimeout(
       getDocs(q),
-      3000,
+      15000,
       "Tempo limite excedido ao buscar lista de barbeiros."
     );
     const list: Barber[] = [];
@@ -295,7 +298,7 @@ export const firebaseService = {
     const docRef = doc(db, COLL_CLIENTS, client.id);
     await withTimeout(
       setDoc(docRef, { ...client, ownerId }),
-      3000,
+      15000,
       "Tempo esgotado ao salvar cliente."
     );
   },
@@ -304,7 +307,7 @@ export const firebaseService = {
     const q = query(collection(db, COLL_CLIENTS), where("ownerId", "==", ownerId));
     const querySnapshot = await withTimeout(
       getDocs(q),
-      3000,
+      15000,
       "Tempo limite excedido ao buscar lista de clientes."
     );
     const list: Client[] = [];
@@ -319,7 +322,7 @@ export const firebaseService = {
     const docRef = doc(db, COLL_APPOINTMENTS, app.id);
     await withTimeout(
       setDoc(docRef, { ...app, ownerId }),
-      3000,
+      15000,
       "Tempo esgotado ao salvar agendamento."
     );
   },
@@ -328,7 +331,7 @@ export const firebaseService = {
     const q = query(collection(db, COLL_APPOINTMENTS), where("ownerId", "==", ownerId));
     const querySnapshot = await withTimeout(
       getDocs(q),
-      3000,
+      15000,
       "Tempo limite excedido ao buscar agendamentos."
     );
     const list: Appointment[] = [];
@@ -342,7 +345,7 @@ export const firebaseService = {
     const docRef = doc(db, COLL_APPOINTMENTS, id);
     await withTimeout(
       updateDoc(docRef, { status }),
-      3000,
+      15000,
       "Tempo limite excedido ao atualizar status do agendamento."
     );
   },
