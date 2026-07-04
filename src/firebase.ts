@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 // Configuração para o ambiente de Preview do AI Studio (Banco de testes integrado)
@@ -39,8 +39,12 @@ const app = initializeApp(activeConfig);
 // No preview do AI Studio usamos a base de dados customizada criada no projeto "positive-decoder-ndzmz".
 // Em produção (no seu projeto "cortestimey"), usamos o banco de dados oficial padrão (default).
 export const db = isPreview 
-  ? getFirestore(app, "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2")
-  : getFirestore(app);
+  ? initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2")
+  : initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
 
 // Inicializa o Auth com a instância ativa
 export const auth = getAuth(app);

@@ -230,7 +230,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
       if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
         friendlyMessage = "E-mail ou senha incorretos. Verifique suas credenciais.";
       } else if (err.code === "auth/email-already-in-use") {
-        friendlyMessage = "Este e-mail já está em uso por outra conta.";
+        friendlyMessage = "Este e-mail já possui uma conta cadastrada. Direcionamos você para a tela de login para que possa entrar.";
+        setIsLogin(true);
       } else if (err.code === "auth/invalid-email") {
         friendlyMessage = "Formato de e-mail inválido.";
       } else if (err.code === "auth/weak-password") {
@@ -333,7 +334,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
                       required
                       value={whatsapp}
                       onChange={e => setWhatsapp(e.target.value)}
-                      placeholder="Ex: (82) 98724-3056"
+                      placeholder="Ex: (11) 99999-9999"
                       className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-blue focus:outline-none transition-colors text-sm bg-gray-50"
                     />
                   </div>
@@ -438,7 +439,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
                           required
                           value={whatsapp}
                           onChange={e => setWhatsapp(e.target.value)}
-                          placeholder="Ex: (82) 98724-3056"
+                          placeholder="Ex: (11) 99999-9999"
                           className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-blue focus:outline-none transition-colors text-sm bg-gray-50"
                         />
                       </div>
