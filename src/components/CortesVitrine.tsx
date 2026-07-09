@@ -22,7 +22,8 @@ import {
   Star,
   Loader2,
   Download,
-  Copy
+  Copy,
+  X
 } from 'lucide-react';
 import { MerchantUser, Service } from '../types';
 import { firebaseService } from '../services/firebaseService';
@@ -1105,7 +1106,7 @@ export default function CortesVitrine({
       {/* UPGRADE PLANS OVERLAY MODAL */}
       <AnimatePresence>
         {showUpgradePlans && (
-          <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
+          <div className="fixed inset-0 z-50 bg-black/85 flex flex-col items-center justify-start p-4 backdrop-blur-md overflow-y-auto">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1114,14 +1115,15 @@ export default function CortesVitrine({
             >
               <button 
                 onClick={() => setShowUpgradePlans(false)}
-                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white cursor-pointer text-xl font-bold"
+                className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 text-white hover:text-amber-400 rounded-full transition-colors cursor-pointer border border-white/10 flex items-center justify-center shadow-md z-10"
+                title="Fechar"
               >
-                &times;
+                <X className="w-5 h-5" />
               </button>
 
               <div className="space-y-2">
                 <span className="bg-amber-500/25 text-amber-400 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider border border-amber-400/25">
-                  🛡️ Assinatura Cortestime Pro
+                  Cortestime Pro
                 </span>
                 <h3 className="font-sans font-extrabold text-2xl md:text-3xl text-white">Escolha o seu plano Cortestime Pro</h3>
                 <p className="text-xs text-gray-300 max-w-lg mx-auto">
@@ -1172,7 +1174,7 @@ export default function CortesVitrine({
                 {/* TRIMESTRAL */}
                 <div className="bg-[#0a2959] border-2 border-amber-400 rounded-3xl p-6 flex flex-col justify-between space-y-4 relative shadow-lg shadow-amber-500/5">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-[#051b42] text-[9px] font-black uppercase tracking-widest px-3 py-0.5 rounded-full">
-                    Mais Popular ✨
+                    Mais Popular
                   </div>
                   <div className="space-y-2 text-center pt-2">
                     <h4 className="font-sans font-extrabold text-base text-white">Plano Trimestral</h4>
@@ -1206,7 +1208,7 @@ export default function CortesVitrine({
                     }}
                     className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
                   >
-                    Assinar Trimestral
+                    Contratar Trimestral
                   </button>
                 </div>
 

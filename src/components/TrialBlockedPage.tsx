@@ -57,42 +57,46 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
   };
 
   return (
-    <div className="min-h-screen bg-[#051b42] text-white flex flex-col justify-between py-8 px-4 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#051b42] text-white flex flex-col justify-between relative overflow-x-hidden">
       
       {/* Background radial effects */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-lime/10 rounded-full blur-3xl -z-10 animate-pulse" />
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-blue/20 rounded-full blur-3xl -z-10" />
 
       {/* HEADER */}
-      <header className="max-w-4xl mx-auto w-full flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <LogoIcon className="w-6 h-6" />
-          <span className="font-sans font-extrabold text-lg text-white">Cortestime</span>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={onLogout}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Sair</span>
-          </button>
+      <header className="sticky top-0 bg-[#051b42]/95 backdrop-blur-md z-40 border-b border-white/10 px-4 py-4 w-full shrink-0">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <LogoIcon className="w-6 h-6" />
+            <span className="font-sans font-extrabold text-lg text-white">Cortestime</span>
+          </div>
           
-          {onBypass && (
+          <div className="flex items-center gap-4">
             <button 
-              onClick={onBypass}
-              className="p-2 text-white hover:text-amber-400 bg-white/5 hover:bg-white/10 rounded-full transition-all duration-200 cursor-pointer border border-white/10 hover:border-amber-400/30 shadow-md flex items-center justify-center"
-              title="Fechar"
+              onClick={onLogout}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
+              <span>Sair</span>
             </button>
-          )}
+            
+            {onBypass && (
+              <button 
+                onClick={onBypass}
+                className="p-2 text-white hover:text-amber-400 bg-white/5 hover:bg-white/10 rounded-full transition-all duration-200 cursor-pointer border border-white/10 hover:border-amber-400/30 shadow-md flex items-center justify-center"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {/* MAIN BANNER */}
-      <main className="flex-1 flex items-center justify-center py-8">
+      <main className={`flex-1 flex flex-col items-center px-4 py-6 ${
+        step === 'plans' ? 'justify-start md:justify-center' : 'justify-center'
+      }`}>
         <AnimatePresence mode="wait">
           {step === 'initial' ? (
             <motion.div 
@@ -184,27 +188,27 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-4xl space-y-6"
+              className="w-full max-w-4xl space-y-4 md:space-y-6"
             >
               {/* Plans Header */}
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-1 md:space-y-2">
                 <button
                   onClick={() => setStep('initial')}
-                  className="inline-flex items-center gap-2 text-xs text-brand-lime font-bold hover:underline mb-4 cursor-pointer"
+                  className="inline-flex items-center gap-2 text-xs text-brand-lime font-bold hover:underline mb-2 md:mb-4 cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Voltar para as opções</span>
                 </button>
-                <h2 className="font-sans font-extrabold text-3xl text-white tracking-tight">
-                  Escolha o Plano Perfeito para Você
+                <h2 className="font-sans font-extrabold text-xl md:text-3xl text-white tracking-tight">
+                  Escolha o Plano Perfeito
                 </h2>
-                <p className="text-sm text-gray-300 max-w-lg mx-auto">
+                <p className="text-xs md:text-sm text-gray-300 max-w-lg mx-auto hidden sm:block">
                   Turbine os agendamentos da sua barbearia com faturamento automatizado, controle de funcionários e comissões integradas.
                 </p>
               </div>
 
               {/* THREE CARDS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:grid-cols-3 md:gap-6 pt-2 md:pt-4">
                 
                 {/* MENSAL */}
                 <div className="bg-[#09224f]/80 border border-white/10 rounded-3xl p-6 text-center space-y-5 relative hover:border-white/20 transition-all flex flex-col justify-between">
@@ -246,7 +250,7 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
                 {/* TRIMESTRAL */}
                 <div className="bg-[#0b295c] border-2 border-amber-400 rounded-3xl p-6 text-center space-y-5 relative shadow-xl shadow-amber-500/5 flex flex-col justify-between">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-[#051b42] text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-amber-400">
-                    Mais Popular ✨
+                    Mais Popular
                   </div>
 
                   <div className="space-y-3 pt-2">
@@ -281,7 +285,7 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
                     onClick={() => handleSelectPlan('Trimestral', 49.90)}
                     className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
                   >
-                    Assinar Trimestral
+                    Contratar Trimestral
                   </button>
                 </div>
 
@@ -358,7 +362,7 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
 
 
       {/* FOOTER */}
-      <footer className="max-w-md mx-auto w-full text-center text-[10px] text-gray-500 shrink-0 space-y-2">
+      <footer className="max-w-md mx-auto w-full text-center text-[10px] text-gray-500 shrink-0 space-y-2 py-8 px-4">
         <div>
           &copy; {new Date().getFullYear()} Cortestime S.A. Simplificando a sua barbearia com inteligência.
         </div>
