@@ -28,10 +28,16 @@ import {
   CreditCard,
   Building,
   ArrowLeft,
-  Undo
+  Undo,
+  Mail,
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
+import CortesVitrine from './CortesVitrine';
+import MercadoPagoCheckout from './MercadoPagoCheckout';
+import { firebaseService } from '../services/firebaseService';
 
 interface MerchantDashboardProps {
   onboardingData: OnboardingData;
@@ -48,6 +54,8 @@ interface MerchantDashboardProps {
   onLogout: () => void;
   firebaseConnected: boolean | null;
   onOpenClientBooking?: () => void;
+  onUpdateMerchant?: (updated: MerchantUser) => void;
+  initialTab?: 'inicio' | 'agenda' | 'notificacoes' | 'menu';
 }
 
 export default function MerchantDashboard({
@@ -64,10 +72,13 @@ export default function MerchantDashboard({
   onUpdateAppointmentStatus,
   onLogout,
   firebaseConnected,
-  onOpenClientBooking
+  onOpenClientBooking,
+  onUpdateMerchant,
+  initialTab = 'inicio'
 }: MerchantDashboardProps) {
   
-  const [activeTab, setActiveTab] = useState<'inicio' | 'agenda' | 'notificacoes' | 'menu'>('inicio');
+  const [showVitrinePage, setShowVitrinePage] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inicio' | 'agenda' | 'notificacoes' | 'menu'>(initialTab);
   const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo'>('sistema');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem('read-system-milestones');
@@ -88,6 +99,8 @@ export default function MerchantDashboard({
   const [isBarberModalOpen, setIsBarberModalOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [showUpgradePlans, setShowUpgradePlans] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<{ name: string; price: number } | null>(null);
   
   // Service form
   const [newServiceName, setNewServiceName] = useState('');
@@ -117,6 +130,14 @@ export default function MerchantDashboard({
   const [tempSelectedServiceId, setTempSelectedServiceId] = useState('');
   const [repeatAppointment, setRepeatAppointment] = useState(false);
   const [showInlineAddServiceForm, setShowInlineAddServiceForm] = useState(false);
+
+
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Free Mode / Modo Livre state
   const [isFreeModeSheetOpen, setIsFreeModeSheetOpen] = useState(false);
@@ -158,7 +179,7 @@ export default function MerchantDashboard({
     // The current date is Monday, June 29, 2026 (from system description). Let's use merchant.trialFim which is set properly when logged in.
     const finalTrialFim = merchant?.trialFim || '30/06/2026';
     const parts = finalTrialFim.split('/');
-    if (parts.length !== 3) return 5;
+    if (parts.length !== 3) return 3;
     const day = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10) - 1;
     const year = parseInt(parts[2], 10);
@@ -426,6 +447,17 @@ export default function MerchantDashboard({
     });
   };
 
+  if (showVitrinePage && merchant) {
+    return (
+      <CortesVitrine 
+        merchant={merchant}
+        services={services}
+        onBack={() => setShowVitrinePage(false)}
+        onUpdateMerchant={onUpdateMerchant}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#1E1E1E] flex flex-col md:flex-row pb-16 md:pb-0">
       
@@ -444,6 +476,16 @@ export default function MerchantDashboard({
             <p className="font-bold text-sm text-brand-lime truncate">{onboardingData.businessName || 'Minha Barbearia'}</p>
             <p className="text-[10px] text-gray-400 truncate mt-0.5">{onboardingData.fullName}</p>
           </div>
+
+          {merchant?.plano !== 'pro' && (
+            <button 
+              onClick={() => setShowUpgradePlans(true)}
+              className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-extrabold text-xs py-2.5 px-4 rounded-xl transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-brand-lime/10 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Assinar Plano Pro</span>
+            </button>
+          )}
 
           {/* Firebase Connection Badge */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-900/40 rounded-xl border border-gray-800 text-xs">
@@ -498,6 +540,15 @@ export default function MerchantDashboard({
               <MenuIcon className="w-4 h-4" />
               <span>Gestão & Menu</span>
             </button>
+
+            <button 
+              onClick={() => setShowVitrinePage(true)}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all hover:bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 mt-2 cursor-pointer"
+              id="btn-sidebar-vitrine"
+            >
+              <Scissors className="w-4 h-4 text-emerald-400" />
+              <span>Cortes Vitrine (Grátis)</span>
+            </button>
           </nav>
         </div>
 
@@ -533,9 +584,19 @@ export default function MerchantDashboard({
               </span>
             )}
           </button>
-          <span className="text-xs bg-brand-lime/30 text-brand-lime-dark font-extrabold px-3 py-1 rounded-full uppercase">
-            Assine Agora
-          </span>
+          {merchant?.plano !== 'pro' ? (
+            <button 
+              onClick={() => setShowUpgradePlans(true)}
+              className="text-xs bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-extrabold px-3 py-1.5 rounded-full uppercase cursor-pointer transition-all shadow-sm flex items-center gap-1"
+            >
+              <Sparkles className="w-3 h-3 animate-pulse" />
+              <span>Assine Pro</span>
+            </button>
+          ) : (
+            <span className="text-xs bg-brand-blue/15 text-brand-blue font-extrabold px-3 py-1.5 rounded-full uppercase">
+              Plano Pro 💎
+            </span>
+          )}
         </div>
       </header>
 
@@ -543,43 +604,36 @@ export default function MerchantDashboard({
       <main className="flex-1 overflow-y-auto p-4 md:p-8 max-w-6xl mx-auto w-full space-y-6">
         
         {/* TRIAL WARNING BANNER */}
-        {getTrialDaysLeft() >= 0 && (
+        {merchant?.plano === 'pro_trial' && getTrialDaysLeft() >= 0 && (
           <div className={`p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 text-sm font-bold shadow-sm text-left ${
-            getTrialDaysLeft() === 5
+            getTrialDaysLeft() === 3
               ? 'bg-brand-blue/10 text-brand-blue border border-brand-blue/20'
-              : getTrialDaysLeft() === 4 || getTrialDaysLeft() === 3
-              ? 'bg-blue-50/50 text-blue-900 border border-blue-100'
               : getTrialDaysLeft() === 2 
               ? 'bg-yellow-50 text-yellow-800 border border-yellow-100' 
               : 'bg-[#bffd32] text-[#051b42] border border-white/10'
           }`}>
             <div className="flex items-center gap-2.5">
               <span className="text-xl">
-                {getTrialDaysLeft() === 5 ? '🎉' : getTrialDaysLeft() >= 3 ? '⭐' : getTrialDaysLeft() === 2 ? '⏳' : '🔥'}
+                {getTrialDaysLeft() === 3 ? '🎉' : getTrialDaysLeft() === 2 ? '⏳' : '🔥'}
               </span>
               <span className="text-xs">
-                {getTrialDaysLeft() === 5 
-                  ? 'Bem-vindo ao Cortestime! Seu período de teste de 5 dias grátis começou hoje. Aproveite!'
+                {getTrialDaysLeft() === 3 
+                  ? 'Bem-vindo ao Cortestime! Seu período de teste de 3 dias grátis começou hoje. Aproveite!'
                   : `Teste Grátis Ativo: Você possui ${getTrialDaysLeft()} dias restantes para testar todos os recursos do sistema.`
                 }
               </span>
             </div>
             <button 
-              onClick={() => {
-                const text = encodeURIComponent(`Olá! Gostaria de ativar a minha assinatura Premium no Cortestime.`);
-                window.open(`https://wa.me/5582987243056?text=${text}`, '_blank');
-              }}
+              onClick={() => setShowUpgradePlans(true)}
               className={`py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider font-extrabold cursor-pointer transition-colors ${
-                getTrialDaysLeft() === 5
+                getTrialDaysLeft() === 3
                   ? 'bg-brand-blue text-white hover:bg-brand-blue-light'
-                  : getTrialDaysLeft() >= 3
-                  ? 'bg-brand-dark text-white hover:bg-gray-800'
                   : getTrialDaysLeft() === 2 
                   ? 'bg-yellow-800 text-white hover:bg-yellow-900' 
                   : 'bg-[#051b42] text-white hover:bg-[#051b42]/90'
               }`}
             >
-              {getTrialDaysLeft() >= 3 ? 'Ativar Assinatura' : 'Assinar Plano'}
+              {getTrialDaysLeft() === 3 ? 'Ativar Assinatura' : 'Assinar Plano'}
             </button>
           </div>
         )}
@@ -599,7 +653,7 @@ export default function MerchantDashboard({
                 </h2>
                 <p className="text-xs text-gray-400">
                   {merchant?.whatsapp 
-                    ? `WhatsApp: ${merchant.whatsapp} • Plano: Teste Grátis (5 dias)` 
+                    ? `WhatsApp: ${merchant.whatsapp} • Plano: ${merchant.plano === 'pro' ? 'Premium 💎' : `Teste Grátis (${getTrialDaysLeft()} dias restantes)`}` 
                     : onboardingData.cep 
                     ? `CEP: ${onboardingData.cep} • ${onboardingData.street}, ${onboardingData.number}` 
                     : 'Acesse todos os recursos abaixo'
@@ -1162,7 +1216,7 @@ export default function MerchantDashboard({
                   notifSubTab === 'sistema' ? 'border-brand-blue text-[#051b42] border-b-2 border-brand-blue' : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
-                <span>🔔 Central do Sistema</span>
+                <span>Central do Sistema</span>
                 {unreadCount > 0 && (
                   <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                     {unreadCount}
@@ -1175,7 +1229,7 @@ export default function MerchantDashboard({
                   notifSubTab === 'dispositivo' ? 'border-brand-blue text-[#051b42] border-b-2 border-brand-blue' : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
-                <span>📲 Alertas Push (Celular)</span>
+                <span>Alertas Push (Celular)</span>
               </button>
             </div>
 
@@ -1323,6 +1377,20 @@ export default function MerchantDashboard({
                     </p>
                   </div>
 
+                  {typeof window !== 'undefined' && window.self !== window.top && (
+                    <div className="bg-amber-400/10 border border-amber-400/20 rounded-2xl p-4 text-left space-y-2">
+                      <div className="flex items-center gap-2 text-amber-400">
+                        <span className="text-sm">⚠️</span>
+                        <h4 className="font-extrabold text-xs uppercase tracking-wider">iFrame do AI Studio Detectado</h4>
+                      </div>
+                      <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                        Navegadores bloqueiam solicitações de notificações e Service Workers dentro de telas incorporadas (iFrames) por motivos de segurança.
+                        <br />
+                        <strong>Para conseguir testar:</strong> Clique no botão de <strong>"Abrir em nova aba"</strong> (ícone de seta diagonal saindo de um quadrado no canto superior direito desta pré-visualização) para abrir o aplicativo diretamente no navegador, ativar os alertas e testar as notificações.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                     
                     {/* SIMULATE 30 MIN */}
@@ -1432,6 +1500,31 @@ export default function MerchantDashboard({
             <div>
               <h2 className="font-display font-extrabold text-2xl text-brand-dark">Painel de Gestão Completo</h2>
               <p className="text-xs text-gray-500">Administre serviços, preços, comissões, profissionais cadastrados e faturamento</p>
+            </div>
+
+            {/* CORTES VITRINE PROMO CARD */}
+            <div className="bg-[#051b42] text-white p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-emerald-500/25 shadow-lg shadow-emerald-500/5">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="space-y-2 text-left">
+                <span className="text-[10px] bg-emerald-500/25 text-emerald-400 px-2.5 py-1 rounded-full uppercase font-extrabold tracking-wider border border-emerald-400/20">
+                  Novidade • Cortes Vitrine (Grátis)
+                </span>
+                <h3 className="font-display font-extrabold text-xl">
+                  Mini-site digital para divulgar sua barbearia!
+                </h3>
+                <p className="text-xs text-gray-300 max-w-xl leading-relaxed">
+                  Crie uma versão gratuita do seu catálogo de serviços, produtos recomendados, galeria de cortes e link para as redes sociais. Ative o mini-site para colocar na bio do seu Instagram agora mesmo.
+                </p>
+              </div>
+
+              <button 
+                onClick={() => setShowVitrinePage(true)}
+                className="bg-[#10b981] hover:bg-[#059669] text-white font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0 border border-emerald-400/20"
+                id="btn-menu-tab-vitrine"
+              >
+                <Scissors className="w-4 h-4" />
+                <span>Gerar Meu Mini-Site</span>
+              </button>
             </div>
 
             {/* SECTION: SERVICES & COMISSIONS */}
@@ -2244,6 +2337,185 @@ export default function MerchantDashboard({
 
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* UPGRADE PLANS MODAL */}
+      <AnimatePresence>
+        {showUpgradePlans && (
+          <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#051b42] border border-white/10 rounded-3xl p-6 md:p-8 max-w-4xl w-full text-center space-y-6 shadow-2xl relative my-8 text-white"
+            >
+              <button 
+                onClick={() => setShowUpgradePlans(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white cursor-pointer text-xl font-bold"
+              >
+                &times;
+              </button>
+
+              <div className="space-y-2">
+                <span className="bg-amber-500/25 text-amber-400 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider border border-amber-400/25 inline-block">
+                  🛡️ Assinatura Cortestime Pro
+                </span>
+                <h3 className="font-sans font-extrabold text-2xl md:text-3xl text-white">Escolha o seu plano Cortestime Pro</h3>
+                <p className="text-xs text-gray-300 max-w-lg mx-auto">
+                  Sem taxas extras, cancele quando desejar. Desbloqueie imediatamente o fluxo financeiro, funcionários, notificações automáticas e agendamento completo.
+                </p>
+              </div>
+
+              {/* Plans Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2 text-left">
+                
+                {/* MENSAL */}
+                <div className="bg-[#09224f]/80 border border-white/10 rounded-3xl p-6 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2 text-center">
+                    <h4 className="font-sans font-extrabold text-base text-gray-200">Plano Mensal</h4>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-gray-400">Cobrança Mensal</p>
+                      <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-lg font-bold">R$</span>
+                        <span className="text-3xl font-black text-white">19,90</span>
+                        <span className="text-xs text-gray-400">/mês</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-white/5 pt-4 space-y-2 text-xs text-gray-300 flex-1">
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Agendamentos Ilimitados</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Cadastro de clientes</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Dashboard financeiro</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCheckoutPlan({ name: 'Mensal', price: 19.90 });
+                    }}
+                    className="w-full bg-emerald-400 hover:bg-emerald-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
+                  >
+                    Assinar Mensal
+                  </button>
+                </div>
+
+                {/* TRIMESTRAL */}
+                <div className="bg-[#0a2959] border-2 border-amber-400 rounded-3xl p-6 flex flex-col justify-between space-y-4 relative shadow-lg shadow-amber-500/5">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-[#051b42] text-[9px] font-black uppercase tracking-widest px-3 py-0.5 rounded-full">
+                    Mais Popular ✨
+                  </div>
+                  <div className="space-y-2 text-center pt-2">
+                    <h4 className="font-sans font-extrabold text-base text-white">Plano Trimestral</h4>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-amber-400 font-bold">16% de Desconto</p>
+                      <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-lg font-bold">R$</span>
+                        <span className="text-3xl font-black text-amber-400">49,90</span>
+                        <span className="text-xs text-gray-200">/trimestre</span>
+                      </div>
+                      <p className="text-[9px] text-gray-400">Equivale a R$ 16,63 por mês</p>
+                    </div>
+                  </div>
+                  <div className="border-t border-white/5 pt-4 space-y-2 text-xs text-gray-200 flex-1">
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Agendamentos Ilimitados</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Notificações Automáticas</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Controle de funcionários</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCheckoutPlan({ name: 'Trimestral', price: 49.90 });
+                    }}
+                    className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
+                  >
+                    Assinar Trimestral
+                  </button>
+                </div>
+
+                {/* ANUAL */}
+                <div className="bg-[#09224f]/80 border border-white/10 rounded-3xl p-6 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2 text-center">
+                    <h4 className="font-sans font-extrabold text-base text-gray-200">Plano Anual</h4>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-emerald-400 font-bold">37% de Desconto</p>
+                      <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-lg font-bold">R$</span>
+                        <span className="text-3xl font-black text-white">149,90</span>
+                        <span className="text-xs text-gray-400">/ano</span>
+                      </div>
+                      <p className="text-[9px] text-gray-400">Equivale a R$ 12,49 por mês</p>
+                    </div>
+                  </div>
+                  <div className="border-t border-white/5 pt-4 space-y-2 text-xs text-gray-300 flex-1">
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Agendamentos Ilimitados</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Relatórios de faturamento</span>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Suporte Preferencial</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCheckoutPlan({ name: 'Anual', price: 149.90 });
+                    }}
+                    className="w-full bg-cyan-400 hover:bg-cyan-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
+                  >
+                    Assinar Anual
+                  </button>
+                </div>
+
+              </div>
+
+              <div className="pt-2 text-center text-[10px] text-gray-400">
+                Ao concluir a assinatura, sua conta será migrada imediatamente para o plano Pro, ativando todas as ferramentas sem perda de dados.
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MERCADO PAGO CHECKOUT MODAL OVERLAY */}
+      <AnimatePresence>
+        {checkoutPlan && merchant && (
+          <MercadoPagoCheckout 
+            planName={checkoutPlan.name}
+            price={checkoutPlan.price}
+            merchant={merchant}
+            onPaymentSuccess={async () => {
+              try {
+                await firebaseService.updateMerchantProfile(merchant.uid, { plano: 'pro' });
+                if (onUpdateMerchant) onUpdateMerchant({ ...merchant, plano: 'pro' });
+                setShowUpgradePlans(false);
+                setCheckoutPlan(null);
+              } catch (err) {
+                alert('Erro ao atualizar plano.');
+              }
+            }}
+            onClose={() => setCheckoutPlan(null)}
+          />
         )}
       </AnimatePresence>
 

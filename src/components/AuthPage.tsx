@@ -84,6 +84,33 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
       );
     }
 
+    if (errStr === "auth/operation-not-allowed") {
+      return (
+        <div className="p-4 bg-amber-50 text-amber-900 rounded-2xl text-xs space-y-3 border border-amber-200">
+          <div className="flex items-center gap-2 font-bold text-amber-800">
+            <BadgeAlert className="w-4.5 h-4.5 shrink-0" />
+            <span>Ative o Login com E-mail e Senha no Firebase</span>
+          </div>
+          <p className="text-gray-700 leading-relaxed text-left">
+            O provedor de login por <strong>E-mail/Senha</strong> precisa ser ativado no console do Firebase para que você possa se cadastrar ou fazer login:
+          </p>
+          
+          <ol className="list-decimal list-inside space-y-2 text-[11px] text-gray-600 pl-1 leading-relaxed text-left">
+            <li>Acesse o <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="underline font-bold text-amber-800 hover:text-amber-900">Console do Firebase</a></li>
+            <li>Selecione o seu projeto <strong>cortestimey</strong></li>
+            <li>No menu lateral esquerdo, clique em <strong>Build</strong> &gt; <strong>Authentication</strong></li>
+            <li>Clique no botão <strong>Começar (Get Started)</strong> se for o primeiro acesso, ou vá na aba <strong>Sign-in method</strong></li>
+            <li>Em <strong>Provedores nativos (Native providers)</strong>, clique em <strong>E-mail/Senha (Email/Password)</strong></li>
+            <li>Ative a primeira opção <strong>E-mail/senha (Ativar)</strong> e clique em <strong>Salvar (Save)</strong></li>
+          </ol>
+
+          <p className="text-[10px] text-gray-500 italic mt-2">
+            Após salvar no console do Firebase, você poderá cadastrar e logar na sua barbearia normalmente aqui!
+          </p>
+        </div>
+      );
+    }
+
     if (
       errStr.toLowerCase().includes("offline") || 
       errStr.toLowerCase().includes("could not reach") || 
@@ -237,7 +264,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
       } else if (err.code === "auth/weak-password") {
         friendlyMessage = "A senha é muito fraca. Escolha uma senha mais forte.";
       } else if (err.code === "auth/operation-not-allowed") {
-        friendlyMessage = "O provedor de login com E-mail/Senha não está ativado no Firebase. Vá em seu Firebase Console > Authentication > Sign-in Method e ative o provedor 'E-mail/Senha'.";
+        friendlyMessage = "auth/operation-not-allowed";
       }
       
       setError(friendlyMessage);
@@ -382,7 +409,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
                   {isLogin ? 'Acesse sua barbearia' : 'Cadastre sua barbearia'}
                 </h2>
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mt-1.5">
-                  {isLogin ? 'Pronto para começar?' : 'Teste grátis por 5 dias'}
+                  {isLogin ? 'Pronto para começar?' : 'Teste grátis por 3 dias'}
                 </p>
               </div>
 

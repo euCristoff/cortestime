@@ -89,7 +89,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected }
               onClick={onStartTrial}
               className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-extrabold text-sm sm:text-base px-8 py-4 rounded-full shadow-lg shadow-brand-lime/20 hover:shadow-brand-lime/30 transition-all text-center uppercase tracking-wide"
             >
-              Teste Grátis por 5 dias
+              Teste Grátis por 3 dias
             </button>
           </motion.div>
 

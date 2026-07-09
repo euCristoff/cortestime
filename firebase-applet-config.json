@@ -6,5 +6,6 @@
   "firestoreDatabaseId": "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2",
   "storageBucket": "positive-decoder-ndzmz.firebasestorage.app",
   "messagingSenderId": "576867565081",
-  "measurementId": ""
+  "measurementId": "",
+  "oAuthClientId": "576867565081-ik1an83sb7norbl2shjmu7mernp6pet4.apps.googleusercontent.com"
 }

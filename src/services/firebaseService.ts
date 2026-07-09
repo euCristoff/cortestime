@@ -74,7 +74,7 @@ export const firebaseService = {
     const trialInicio = formatDate(today);
     
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 5);
+    expiry.setDate(today.getDate() + 3);
     const trialFim = formatDate(expiry);
     
     const merchant: MerchantUser = {
@@ -83,7 +83,7 @@ export const firebaseService = {
       nomeProprietario,
       email,
       whatsapp,
-      plano: 'trial',
+      plano: 'pro_trial',
       trialInicio,
       trialFim,
       status: 'ativo',
@@ -97,6 +97,24 @@ export const firebaseService = {
       15000, 
       "Não foi possível salvar o perfil no banco de dados. Tempo limite esgotado."
     );
+
+    // Sync with Brevo asynchronously (client-side proxy call)
+    try {
+      fetch("/api/brevo/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: merchant.email,
+          nomeProprietario: merchant.nomeProprietario,
+          nomeBarbearia: merchant.nomeBarbearia,
+          whatsapp: merchant.whatsapp,
+          plano: merchant.plano
+        })
+      }).catch(err => console.error("Error triggering Brevo sync in signup:", err));
+    } catch (err) {
+      console.error("Failed to run Brevo fetch in signup:", err);
+    }
+
     return merchant;
   },
 
@@ -184,7 +202,7 @@ export const firebaseService = {
     const trialInicio = formatDate(today);
     
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 5);
+    expiry.setDate(today.getDate() + 3);
     const trialFim = formatDate(expiry);
     
     const merchant: MerchantUser = {
@@ -193,7 +211,7 @@ export const firebaseService = {
       nomeProprietario,
       email: user.email || "",
       whatsapp,
-      plano: 'trial',
+      plano: 'pro_trial',
       trialInicio,
       trialFim,
       status: 'ativo',
@@ -222,6 +240,15 @@ export const firebaseService = {
     );
     if (snap.exists()) {
       return snap.data() as MerchantUser;
+    }
+    return null;
+  },
+
+  async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {
+    const q = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", slug));
+    const snap = await withTimeout(getDocs(q), 15000);
+    if (!snap.empty) {
+      return snap.docs[0].data() as MerchantUser;
     }
     return null;
   },
@@ -391,6 +418,39 @@ export const firebaseService = {
       }
     } catch (e) {
       console.error("Error seeding initial Firebase data for merchant:", e);
+    }
+  },
+
+  async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
+    const docRef = doc(db, "users", uid);
+    await withTimeout(
+      updateDoc(docRef, data),
+      15000,
+      "Tempo limite esgotado ao atualizar perfil."
+    );
+
+    // Sync with Brevo asynchronously if key details or subscription plans are updated
+    if (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined) {
+      try {
+        getDoc(docRef).then((snap) => {
+          if (snap.exists()) {
+            const fullUser = snap.data() as MerchantUser;
+            fetch("/api/brevo/contact", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: fullUser.email,
+                nomeProprietario: fullUser.nomeProprietario,
+                nomeBarbearia: fullUser.nomeBarbearia,
+                whatsapp: fullUser.whatsapp,
+                plano: fullUser.plano
+              })
+            }).catch(err => console.error("Error triggering Brevo sync in update:", err));
+          }
+        }).catch(err => console.error("Error fetching updated user for Brevo sync:", err));
+      } catch (err) {
+        console.error("Failed to run Brevo fetch in update:", err);
+      }
     }
   }
 };

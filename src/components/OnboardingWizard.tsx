@@ -31,7 +31,12 @@ interface OnboardingWizardProps {
 }
 
 export default function OnboardingWizard({ initialData, onComplete, onBackToLanding }: OnboardingWizardProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(() => {
+    if (initialData?.fullName && initialData?.cellphone && initialData?.email && initialData?.businessName) {
+      return 2;
+    }
+    return 1;
+  });
   const [termsAccepted, setTermsAccepted] = useState(!!initialData);
   
   // Step data

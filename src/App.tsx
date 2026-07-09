@@ -5,6 +5,7 @@ import TrialBlockedPage from './components/TrialBlockedPage';
 import OnboardingWizard from './components/OnboardingWizard';
 import MerchantDashboard from './components/MerchantDashboard';
 import ClientBooking from './components/ClientBooking';
+import CortesVitrine from './components/CortesVitrine';
 import { Service, Barber, Client, Appointment, OnboardingData, MerchantUser } from './types';
 import { firebaseService } from './services/firebaseService';
 import { notificationService } from './services/notificationService';
@@ -23,6 +24,11 @@ function isTrialActive(trialFimStr: string): boolean {
   return currentDate <= expiryDate;
 }
 
+function isUserActive(merchant: MerchantUser): boolean {
+  if (merchant.plano === 'pro' || merchant.plano === 'vitrine') return true;
+  return isTrialActive(merchant.trialFim);
+}
+
 export default function App() {
   const [currentMerchant, setCurrentMerchant] = useState<MerchantUser | null>(() => {
     try {
@@ -33,12 +39,14 @@ export default function App() {
     }
   });
 
+  const [bypassBlocked, setBypassBlocked] = useState(false);
+
   const [viewMode, setViewMode] = useState<'landing' | 'auth' | 'onboarding' | 'dashboard' | 'clientBooking'>(() => {
     try {
       const saved = localStorage.getItem('cortestime_merchant_session');
       if (saved) {
         const merchant = JSON.parse(saved) as MerchantUser;
-        if (isTrialActive(merchant.trialFim)) {
+        if (isUserActive(merchant)) {
           return merchant.onboardingCompleted ? 'dashboard' : 'onboarding';
         }
       }
@@ -106,6 +114,73 @@ export default function App() {
   const [barbers, setBarbers] = useState<Barber[]>(defaultBarbers);
   const [clients, setClients] = useState<Client[]>(defaultClients);
   const [appointments, setAppointments] = useState<Appointment[]>(defaultAppointments);
+  const [dashboardTab, setDashboardTab] = useState<'inicio' | 'agenda' | 'notificacoes' | 'menu'>('inicio');
+
+  const [publicVitrineMerchant, setPublicVitrineMerchant] = useState<MerchantUser | null>(null);
+  const [publicVitrineServices, setPublicVitrineServices] = useState<Service[]>([]);
+  const [isPublicVitrineLoading, setIsPublicVitrineLoading] = useState(false);
+
+  // Check for public vitrine slug on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('v') || params.get('vitrine');
+    if (slug) {
+      setIsPublicVitrineLoading(true);
+      firebaseService.getMerchantBySlug(slug).then(async (m) => {
+        if (m) {
+          setPublicVitrineMerchant(m);
+          try {
+            const fetchedServices = await firebaseService.getServices(m.uid);
+            setPublicVitrineServices(fetchedServices.length > 0 ? fetchedServices : defaultServices);
+            
+            const fetchedBarbers = await firebaseService.getBarbers(m.uid);
+            if (fetchedBarbers.length > 0) {
+              setBarbers(fetchedBarbers);
+            }
+          } catch (e) {
+            console.error("Error loading services for public vitrine:", e);
+            setPublicVitrineServices(defaultServices);
+          }
+        } else {
+          alert('Barbearia / Vitrine não encontrada.');
+          // Clear query parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }).catch((err) => {
+        console.error("Error fetching merchant by slug:", err);
+      }).finally(() => {
+        setIsPublicVitrineLoading(false);
+      });
+    }
+  }, []);
+
+  // Check for Mercado Pago payment callbacks on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment_status');
+    const merchantUid = params.get('uid');
+    
+    if (paymentStatus === 'success' && merchantUid) {
+      firebaseService.updateMerchantProfile(merchantUid, { plano: 'pro' })
+        .then(() => {
+          if (currentMerchant && currentMerchant.uid === merchantUid) {
+            const updated = { ...currentMerchant, plano: 'pro' as const };
+            setCurrentMerchant(updated);
+            localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+            setViewMode('dashboard');
+          }
+          alert('Parabéns! Sua assinatura do plano Cortestime Pro foi ativada com sucesso!');
+        })
+        .catch(err => {
+          console.error('Erro ao atualizar plano após pagamento:', err);
+        })
+        .finally(() => {
+          // Clean up url parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
+  }, [currentMerchant]);
+
 
   // Compute OnboardingData dynamically based on current logged in Merchant
   const onboardingData: OnboardingData = currentMerchant ? {
@@ -135,7 +210,7 @@ export default function App() {
                 setCurrentMerchant(cachedMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                if (isTrialActive(cachedMerchant.trialFim)) {
+                if (isUserActive(cachedMerchant)) {
                   setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
                 }
               }
@@ -150,14 +225,18 @@ export default function App() {
               localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
               setFirebaseConnected(true);
 
-              if (isTrialActive(merchant.trialFim)) {
+              if (isUserActive(merchant)) {
                 if (merchant.onboardingCompleted) {
                   setViewMode('dashboard');
                 } else {
                   setViewMode('onboarding');
                 }
               } else {
-                setViewMode('landing');
+                if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
+                  setViewMode('dashboard');
+                } else {
+                  setViewMode('landing');
+                }
               }
             } else {
               const saved = localStorage.getItem('cortestime_merchant_session');
@@ -178,14 +257,18 @@ export default function App() {
             setCurrentMerchant(merchant);
             setFirebaseConnected(true);
             
-            if (isTrialActive(merchant.trialFim)) {
+            if (isUserActive(merchant)) {
               if (merchant.onboardingCompleted) {
                 setViewMode('dashboard');
               } else {
                 setViewMode('onboarding');
               }
             } else {
-              setViewMode('landing');
+              if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
+                setViewMode('dashboard');
+              } else {
+                setViewMode('landing');
+              }
             }
           } else {
             setCurrentMerchant(null);
@@ -221,8 +304,10 @@ export default function App() {
             const cachedMerchant = JSON.parse(cachedSession) as MerchantUser;
             setCurrentMerchant(cachedMerchant);
             setFirebaseConnected(false); // Flagged as offline/cache-fallback
-            if (isTrialActive(cachedMerchant.trialFim)) {
+            if (isUserActive(cachedMerchant)) {
               setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+            } else if (cachedMerchant.plano === 'pro_trial') {
+              setViewMode('dashboard');
             }
           } catch (e) {}
         }
@@ -230,6 +315,41 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [isLoading]);
+
+  // Auto-downgrade plan on trial expiration or subscription expiration/cancellation
+  useEffect(() => {
+    if (!currentMerchant) return;
+
+    const isTrialExpired = (currentMerchant.plano === 'pro_trial' || currentMerchant.plano === 'trial') && 
+      !isTrialActive(currentMerchant.trialFim);
+
+    const isSubscriptionExpired = currentMerchant.plano === 'pro' && 
+      (currentMerchant.status === 'expirado' || currentMerchant.status === 'suspenso');
+
+    if (isTrialExpired || isSubscriptionExpired) {
+      const reason = isTrialExpired ? 'trial_expired' : 'subscription_expired';
+      
+      console.log(`Auto-downgrading merchant ${currentMerchant.uid} to vitrine due to: ${reason}`);
+      
+      // Update plan immediately in Firestore
+      firebaseService.updateMerchantProfile(currentMerchant.uid, {
+        plano: 'vitrine',
+        status: 'ativo'
+      }).then(() => {
+        const updated: MerchantUser = { 
+          ...currentMerchant, 
+          plano: 'vitrine', 
+          status: 'ativo' 
+        };
+        setCurrentMerchant(updated);
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+        localStorage.setItem('cortestime_downgrade_notice', reason);
+        setViewMode('dashboard');
+      }).catch(err => {
+        console.error("Error auto-downgrading merchant plan:", err);
+      });
+    }
+  }, [currentMerchant]);
 
   // Load cached lists from localStorage instantly to bypass Firestore network lag
   useEffect(() => {
@@ -382,25 +502,42 @@ export default function App() {
     }
     localStorage.removeItem('cortestime_merchant_session');
     setCurrentMerchant(null);
+    setBypassBlocked(false);
     setViewMode('landing');
     setIsLoading(false);
   };
 
   const handleAuthSuccess = (merchant: MerchantUser) => {
     setCurrentMerchant(merchant);
+    setBypassBlocked(false);
     localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
-    if (isTrialActive(merchant.trialFim)) {
+    if (isUserActive(merchant)) {
       if (merchant.onboardingCompleted) {
         setViewMode('dashboard');
       } else {
         setViewMode('onboarding');
       }
     } else {
-      setViewMode('landing');
+      if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
+        setViewMode('dashboard');
+      } else {
+        setViewMode('landing');
+      }
     }
   };
 
-  const isExpired = currentMerchant ? !isTrialActive(currentMerchant.trialFim) : false;
+  const isExpired = currentMerchant && (currentMerchant.plano === 'pro_trial' || currentMerchant.plano === 'trial') 
+    ? !isTrialActive(currentMerchant.trialFim) 
+    : false;
+
+  if (isPublicVitrineLoading) {
+    return (
+      <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 rounded-full border-4 border-[#051b42]/25 border-t-[#051b42] animate-spin mb-3"></div>
+        <p className="font-sans font-medium text-[#051b42] text-sm">Carregando Vitrine Digital...</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -412,9 +549,65 @@ export default function App() {
     );
   }
 
+  const handleUpdatePlan = async (newPlan: 'vitrine' | 'pro') => {
+    if (!currentMerchant) return;
+    setIsLoading(true);
+    try {
+      await firebaseService.updateMerchantProfile(currentMerchant.uid, { plano: newPlan });
+      const updated = { ...currentMerchant, plano: newPlan };
+      setCurrentMerchant(updated);
+      localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+    } catch (e) {
+      console.error("Error updating plan:", e);
+      alert("Houve um erro ao atualizar o plano. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExtendTrial = async () => {
+    if (!currentMerchant) return;
+    setIsLoading(true);
+    try {
+      const today = new Date();
+      const expiry = new Date();
+      expiry.setDate(today.getDate() + 15); // +15 days
+      const formatDate = (date: Date) => {
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      };
+      const newTrialFim = formatDate(expiry);
+      
+      await firebaseService.updateMerchantProfile(currentMerchant.uid, { 
+        trialFim: newTrialFim,
+        plano: 'pro_trial'
+      });
+      
+      const updated = { ...currentMerchant, trialFim: newTrialFim, plano: 'pro_trial' as const };
+      setCurrentMerchant(updated);
+      localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+      setViewMode('dashboard');
+      alert("Seu período de teste grátis foi estendido com sucesso por mais 15 dias! Aproveite para testar a agenda e os envios de notificações.");
+    } catch (e) {
+      console.error("Error extending trial:", e);
+      alert("Houve um erro ao estender o período de teste. Tente novamente.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Active Block for Trial Expiration
-  if (currentMerchant && isExpired) {
-    return <TrialBlockedPage merchant={currentMerchant} onLogout={handleLogout} />;
+  if (currentMerchant && isExpired && !bypassBlocked) {
+    return (
+      <TrialBlockedPage 
+        merchant={currentMerchant} 
+        onLogout={handleLogout} 
+        onUpdatePlan={handleUpdatePlan} 
+        onBypass={() => setBypassBlocked(true)}
+      />
+    );
   }
 
   return (
@@ -489,6 +682,7 @@ export default function App() {
                   setAppointments([]);
                 }
 
+                setDashboardTab('agenda');
                 setViewMode('dashboard');
               } catch (e) {
                 console.error("Erro ao salvar onboarding:", e);
@@ -497,6 +691,7 @@ export default function App() {
                 setIsLoading(false);
               }
             } else {
+              setDashboardTab('agenda');
               setViewMode('dashboard');
             }
           }}
@@ -506,33 +701,93 @@ export default function App() {
         />
       )}
 
-      {viewMode === 'clientBooking' && (
-        <ClientBooking 
-          businessName={currentMerchant?.nomeBarbearia || onboardingData.businessName}
-          services={services}
-          barbers={barbers}
-          onBookAppointment={handleAddAppointment}
-          onClose={() => setViewMode(currentMerchant ? 'dashboard' : 'landing')}
-        />
-      )}
+      {publicVitrineMerchant ? (
+        viewMode === 'clientBooking' ? (
+          <ClientBooking 
+            businessName={publicVitrineMerchant.nomeBarbearia}
+            services={publicVitrineServices}
+            barbers={barbers}
+            onBookAppointment={async (app) => {
+              // Save booking to public merchant's appointments
+              try {
+                const id = `app-${Date.now()}`;
+                const item: Appointment = { id, status: 'pending', ...app };
+                await firebaseService.saveAppointment(item, publicVitrineMerchant.uid);
+                alert("Agendamento solicitado com sucesso!");
+                setViewMode('landing');
+              } catch (e) {
+                console.error("Error booking public app:", e);
+                alert("Erro ao realizar agendamento. Tente novamente.");
+              }
+            }}
+            onClose={() => setViewMode('landing')}
+          />
+        ) : (
+          <CortesVitrine 
+            merchant={publicVitrineMerchant}
+            services={publicVitrineServices}
+            isOnlyView={true}
+            isPublicAccess={true}
+            onBack={() => {
+              setPublicVitrineMerchant(null);
+              // Clean search parameters
+              window.history.replaceState({}, document.title, window.location.pathname);
+              setViewMode('landing');
+            }}
+            onBookOnline={() => {
+              setViewMode('clientBooking');
+            }}
+          />
+        )
+      ) : (
+        <>
+          {viewMode === 'clientBooking' && (
+            <ClientBooking 
+              businessName={currentMerchant?.nomeBarbearia || onboardingData.businessName}
+              services={services}
+              barbers={barbers}
+              onBookAppointment={handleAddAppointment}
+              onClose={() => setViewMode(currentMerchant ? 'dashboard' : 'landing')}
+            />
+          )}
 
-      {viewMode === 'dashboard' && (
-        <MerchantDashboard 
-          onboardingData={onboardingData}
-          merchant={currentMerchant}
-          services={services}
-          barbers={barbers}
-          clients={clients}
-          appointments={appointments}
-          onAddService={handleAddService}
-          onAddBarber={handleAddBarber}
-          onAddClient={handleAddClient}
-          onAddAppointment={handleAddAppointment}
-          onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-          onLogout={handleLogout}
-          firebaseConnected={firebaseConnected}
-          onOpenClientBooking={() => setViewMode('clientBooking')}
-        />
+          {viewMode === 'dashboard' && (
+            currentMerchant?.plano === 'vitrine' ? (
+              <CortesVitrine 
+                merchant={currentMerchant}
+                services={services}
+                isOnlyView={true}
+                onLogout={handleLogout}
+                onUpdateMerchant={(updated) => {
+                  setCurrentMerchant(updated);
+                  localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+                }}
+              />
+            ) : (
+              <MerchantDashboard 
+                onboardingData={onboardingData}
+                merchant={currentMerchant}
+                services={services}
+                barbers={barbers}
+                clients={clients}
+                appointments={appointments}
+                onAddService={handleAddService}
+                onAddBarber={handleAddBarber}
+                onAddClient={handleAddClient}
+                onAddAppointment={handleAddAppointment}
+                onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+                onLogout={handleLogout}
+                firebaseConnected={firebaseConnected}
+                onOpenClientBooking={() => setViewMode('clientBooking')}
+                onUpdateMerchant={(updated) => {
+                  setCurrentMerchant(updated);
+                  localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+                }}
+                initialTab={dashboardTab}
+              />
+            )
+          )}
+        </>
       )}
     </div>
   );

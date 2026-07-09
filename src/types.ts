@@ -57,11 +57,23 @@ export interface MerchantUser {
   nomeProprietario: string;
   email: string;
   whatsapp: string;
-  plano: 'trial' | 'premium';
+  plano: 'vitrine' | 'pro_trial' | 'pro' | 'trial';
   trialInicio: string; // DD/MM/YYYY
   trialFim: string; // DD/MM/YYYY
   status: 'ativo' | 'suspenso' | 'expirado';
   criadoEm: string;
   onboardingCompleted?: boolean;
+  // Optional vitrine fields
+  vitrineLogo?: string;
+  vitrineSlogan?: string;
+  vitrineCapa?: string;
+  vitrineLinkPersonalizado?: string;
+  vitrineHorarios?: string;
+  vitrineLocalizacao?: string;
+  vitrineWhatsApp?: string;
+  vitrineInstagram?: string;
+  vitrineLinkBio?: string;
+  vitrineProdutos?: { id: string; name: string; price: number; imageUrl?: string }[];
+  vitrineGaleria?: string[];
 }
 
