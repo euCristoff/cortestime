@@ -174,9 +174,17 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
     setError(null);
     setIsLoading(true);
     try {
-      // Usar signInWithPopup para todos os casos. Isso funciona perfeitamente em computadores
-      // e celulares, e é obrigatório dentro de iframes (como a visualização do AI Studio)
-      // para evitar o erro 403 do Google.
+      const isIframe = window.self !== window.top;
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+      // Se for dispositivo móvel e NÃO estiver em um iframe (como no site em produção),
+      // o signInWithRedirect é recomendado e não sofre bloqueio de popups.
+      if (isMobile && !isIframe) {
+        await firebaseService.signInWithGoogle();
+        return; // getRedirectResult no useEffect cuidará do restante ao retornar
+      }
+
+      // Caso contrário (Desktop ou dentro do preview/iframe do AI Studio), usa popup
       const result = await firebaseService.signInWithGooglePopup();
       if (result.isNew) {
         // Novo usuário! Transiciona para completar o perfil
@@ -190,8 +198,22 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPagePro
     } catch (err: any) {
       console.error("Google Auth error:", err);
       let friendlyMessage = err.message || "Erro ao iniciar o login com o Google.";
-      if (err.code === "auth/popup-blocked") {
-        friendlyMessage = "O popup de login foi bloqueado pelo seu navegador. Por favor, ative os popups para este site ou abra o aplicativo em uma nova aba.";
+      if (
+        err.code === "auth/popup-blocked" || 
+        err.code === "auth/popup-closed-by-user" || 
+        (err.message && err.message.includes("popup-closed-by-user"))
+      ) {
+        const isIframe = window.self !== window.top;
+        // Se falhou no popup e não está no iframe, tenta redirecionar como plano de fundo (fallback)
+        if (!isIframe) {
+          try {
+            await firebaseService.signInWithGoogle();
+            return;
+          } catch (redirectErr) {
+            console.error("Redirect fallback error:", redirectErr);
+          }
+        }
+        friendlyMessage = "O popup de login do Google foi bloqueado ou fechado pelo navegador. Por favor, tente novamente ou use o login por E-mail e Senha.";
       } else if (err.code === "auth/unauthorized-domain" || (err.message && err.message.includes("unauthorized-domain"))) {
         friendlyMessage = `unauthorized-domain:${window.location.hostname}`;
       }

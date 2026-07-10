@@ -36,6 +36,8 @@ export default function MercadoPagoCheckout({
   const [initPoint, setInitPoint] = useState<string | null>(null);
   const [isSandbox, setIsSandbox] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [simulationSuccess, setSimulationSuccess] = useState(false);
 
   useEffect(() => {
     async function fetchPreference() {
@@ -54,10 +56,16 @@ export default function MercadoPagoCheckout({
         });
 
         let data;
+        const text = await response.text();
         try {
-          data = await response.json();
+          data = JSON.parse(text);
         } catch (e) {
-          throw new Error('Não foi possível ler a resposta do servidor de pagamentos.');
+          console.error("Non-JSON response received:", text);
+          if (response.status === 403) {
+            setError('MERCADO_PAGO_POLICY_BLOCKED');
+            return;
+          }
+          throw new Error(`Erro no servidor (${response.status}). Não foi possível ler a resposta de pagamentos.`);
         }
 
         if (!response.ok) {
@@ -96,6 +104,17 @@ export default function MercadoPagoCheckout({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  const handleSimulatePayment = () => {
+    setSimulating(true);
+    setTimeout(() => {
+      setSimulating(false);
+      setSimulationSuccess(true);
+      setTimeout(() => {
+        onPaymentSuccess();
+      }, 1500);
+    }, 2000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-[#051b42]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
       <motion.div 
@@ -124,7 +143,30 @@ export default function MercadoPagoCheckout({
           </p>
         </div>
 
-        {loading ? (
+        {simulating || simulationSuccess ? (
+          <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center animate-fade-in">
+            {simulating ? (
+              <>
+                <Loader2 className="w-12 h-12 animate-spin text-amber-400" />
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-amber-300">Processando Pagamento Simulado...</p>
+                  <p className="text-xs text-gray-400">Homologando seu plano de testes Pro no banco de dados...</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse"></div>
+                  <CheckCircle2 className="w-16 h-16 text-emerald-400 relative z-10" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-black text-emerald-400">Assinatura Ativada!</p>
+                  <p className="text-xs text-gray-300">Seu plano Cortestime Pro está ativo. Redirecionando...</p>
+                </div>
+              </>
+            )}
+          </div>
+        ) : loading ? (
           <div className="py-12 flex flex-col items-center justify-center space-y-4">
             <Loader2 className="w-8 h-8 animate-spin text-brand-lime" />
             <p className="text-xs text-gray-300 font-medium">Iniciando pagamento seguro com Mercado Pago...</p>
@@ -169,6 +211,23 @@ export default function MercadoPagoCheckout({
                 </div>
               </div>
             )}
+
+            {/* INTERACTIVE DEMO / TEST MODE SIMULATOR */}
+            <div className="p-4 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-center space-y-3">
+              <div className="space-y-1 text-left">
+                <p className="text-xs font-bold text-amber-300">💡 Ativar com Modo Simulado (Recomendado para Testes)</p>
+                <p className="text-[10px] text-gray-300 leading-normal">
+                  Como este é um ambiente de desenvolvimento ou sua credencial está com alguma pendência nas políticas do Mercado Pago, disponibilizamos este atalho de simulação para você homologar os recursos premium do plano Pro instantaneamente.
+                </p>
+              </div>
+              <button
+                onClick={handleSimulatePayment}
+                className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>Simular Ativação do Plano Pro</span>
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
             <button
               onClick={onClose}

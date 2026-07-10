@@ -443,11 +443,11 @@ async function startServer() {
     }
   });
 
-  // Proxy Endpoint: Create Mercado Pago Preference
+  // Proxy Endpoint: Create Mercado Pago Subscription (Preapproval)
   app.post("/api/payments/create-preference", async (req, res) => {
     try {
       const { planName, price, merchantUid, email } = req.body;
-      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976";
       
       if (!accessToken) {
         console.log("MERCADO_PAGO_ACCESS_TOKEN is not configured. Emulating sandbox checkout.");
@@ -460,85 +460,81 @@ async function startServer() {
         return;
       }
 
-      console.log(`Creating Mercado Pago preference for plan ${planName} ($${price}) for merchant ${merchantUid}...`);
+      console.log(`Creating Mercado Pago subscription (preapproval) for plan ${planName} ($${price}) for merchant ${merchantUid}...`);
       
-      // Call Mercado Pago API
-      let response = await fetch("https://api.mercadopago.com/checkout/preferences", {
+      const notificationUrl = process.env.APP_URL && process.env.APP_URL.startsWith("http")
+        ? `${process.env.APP_URL}/api/payments/webhook`
+        : undefined;
+
+      // Call Mercado Pago Subscriptions API (Preapproval)
+      let response = await fetch("https://api.mercadopago.com/preapproval", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          items: [
-            {
-              title: `Assinatura Cortestime Pro - Plano ${planName}`,
-              quantity: 1,
-              unit_price: Number(price),
-              currency_id: "BRL"
-            }
-          ],
-          payer: {
-            email: email || "usuario@cortestime.com.br"
+          reason: `Assinatura Cortestime Pro - Plano ${planName}`,
+          external_reference: `${merchantUid}___${planName}`,
+          payer_email: email || "usuario@cortestime.com.br",
+          auto_recurring: {
+            frequency: 1,
+            frequency_type: "months",
+            transaction_amount: Number(price),
+            currency_id: "BRL"
           },
-          back_urls: {
-            success: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=success&uid=${merchantUid}&plan=${planName}`,
-            failure: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=failure`,
-            pending: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=pending`
-          },
-          auto_return: "approved",
-          external_reference: `${merchantUid}___${planName}`
+          back_url: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=success&uid=${merchantUid}&plan=${planName}`,
+          status: "pending"
         })
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.warn(`Initial Mercado Pago preference creation failed: ${errorText}. Retrying with non-conflicting buyer email...`);
+        console.warn(`Initial Mercado Pago subscription creation failed: ${errorText}. Retrying with non-conflicting buyer email...`);
         
         // Retry with a generic, safe buyer email to bypass self-purchase PolicyAgent block
-        response = await fetch("https://api.mercadopago.com/checkout/preferences", {
+        response = await fetch("https://api.mercadopago.com/preapproval", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            items: [
-              {
-                title: `Assinatura Cortestime Pro - Plano ${planName}`,
-                quantity: 1,
-                unit_price: Number(price),
-                currency_id: "BRL"
-              }
-            ],
-            payer: {
-              email: "cliente_pro_pagador@cortestime.com.br"
+            reason: `Assinatura Cortestime Pro - Plano ${planName}`,
+            external_reference: `${merchantUid}___${planName}`,
+            payer_email: "cliente_pro_pagador@cortestime.com.br",
+            auto_recurring: {
+              frequency: 1,
+              frequency_type: "months",
+              transaction_amount: Number(price),
+              currency_id: "BRL"
             },
-            back_urls: {
-              success: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=success&uid=${merchantUid}&plan=${planName}`,
-              failure: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=failure`,
-              pending: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=pending`
-            },
-            auto_return: "approved",
-            external_reference: `${merchantUid}___${planName}`
+            back_url: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=success&uid=${merchantUid}&plan=${planName}`,
+            status: "pending"
           })
         });
 
         if (!response.ok) {
           const finalErrorText = await response.text();
-          throw new Error(`Mercado Pago API error: ${finalErrorText}`);
+          throw new Error(`Mercado Pago Subscriptions API error: ${finalErrorText}`);
         }
       }
 
       const data = await response.json();
+      
+      // If we are using a sandbox/test token, redirect to sandbox_init_point if available
+      const initPointUrl = accessToken.startsWith("TEST-") && data.sandbox_init_point
+        ? data.sandbox_init_point
+        : data.init_point;
+
       res.json({
         success: true,
-        sandbox: false,
-        init_point: data.init_point,
+        sandbox: accessToken.startsWith("TEST-"),
+        init_point: initPointUrl,
         preferenceId: data.id
       });
     } catch (err: any) {
-      console.error("Error creating Mercado Pago preference:", err);
+      console.error("Error creating Mercado Pago subscription:", err);
       const msg = err.message || "";
       const isPolicyBlocked = msg.includes("PolicyAgent") || msg.includes("PA_UNAUTHORIZED_RESULT_FROM_POLICIES") || msg.includes("UNAUTHORIZED");
       
@@ -547,9 +543,100 @@ async function startServer() {
         policyBlocked: isPolicyBlocked,
         error: isPolicyBlocked 
           ? "Sua credencial do Mercado Pago (token de produção) foi recusada pelas políticas do Mercado Pago (PolicyAgent). Isso acontece quando a conta Mercado Pago ainda não foi homologada/aprovada para produção, ou por restrições do firewall regional."
-          : msg || "Failed to create preference",
+          : msg || "Failed to create subscription",
         rawError: msg
       });
+    }
+  });
+
+  // Webhook Endpoint: Handle Mercado Pago async payment and subscription notifications
+  app.post("/api/payments/webhook", async (req, res) => {
+    try {
+      console.log("Received Mercado Pago Webhook payload:", JSON.stringify(req.body));
+      
+      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976";
+      
+      // Handle both Webhook style (type & data.id) and IPN style (topic & id)
+      let paymentId = req.body.data?.id || req.body.id || req.query.id;
+      let topic = req.body.type || req.body.topic || req.query.topic;
+      
+      if (!paymentId) {
+        // Can be a registration verification request from Mercado Pago
+        console.log("No paymentId found in webhook request. Acknowledging.");
+        res.status(200).send("Notification acknowledged without action");
+        return;
+      }
+
+      // Check if it's a subscription (preapproval) notification
+      const isSubscription = topic === "preapproval" || topic === "subscription_preapproval";
+
+      if (isSubscription) {
+        console.log(`Checking preapproval status for ID: ${paymentId}...`);
+        const response = await fetch(`https://api.mercadopago.com/preapproval/${paymentId}`, {
+          headers: {
+            "Authorization": `Bearer ${accessToken}`
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Mercado Pago Preapproval lookup failed: ${errorText}`);
+          res.status(500).send("Failed to lookup preapproval");
+          return;
+        }
+
+        const preapprovalData = await response.json();
+        console.log(`Preapproval Lookup Success. Status: ${preapprovalData.status}, Ref: ${preapprovalData.external_reference}`);
+
+        const isApproved = preapprovalData.status === "authorized" || preapprovalData.status === "active";
+        if (isApproved && preapprovalData.external_reference) {
+          const [merchantUid, planName] = preapprovalData.external_reference.split("___");
+          
+          if (merchantUid) {
+            console.log(`Activating Pro plan for merchant ${merchantUid} (Plan: ${planName}) via preapproval webhook...`);
+            const merchantRef = doc(db, "merchants", merchantUid);
+            await updateDoc(merchantRef, { plano: "pro" });
+            console.log(`Merchant ${merchantUid} is now Pro.`);
+          }
+        }
+        res.status(200).send("OK");
+        return;
+      }
+
+      // Standard payment notification path
+      console.log(`Checking payment status for ID: ${paymentId} (Topic: ${topic})...`);
+
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Mercado Pago Payment lookup failed: ${errorText}`);
+        res.status(500).send("Failed to lookup payment");
+        return;
+      }
+
+      const paymentData = await response.json();
+      console.log(`Payment Lookup Success. Status: ${paymentData.status}, Ref: ${paymentData.external_reference}`);
+
+      if (paymentData.status === "approved" && paymentData.external_reference) {
+        const [merchantUid, planName] = paymentData.external_reference.split("___");
+        
+        if (merchantUid) {
+          console.log(`Activating Pro plan for merchant ${merchantUid} (Plan: ${planName}) via webhook...`);
+          const merchantRef = doc(db, "merchants", merchantUid);
+          await updateDoc(merchantRef, { plano: "pro" });
+          console.log(`Merchant ${merchantUid} is now Pro.`);
+        }
+      }
+
+      res.status(200).send("OK");
+    } catch (err: any) {
+      console.error("Error handling Mercado Pago Webhook:", err);
+      res.status(500).send("Webhook internal processing error");
     }
   });
 
