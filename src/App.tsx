@@ -222,15 +222,30 @@ export default function App() {
               setFirebaseConnected(true);
               setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
             } else {
+              // Se o perfil do Firestore não foi encontrado mas já temos o merchant na memória ou no localStorage, não limpamos
               const saved = localStorage.getItem('cortestime_merchant_session');
-              if (!saved) {
-                // Não redireciona para a landing page se o usuário estiver no processo de login/cadastro ou onboarding
-                setViewMode(prev => {
-                  if (prev === 'auth' || prev === 'onboarding') return prev;
-                  return 'landing';
-                });
-                setCurrentMerchant(null);
+              if (saved) {
+                try {
+                  const cachedMerchant = JSON.parse(saved) as MerchantUser;
+                  if (cachedMerchant.uid === fbUser.uid) {
+                    setCurrentMerchant(cachedMerchant);
+                    setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+                    setFirebaseConnected(true);
+                    return;
+                  }
+                } catch (e) {}
               }
+
+              // Não redireciona para a landing page se o usuário estiver no processo de login/cadastro ou onboarding
+              setViewMode(prev => {
+                if (prev === 'auth' || prev === 'onboarding') return prev;
+                return 'landing';
+              });
+
+              setCurrentMerchant(prev => {
+                if (prev && prev.uid === fbUser.uid) return prev;
+                return null;
+              });
             }
           } catch (fetchErr) {
             console.warn("Background merchant fetch failed, using offline cache.", fetchErr);
