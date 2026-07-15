@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { initializeApp } from "firebase/app";
 import { 
   initializeFirestore, 
@@ -655,7 +654,8 @@ app.use(express.json());
   // Vite middleware or production serving
   if (process.env.NODE_ENV !== "production") {
     (async () => {
-      const vite = await createViteServer({
+      const { createServer } = await import("vite");
+      const vite = await createServer({
         server: { middlewareMode: true },
         appType: "spa",
       });
