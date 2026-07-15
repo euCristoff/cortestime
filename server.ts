@@ -24,11 +24,10 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const db = initializeFirestore(fbApp, {}, "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2");
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  app.use(express.json());
+app.use(express.json());
 
   // Helper function to call Brevo API
   async function callBrevo(endpoint: string, method: string, body: any) {
@@ -641,34 +640,44 @@ async function startServer() {
   });
 
 
-  // Set up background scheduler every 12 hours
-  setInterval(() => {
-    runEmailSequenceAutomation().catch(err => console.error("Scheduler error:", err));
-  }, 12 * 60 * 60 * 1000);
+  if (!process.env.VERCEL) {
+    // Set up background scheduler every 12 hours
+    setInterval(() => {
+      runEmailSequenceAutomation().catch(err => console.error("Scheduler error:", err));
+    }, 12 * 60 * 60 * 1000);
 
-  // Run once on server startup
-  setTimeout(() => {
-    runEmailSequenceAutomation().catch(err => console.error("Startup automation error:", err));
-  }, 5000);
+    // Run once on server startup
+    setTimeout(() => {
+      runEmailSequenceAutomation().catch(err => console.error("Startup automation error:", err));
+    }, 5000);
+  }
 
   // Vite middleware or production serving
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    (async () => {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running in development on port ${PORT}`);
+      });
+    })();
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (!process.env.VERCEL) {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+
+      const serverPort = process.env.PORT || PORT;
+      app.listen(Number(serverPort), "0.0.0.0", () => {
+        console.log(`Server running in production on port ${serverPort}`);
+      });
+    }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-startServer();
+export default app;
