@@ -224,8 +224,12 @@ export default function App() {
             } else {
               const saved = localStorage.getItem('cortestime_merchant_session');
               if (!saved) {
+                // Não redireciona para a landing page se o usuário estiver no processo de login/cadastro ou onboarding
+                setViewMode(prev => {
+                  if (prev === 'auth' || prev === 'onboarding') return prev;
+                  return 'landing';
+                });
                 setCurrentMerchant(null);
-                setViewMode('landing');
               }
             }
           } catch (fetchErr) {
