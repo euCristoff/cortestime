@@ -8,10 +8,11 @@ import { MerchantUser } from '../types';
 interface AuthPageProps {
   onAuthSuccess: (merchant: MerchantUser) => void;
   onBackToLanding: () => void;
+  initialMode?: 'login' | 'signup';
 }
 
-export default function AuthPage({ onAuthSuccess, onBackToLanding }: AuthPageProps) {
-  const [isLogin, setIsLogin] = useState<boolean>(true);
+export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode = 'login' }: AuthPageProps) {
+  const [isLogin, setIsLogin] = useState<boolean>(initialMode === 'login');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);

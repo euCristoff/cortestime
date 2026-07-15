@@ -607,6 +607,7 @@ export default function App() {
         <AuthPage 
           onAuthSuccess={handleAuthSuccess}
           onBackToLanding={() => setViewMode('landing')}
+          initialMode={authMode}
         />
       )}
 

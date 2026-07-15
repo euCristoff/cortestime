@@ -30,7 +30,7 @@ const app = initializeApp(activeConfig);
 // Sempre usa a base de dados default ou nomeada dependendo do ambiente
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, appletConfig.firestoreDatabaseId || undefined);
+}, isDev ? (appletConfig.firestoreDatabaseId || undefined) : undefined);
 
 // Inicializa o Auth com a instância ativa
 export const auth = getAuth(app);
