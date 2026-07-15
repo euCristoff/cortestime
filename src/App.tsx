@@ -46,9 +46,7 @@ export default function App() {
       const saved = localStorage.getItem('cortestime_merchant_session');
       if (saved) {
         const merchant = JSON.parse(saved) as MerchantUser;
-        if (isUserActive(merchant)) {
-          return merchant.onboardingCompleted ? 'dashboard' : 'onboarding';
-        }
+        return merchant.onboardingCompleted ? 'dashboard' : 'onboarding';
       }
     } catch (e) {}
     return 'landing';
@@ -210,9 +208,7 @@ export default function App() {
                 setCurrentMerchant(cachedMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                if (isUserActive(cachedMerchant)) {
-                  setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
-                }
+                setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
               }
             } catch (e) {}
           }
@@ -224,20 +220,7 @@ export default function App() {
               setCurrentMerchant(merchant);
               localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
               setFirebaseConnected(true);
-
-              if (isUserActive(merchant)) {
-                if (merchant.onboardingCompleted) {
-                  setViewMode('dashboard');
-                } else {
-                  setViewMode('onboarding');
-                }
-              } else {
-                if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
-                  setViewMode('dashboard');
-                } else {
-                  setViewMode('landing');
-                }
-              }
+              setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
             } else {
               const saved = localStorage.getItem('cortestime_merchant_session');
               if (!saved) {
@@ -256,20 +239,7 @@ export default function App() {
             const merchant = JSON.parse(saved) as MerchantUser;
             setCurrentMerchant(merchant);
             setFirebaseConnected(true);
-            
-            if (isUserActive(merchant)) {
-              if (merchant.onboardingCompleted) {
-                setViewMode('dashboard');
-              } else {
-                setViewMode('onboarding');
-              }
-            } else {
-              if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
-                setViewMode('dashboard');
-              } else {
-                setViewMode('landing');
-              }
-            }
+            setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
           } else {
             setCurrentMerchant(null);
             // Fallback to static defaults when logged out (so the client booking doesn't crash)
@@ -511,19 +481,7 @@ export default function App() {
     setCurrentMerchant(merchant);
     setBypassBlocked(false);
     localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
-    if (isUserActive(merchant)) {
-      if (merchant.onboardingCompleted) {
-        setViewMode('dashboard');
-      } else {
-        setViewMode('onboarding');
-      }
-    } else {
-      if (merchant.plano === 'pro_trial' || merchant.plano === 'trial') {
-        setViewMode('dashboard');
-      } else {
-        setViewMode('landing');
-      }
-    }
+    setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
   };
 
   const isExpired = currentMerchant && (currentMerchant.plano === 'pro_trial' || currentMerchant.plano === 'trial') 
