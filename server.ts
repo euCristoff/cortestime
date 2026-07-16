@@ -445,9 +445,14 @@ app.use(express.json());
   app.post("/api/payments/create-preference", async (req, res) => {
     try {
       const { planName, price, merchantUid, email } = req.body;
-      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976";
+      let accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
       
-      if (!accessToken) {
+      // If the token is the expired fallback placeholder, treat it as not configured
+      if (accessToken === "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976") {
+        accessToken = undefined;
+      }
+      
+      if (!accessToken || accessToken.trim() === "") {
         console.log("MERCADO_PAGO_ACCESS_TOKEN is not configured. Emulating sandbox checkout.");
         res.json({
           success: true,
@@ -486,7 +491,10 @@ app.use(express.json());
         })
       });
 
-      if (!response.ok) {
+      let isSuccess = response.ok;
+      let data;
+
+      if (!isSuccess) {
         const errorText = await response.text();
         console.warn(`Initial Mercado Pago subscription creation failed: ${errorText}. Retrying with non-conflicting buyer email...`);
         
@@ -512,13 +520,51 @@ app.use(express.json());
           })
         });
 
-        if (!response.ok) {
+        if (response.ok) {
+          isSuccess = true;
+          data = await response.json();
+        } else {
           const finalErrorText = await response.text();
-          throw new Error(`Mercado Pago Subscriptions API error: ${finalErrorText}`);
-        }
-      }
+          console.warn(`Subscription preapproval failed completely: ${finalErrorText}. Attempting fallback to standard checkout preference...`);
+          
+          // Fallback: Create a standard single-payment checkout preference which does not require subscription permissions
+          const prefResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              items: [
+                {
+                  title: `Assinatura Cortestime Pro - Plano ${planName}`,
+                  quantity: 1,
+                  unit_price: Number(price),
+                  currency_id: "BRL"
+                }
+              ],
+              external_reference: `${merchantUid}___${planName}`,
+              back_urls: {
+                success: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=success&uid=${merchantUid}&plan=${planName}`,
+                failure: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=failure`,
+                pending: `${process.env.APP_URL || "http://localhost:3000"}/?payment_status=pending`
+              },
+              auto_return: "all"
+            })
+          });
 
-      const data = await response.json();
+          if (prefResponse.ok) {
+            isSuccess = true;
+            data = await prefResponse.json();
+            console.log("Successfully created standard checkout preference as a fallback!");
+          } else {
+            const prefErrorText = await prefResponse.text();
+            throw new Error(`Mercado Pago Subscriptions API error: ${finalErrorText}. Fallback standard checkout error: ${prefErrorText}`);
+          }
+        }
+      } else {
+        data = await response.json();
+      }
       
       // If we are using a sandbox/test token, redirect to sandbox_init_point if available
       const initPointUrl = accessToken.startsWith("TEST-") && data.sandbox_init_point
@@ -534,8 +580,19 @@ app.use(express.json());
     } catch (err: any) {
       console.error("Error creating Mercado Pago subscription:", err);
       const msg = err.message || "";
+      const isUnauthorized = msg.toLowerCase().includes("unauthorized") || msg.includes("401") || msg.toLowerCase().includes("unauthorised");
       const isPolicyBlocked = msg.includes("PolicyAgent") || msg.includes("PA_UNAUTHORIZED_RESULT_FROM_POLICIES") || msg.includes("UNAUTHORIZED");
       
+      if (isUnauthorized) {
+        res.status(401).json({
+          success: false,
+          unauthorized: true,
+          error: "O token de acesso (Access Token) do Mercado Pago configurado é inválido, expirou ou não possui as permissões necessárias para criar assinaturas. Verifique suas credenciais em seu painel de Mercado Pago Developers.",
+          rawError: msg
+        });
+        return;
+      }
+
       res.status(isPolicyBlocked ? 403 : 500).json({ 
         success: false,
         policyBlocked: isPolicyBlocked,
@@ -552,7 +609,15 @@ app.use(express.json());
     try {
       console.log("Received Mercado Pago Webhook payload:", JSON.stringify(req.body));
       
-      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN || "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976";
+      let accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      if (accessToken === "TEST-26391707456161-070916-3f497b7e92e1b4aaf0ee4568f4580224-704673976") {
+        accessToken = undefined;
+      }
+      if (!accessToken || accessToken.trim() === "") {
+        console.warn("Webhook received but MERCADO_PAGO_ACCESS_TOKEN is not configured.");
+        res.status(400).send("Mercado Pago Access Token not configured");
+        return;
+      }
       
       // Handle both Webhook style (type & data.id) and IPN style (topic & id)
       let paymentId = req.body.data?.id || req.body.id || req.query.id;
