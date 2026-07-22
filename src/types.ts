@@ -63,6 +63,14 @@ export interface MerchantUser {
   status: 'ativo' | 'suspenso' | 'expirado';
   criadoEm: string;
   onboardingCompleted?: boolean;
+  isAdmin?: boolean;
+  
+  // Subscription & Manual Payment fields
+  dataExpiracaoAssinatura?: string;
+  pagamentoPendente?: boolean;
+  planoPendente?: string;
+  dataPagamentoSolicitado?: string;
+  
   // Optional vitrine fields
   vitrineLogo?: string;
   vitrineSlogan?: string;

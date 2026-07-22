@@ -421,6 +421,20 @@ export const firebaseService = {
     }
   },
 
+  async getAllMerchants(): Promise<MerchantUser[]> {
+    try {
+      const snap = await withTimeout(
+        getDocs(collection(db, "users")),
+        15000,
+        "Tempo limite ao carregar barbeiros cadastrados."
+      );
+      return snap.docs.map((docSnap) => docSnap.data() as MerchantUser);
+    } catch (e) {
+      console.error("Error fetching all merchants:", e);
+      return [];
+    }
+  },
+
   async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
     const docRef = doc(db, "users", uid);
     await withTimeout(

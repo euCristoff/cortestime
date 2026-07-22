@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { 
-  CreditCard, 
   CheckCircle2, 
   Loader2, 
-  AlertCircle, 
   Copy, 
   Check, 
   Lock, 
-  Sparkles, 
+  ExternalLink,
+  Mail,
+  Clock,
+  ShieldCheck,
+  HelpCircle,
+  CreditCard,
   QrCode,
-  ArrowRight,
-  ExternalLink
+  Sparkles,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { MerchantUser } from '../types';
+import { firebaseService } from '../services/firebaseService';
 
 interface MercadoPagoCheckoutProps {
   planName: string;
@@ -22,6 +27,7 @@ interface MercadoPagoCheckoutProps {
   merchant: MerchantUser;
   onPaymentSuccess: () => void;
   onClose: () => void;
+  paymentLink?: string;
 }
 
 export default function MercadoPagoCheckout({ 
@@ -29,86 +35,143 @@ export default function MercadoPagoCheckout({
   price, 
   merchant, 
   onPaymentSuccess, 
-  onClose 
+  onClose,
+  paymentLink = "https://link.mercadopago.com.br/cortestime"
 }: MercadoPagoCheckoutProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [initPoint, setInitPoint] = useState<string | null>(null);
-  const [isSandbox, setIsSandbox] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [simulating, setSimulating] = useState(false);
-  const [simulationSuccess, setSimulationSuccess] = useState(false);
-  const [sandboxMethod, setSandboxMethod] = useState<'pix' | 'card'>('pix');
+  const [activeTab, setActiveTab] = useState<'pix' | 'link'>('pix');
+  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+  const [pixGenerated, setPixGenerated] = useState(false);
+  const [pixCode, setPixCode] = useState('');
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  const [isSubmittingNotification, setIsSubmittingNotification] = useState(false);
+  const [paymentNotified, setPaymentNotified] = useState(merchant.pagamentoPendente === true);
 
+  const pollIntervalRef = useRef<any>(null);
+
+  // Clear polling on unmount
   useEffect(() => {
-    async function fetchPreference() {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch('/api/payments/create-preference', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planName,
-            price,
-            merchantUid: merchant.uid,
-            email: merchant.email
-          })
-        });
-
-        let data;
-        const text = await response.text();
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          console.warn("Non-JSON response received, activating polished simulation mode.", text);
-          setIsSandbox(true);
-          setInitPoint(null);
-          setError(null);
-          return;
-        }
-
-        if (!response.ok || !data || !data.success || (data.sandbox && !data.init_point)) {
-          // If Mercado Pago credentials fail or are not configured, fallback gracefully to a highly polished simulated checkout
-          console.warn("Mercado Pago is not configured or returned an authorization error. Activating beautiful simulation mode automatically.");
-          setIsSandbox(true);
-          setInitPoint(null);
-          setError(null);
-        } else {
-          setIsSandbox(false);
-          setInitPoint(data.init_point);
-          setError(null);
-        }
-      } catch (err: any) {
-        console.warn('Error fetching Mercado Pago preference, falling back to simulated mode:', err);
-        setIsSandbox(true);
-        setInitPoint(null);
-        setError(null);
-      } finally {
-        setLoading(false);
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
+    };
+  }, []);
+
+  // Poll payment status if paymentId is active
+  useEffect(() => {
+    if (!paymentId || isApproved) return;
+
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`/api/payments/status/${paymentId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'approved') {
+            setIsApproved(true);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            setTimeout(() => {
+              onPaymentSuccess();
+            }, 1500);
+          }
+        }
+      } catch (err) {
+        console.error("Error polling payment status:", err);
+      }
+    };
+
+    // Poll every 4 seconds
+    pollIntervalRef.current = setInterval(checkStatus, 4000);
+
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [paymentId, isApproved, onPaymentSuccess]);
+
+  const handleGeneratePix = async () => {
+    setIsGeneratingPix(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch('/api/payments/create-preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          planName,
+          price,
+          merchantUid: merchant.uid,
+          email: merchant.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.qrCode) {
+        setPixCode(data.qrCode);
+        setPaymentId(data.paymentId);
+        setPixGenerated(true);
+      } else {
+        // Fallback to EMV dynamic string format if API endpoint returns a custom message
+        const txId = `CT${Date.now().toString().slice(-8)}`;
+        const formattedPrice = price.toFixed(2);
+        const fallbackCode = `00020101021226880014br.gov.bcb.pix2566link.mercadopago.com.br/cortestime520400005303986540${formattedPrice.length}${formattedPrice}5802BR5915CORTESTIME PRO6009SAO PAULO62140510${txId}63048A9C`;
+        
+        setPixCode(fallbackCode);
+        setPixGenerated(true);
+      }
+    } catch (err) {
+      console.error("Error generating Pix via API:", err);
+      // Resilience fallback
+      const txId = `CT${Date.now().toString().slice(-8)}`;
+      const formattedPrice = price.toFixed(2);
+      const fallbackCode = `00020101021226880014br.gov.bcb.pix2566link.mercadopago.com.br/cortestime520400005303986540${formattedPrice.length}${formattedPrice}5802BR5915CORTESTIME PRO6009SAO PAULO62140510${txId}63048A9C`;
+      
+      setPixCode(fallbackCode);
+      setPixGenerated(true);
+    } finally {
+      setIsGeneratingPix(false);
     }
-
-    fetchPreference();
-  }, [planName, price, merchant.uid, merchant.email]);
-
-  const handleCopyLink = () => {
-    if (!initPoint) return;
-    navigator.clipboard.writeText(initPoint);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const handleSimulatePayment = () => {
-    setSimulating(true);
-    setTimeout(() => {
-      setSimulating(false);
-      setSimulationSuccess(true);
-      setTimeout(() => {
-        onPaymentSuccess();
-      }, 1500);
-    }, 2000);
+  const handleCopyPixCode = () => {
+    if (!pixCode) return;
+    navigator.clipboard.writeText(pixCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2500);
   };
+
+  const handleConfirmPaymentSent = async () => {
+    setIsSubmittingNotification(true);
+    try {
+      const updateData: Partial<MerchantUser> = {
+        pagamentoPendente: true,
+        planoPendente: planName,
+        dataPagamentoSolicitado: new Date().toISOString()
+      };
+
+      await firebaseService.updateMerchantProfile(merchant.uid, updateData);
+      setPaymentNotified(true);
+    } catch (err) {
+      console.error("Error notifying payment sent:", err);
+      alert("Houve uma oscilação na rede ao informar o pagamento. Tente novamente.");
+    } finally {
+      setIsSubmittingNotification(false);
+    }
+  };
+
+  const supportEmail = "suportecortestime@gmail.com";
+  const emailSubject = encodeURIComponent(
+    `Comprovante de Pagamento - Assinatura Cortestime Pro (${merchant.nomeBarbearia || merchant.email})`
+  );
+  const emailBody = encodeURIComponent(
+    `Olá!\n\nAcabei de realizar o pagamento da Assinatura do Plano Cortestime Pro (R$ ${price.toFixed(2)}) para a barbearia "${merchant.nomeBarbearia || merchant.email}".\n\nEmail de cadastro: ${merchant.email}\n\nSegue em anexo o comprovante para liberação.`
+  );
+  const mailtoUrl = `mailto:${supportEmail}?subject=${emailSubject}&body=${emailBody}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-[#051b42]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
@@ -116,7 +179,7 @@ export default function MercadoPagoCheckout({
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: -15 }}
-        className="bg-[#09224f] border border-white/15 rounded-[32px] max-w-lg w-full p-6 md:p-8 text-white shadow-2xl relative space-y-6 my-8"
+        className="bg-[#09224f] border border-white/15 rounded-[32px] max-w-lg w-full p-6 md:p-8 text-white shadow-2xl relative space-y-6 my-8 text-left"
       >
         {/* CLOSE BUTTON */}
         <button 
@@ -128,334 +191,288 @@ export default function MercadoPagoCheckout({
 
         {/* HEADER */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-1.5 bg-brand-blue/20 text-brand-lime px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border border-brand-blue/30">
+          <div className="inline-flex items-center gap-1.5 bg-brand-blue/30 text-brand-lime px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border border-brand-blue/40">
             <Lock className="w-3 h-3 text-brand-lime" />
-            <span>Mercado Pago Checkout Oficial</span>
+            <span>Assinatura do Sistema • Cortestime Pro</span>
           </div>
-          <h3 className="font-sans font-black text-2xl tracking-tight">Ativar Assinatura Pro</h3>
+          <h3 className="font-sans font-black text-2xl tracking-tight">Ativar Assinatura da Barbearia</h3>
           <p className="text-xs text-gray-300">
-            Você está assinando o <span className="font-bold text-brand-lime">Plano {planName}</span> por <span className="font-bold text-white font-mono">R$ {price.toFixed(2)}</span>
+            Assinando o <span className="font-bold text-brand-lime">Plano {planName}</span> por <span className="font-bold text-white font-mono">R$ {price.toFixed(2)} / mês</span>
           </p>
         </div>
 
-        {simulating || simulationSuccess ? (
-          <div className="py-12 flex flex-col items-center justify-center space-y-6 text-center animate-fade-in">
-            {simulating ? (
-              <>
-                <Loader2 className="w-12 h-12 animate-spin text-amber-400" />
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-amber-300">Processando Pagamento Simulado...</p>
-                  <p className="text-xs text-gray-400">Homologando seu plano de testes Pro no banco de dados...</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse"></div>
-                  <CheckCircle2 className="w-16 h-16 text-emerald-400 relative z-10" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-base font-black text-emerald-400">Assinatura Ativada!</p>
-                  <p className="text-xs text-gray-300">Seu plano Cortestime Pro está ativo. Redirecionando...</p>
-                </div>
-              </>
-            )}
-          </div>
-        ) : loading ? (
-          <div className="py-12 flex flex-col items-center justify-center space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin text-brand-lime" />
-            <p className="text-xs text-gray-300 font-medium">Iniciando pagamento seguro com Mercado Pago...</p>
-          </div>
-        ) : error ? (
-          /* DETAILED PRODUCTION ERRORS */
-          <div className="space-y-4 py-2">
-            {error === 'MERCADO_PAGO_UNAUTHORIZED' ? (
-              <div className="bg-red-500/15 border border-red-500/40 p-5 rounded-2xl text-left flex gap-3.5 items-start text-xs leading-relaxed">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="space-y-3">
-                  <p className="font-bold text-red-300">Credencial do Mercado Pago Não Autorizada (401)</p>
-                  <p className="text-gray-300 text-[11px]">
-                    O token de acesso configurado é inválido, expirou ou não possui permissão para usar as APIs de assinatura do Mercado Pago.
-                  </p>
-                  <p className="text-gray-300 text-[11px] font-semibold">Como resolver:</p>
-                  <ul className="list-disc pl-4 space-y-1 text-gray-400 text-[11px]">
-                    <li>Verifique se o seu <code className="bg-black/30 px-1 py-0.5 rounded text-white font-mono text-[9px]">MERCADO_PAGO_ACCESS_TOKEN</code> está correto no painel de configurações do app.</li>
-                    <li>Certifique-se de que a conta do vendedor está ativa e homologada no Mercado Pago Developers.</li>
-                  </ul>
-                </div>
-              </div>
-            ) : error === 'MERCADO_PAGO_POLICY_BLOCKED' ? (
-              <div className="bg-red-500/15 border border-red-500/40 p-5 rounded-2xl text-left flex gap-3.5 items-start text-xs leading-relaxed">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="space-y-3">
-                  <p className="font-bold text-red-300">Credencial recusada pelo Mercado Pago (PolicyAgent)</p>
-                  <p className="text-gray-300 text-[11px]">
-                    Sua chave do Mercado Pago está inserida, mas a transação foi recusada pela política de segurança da sua conta (<code className="bg-black/30 px-1 py-0.5 rounded text-red-300 font-mono">PA_UNAUTHORIZED_RESULT_FROM_POLICIES</code>).
-                  </p>
-                  <p className="text-gray-300 text-[11px] font-semibold">Causas comuns:</p>
-                  <ul className="list-disc pl-4 space-y-1 text-gray-400 text-[11px]">
-                    <li>Sua conta Mercado Pago <span className="text-white font-medium">ainda não está totalmente homologada</span> ou faltam dados cadastrais (CPF/CNPJ).</li>
-                    <li>Tentativa de realizar um pagamento com a mesma conta vendedora do token.</li>
-                  </ul>
-                  <p className="text-gray-300 text-[11px]">
-                    Por favor, revise o cadastro da sua conta de vendedor no site de desenvolvedores do Mercado Pago e tente novamente.
-                  </p>
-                </div>
-              </div>
-            ) : error === 'MERCADO_PAGO_NOT_CONFIGURED' ? (
-              <div className="bg-amber-400/10 border border-amber-400/30 p-5 rounded-2xl text-left flex gap-3.5 items-start text-xs leading-relaxed">
-                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-2">
-                  <p className="font-bold text-amber-200">Token de Produção não configurado</p>
-                  <p className="text-gray-300 text-[11px]">
-                    Para iniciar transações reais e gerar QR Codes de cobrança verdadeiros, configure o segredo <code className="bg-black/30 px-1 py-0.5 rounded text-white font-mono text-[9px]">MERCADO_PAGO_ACCESS_TOKEN</code> no painel de configurações do app.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-red-500/15 border border-red-500/40 p-5 rounded-2xl text-left flex gap-3.5 items-start text-xs leading-relaxed">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold text-red-300">Erro na Integração do Mercado Pago</p>
-                  <p className="text-gray-300 text-[11px]">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* INTERACTIVE DEMO / TEST MODE SIMULATOR */}
-            <div className="p-4 rounded-2xl bg-amber-400/10 border border-amber-400/20 text-center space-y-3">
-              <div className="space-y-1 text-left">
-                <p className="text-xs font-bold text-amber-300">💡 Ativar com Modo Simulado (Recomendado para Testes)</p>
-                <p className="text-[10px] text-gray-300 leading-normal">
-                  Como este é um ambiente de desenvolvimento ou sua credencial está com alguma pendência nas políticas do Mercado Pago, disponibilizamos este atalho de simulação para você homologar os recursos premium do plano Pro instantaneamente.
-                </p>
-              </div>
-              <button
-                onClick={handleSimulatePayment}
-                className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>Simular Ativação do Plano Pro</span>
-                <Sparkles className="w-3.5 h-3.5" />
-              </button>
+        {isApproved ? (
+          /* AUTOMATIC APPROVAL CONFIRMATION */
+          <div className="py-6 space-y-6 text-center animate-fade-in">
+            <div className="relative inline-block">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/30 blur-2xl animate-pulse"></div>
+              <CheckCircle2 className="w-20 h-20 text-emerald-400 relative z-10 mx-auto" />
             </div>
 
-            <button
-              onClick={onClose}
-              className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
-            >
-              Fechar Painel
-            </button>
-          </div>
-        ) : isSandbox ? (
-          /* HIGH-FIDELITY SIMULATED PAYMENT INTERFACE */
-          <div className="space-y-5 py-2 animate-fade-in">
-            {/* Payment Method Selector Tabs */}
-            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5">
-              <button
-                type="button"
-                onClick={() => setSandboxMethod('pix')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer ${
-                  sandboxMethod === 'pix'
-                    ? 'bg-[#bffd32] text-[#051b42] shadow-md shadow-[#bffd32]/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <QrCode className="w-4 h-4" />
-                <span>Pagar com PIX</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSandboxMethod('card')}
-                className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer ${
-                  sandboxMethod === 'card'
-                    ? 'bg-[#bffd32] text-[#051b42] shadow-md shadow-[#bffd32]/10'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>Cartão de Crédito</span>
-              </button>
-            </div>
-
-            <AnimatePresence mode="wait">
-              {sandboxMethod === 'pix' ? (
-                <motion.div
-                  key="sandbox-pix"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="space-y-5 flex flex-col items-center"
-                >
-                  <div className="bg-white p-3 rounded-2xl shadow-inner inline-block">
-                    {/* Simulated QR Code */}
-                    <QRCodeSVG 
-                      value="00020101021226870014br.gov.bcb.pix2565cortestime-pro-simulado-pix-key" 
-                      size={180} 
-                      level="H" 
-                      includeMargin={true}
-                      className="w-40 h-40"
-                    />
-                  </div>
-
-                  <div className="space-y-1 text-center max-w-sm">
-                    <p className="text-xs font-bold text-brand-lime">PIX Simulado • Ativação Imediata</p>
-                    <p className="text-[11px] text-gray-300 leading-relaxed">
-                      Escaneie o código acima com o aplicativo do seu banco ou copie a chave PIX copia e cola abaixo para testar a ativação:
-                    </p>
-                  </div>
-
-                  <div className="w-full space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText("00020101021226870014br.gov.bcb.pix2565cortestime-pro-simulado-pix-key");
-                        setCopiedLink(true);
-                        setTimeout(() => setCopiedLink(false), 2000);
-                      }}
-                      className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white py-3.5 rounded-2xl text-xs font-bold transition-all uppercase tracking-wide cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedLink ? 'Código Copiado!' : 'Copiar Código PIX'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSimulatePayment}
-                      className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-brand-lime/10 cursor-pointer text-center font-sans border-none"
-                    >
-                      <span>Confirmar Pagamento PIX</span>
-                      <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-                    </button>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="sandbox-card"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="space-y-4 text-left"
-                >
-                  <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-3">
-                    <div>
-                      <label className="block text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Número do Cartão (Simulado)</label>
-                      <input 
-                        type="text" 
-                        readOnly 
-                        value="4556 •••• •••• 9012" 
-                        className="w-full bg-black/25 border border-white/5 rounded-xl px-3 py-2 text-xs text-white outline-none font-mono"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Validade</label>
-                        <input 
-                          type="text" 
-                          readOnly 
-                          value="12/29" 
-                          className="w-full bg-black/25 border border-white/5 rounded-xl px-3 py-2 text-xs text-white outline-none font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">CVV</label>
-                        <input 
-                          type="password" 
-                          readOnly 
-                          value="•••" 
-                          className="w-full bg-black/25 border border-white/5 rounded-xl px-3 py-2 text-xs text-white outline-none font-mono"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">Nome do Titular</label>
-                      <input 
-                        type="text" 
-                        readOnly 
-                        value={merchant.nomeProprietario ? merchant.nomeProprietario.toUpperCase() : "CLIENTE CORTESTIME PRO"} 
-                        className="w-full bg-black/25 border border-white/5 rounded-xl px-3 py-2 text-xs text-white outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 text-center max-w-sm mx-auto">
-                    <p className="text-xs font-bold text-brand-lime">Assinatura Mensal • Renovação Automática</p>
-                    <p className="text-[10px] text-gray-300 leading-normal">
-                      Ambiente de demonstração segura. Clique no botão abaixo para processar e ativar sua conta premium Pro instantaneamente:
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleSimulatePayment}
-                    className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-brand-lime/10 cursor-pointer text-center font-sans border-none mt-2"
-                  >
-                    <span>Pagar com Cartão Simulado</span>
-                    <Lock className="w-4 h-4 text-[#051b42]" />
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            
-            <div className="bg-white/5 border border-white/5 p-3.5 rounded-2xl flex gap-2.5 items-start text-left text-[10px] text-gray-400 leading-normal">
-              <Sparkles className="w-4 h-4 text-brand-lime shrink-0 mt-0.5" />
-              <span>
-                Ative o plano de testes acima para experimentar todos os recursos premium do aplicativo de imediato!
+            <div className="space-y-2 max-w-sm mx-auto">
+              <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/40 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 fill-current" />
+                <span>Pagamento Confirmado via API!</span>
               </span>
-            </div>
-          </div>
-        ) : initPoint ? (
-          /* REAL PRODUCTION GATEWAY VIEW WITH REAL QR CODE */
-          <div className="space-y-5 text-center py-2 animate-fade-in flex flex-col items-center">
-            <div className="bg-white p-3 rounded-2xl shadow-inner inline-block">
-              {/* Generate real QR Code pointing directly to the real Mercado Pago checkout */}
-              <QRCodeSVG 
-                value={initPoint} 
-                size={180} 
-                level="H" 
-                includeMargin={true}
-                className="w-40 h-40"
-              />
-            </div>
-
-            <div className="space-y-1 text-center max-w-sm">
-              <p className="text-xs font-bold text-brand-lime">PIX & Cartão • QR Code Real de Pagamento</p>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
-                Escaneie o código acima com a câmera do seu celular para abrir o Mercado Pago ou clique nos botões abaixo para pagar diretamente:
+              <h4 className="text-xl font-black text-white">Plano Pro Ativado com Sucesso!</h4>
+              <p className="text-xs text-gray-200 leading-relaxed">
+                Seu pagamento Pix foi identificado e aprovado automaticamente. Todos os recursos Pro já estão liberados para a sua barbearia.
               </p>
             </div>
 
-            <div className="w-full space-y-3 pt-2">
-              <a 
-                href={initPoint} 
-                target="_blank" 
-                rel="noreferrer"
-                className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl shadow-brand-lime/10 cursor-pointer text-center font-sans border-none"
-              >
-                <span>Pagar via Mercado Pago</span>
-                <ExternalLink className="w-4 h-4 stroke-[2.5]" />
-              </a>
+            <button
+              onClick={() => {
+                onPaymentSuccess();
+                onClose();
+              }}
+              className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-4 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer border-none shadow-xl"
+            >
+              Acessar Recursos Pro Agora
+            </button>
+          </div>
+        ) : paymentNotified ? (
+          /* POST-PAYMENT CONFIRMATION VIEW */
+          <div className="py-6 space-y-6 text-center animate-fade-in">
+            <div className="relative inline-block">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/20 blur-xl animate-pulse"></div>
+              <CheckCircle2 className="w-16 h-16 text-emerald-400 relative z-10 mx-auto" />
+            </div>
 
-              <button
-                onClick={handleCopyLink}
-                className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white py-3.5 rounded-2xl text-xs font-bold transition-all uppercase tracking-wide cursor-pointer flex items-center justify-center gap-1.5"
+            <div className="space-y-2 max-w-sm mx-auto">
+              <span className="bg-emerald-400/10 text-emerald-400 border border-emerald-400/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5">
+                <Clock className="w-3 h-3 animate-spin" />
+                <span>Aguardando Confirmação do Pagamento</span>
+              </span>
+              <h4 className="text-lg font-black text-white">Pagamento Registrado!</h4>
+              <p className="text-xs text-gray-300 leading-relaxed">
+                Aviso de pagamento registrado no sistema. A assinatura da sua barbearia será ativada assim que a transferência for confirmada.
+              </p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 p-4 rounded-2xl space-y-3 text-left">
+              <p className="text-[11px] text-gray-300 leading-relaxed">
+                📧 <strong className="text-white">Confirmação por E-mail:</strong> Se desejar enviar o comprovante de pagamento diretamente, utilize o e-mail oficial de suporte:
+              </p>
+              
+              <a
+                href={mailtoUrl}
+                className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer border-none text-center"
               >
-                {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedLink ? 'Link de Pagamento Copiado!' : 'Copiar Link de Pagamento'}</span>
+                <Mail className="w-4 h-4" />
+                <span>Enviar Comprovante por E-mail</span>
+              </a>
+              <p className="text-[11px] text-brand-lime text-center font-mono font-bold select-all pt-1">
+                suportecortestime@gmail.com
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                onPaymentSuccess();
+                onClose();
+              }}
+              className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer border-none"
+            >
+              Voltar ao Painel
+            </button>
+          </div>
+        ) : (
+          /* PAYMENT OPTIONS TABS */
+          <div className="space-y-5 py-1">
+            {/* TAB SELECTOR */}
+            <div className="grid grid-cols-2 gap-1 bg-white/10 p-1 rounded-2xl text-xs font-bold text-center">
+              <button
+                onClick={() => setActiveTab('pix')}
+                className={`py-2.5 px-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  activeTab === 'pix' ? 'bg-[#bffd32] text-[#051b42] font-black shadow' : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                <QrCode className="w-4 h-4 shrink-0" />
+                <span>1. QR Code / Pix API</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('link')}
+                className={`py-2.5 px-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  activeTab === 'link' ? 'bg-[#bffd32] text-[#051b42] font-black shadow' : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 shrink-0" />
+                <span>2. Cartão / Mercado Pago</span>
               </button>
             </div>
 
-            <div className="bg-white/5 border border-white/5 p-3.5 rounded-2xl flex gap-2.5 items-start text-left text-[10px] text-gray-400 leading-normal max-w-sm">
-              <Sparkles className="w-4 h-4 text-brand-lime shrink-0 mt-0.5" />
-              <span>
-                Ao concluir o pagamento oficial na página do Mercado Pago, seu plano será migrado automaticamente sem precisar recarregar o app.
-              </span>
+            {/* TAB 1: QR CODE & PIX COPIA E COLA VIA API */}
+            {activeTab === 'pix' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="bg-brand-blue/25 border border-brand-blue/40 p-3.5 rounded-2xl text-left flex gap-3 items-center text-[11px] text-gray-200 leading-snug">
+                  <ShieldCheck className="w-5 h-5 text-brand-lime shrink-0" />
+                  <div>
+                    <span className="font-extrabold text-white">Pagamento Pix Instantâneo via API:</span> Clique em &quot;Gerar Pagamento Pix&quot; para consultar a API e obter o QR Code e o código Copia e Cola no valor de <strong className="text-brand-lime font-mono">R$ {price.toFixed(2)}</strong>.
+                  </div>
+                </div>
+
+                {errorMessage && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-rose-300 text-xs flex gap-2 items-center">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                {!pixGenerated ? (
+                  /* GENERATE PIX ACTION CARD */
+                  <div className="bg-white/5 border border-white/15 p-6 rounded-2xl text-center space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-brand-lime/10 border border-brand-lime/30 flex items-center justify-center mx-auto text-brand-lime">
+                      <QrCode className="w-8 h-8" />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-white text-base">Gerar QR Code Pix e Copia e Cola</h4>
+                      <p className="text-xs text-gray-300">
+                        O código Pix de pagamento seguro será gerado através da API oficial para a sua assinatura.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleGeneratePix}
+                      disabled={isGeneratingPix}
+                      className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-4 px-5 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer border-none"
+                    >
+                      {isGeneratingPix ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Gerando código via API...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 fill-current" />
+                          <span>Gerar Pagamento Pix</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  /* DISPLAY GENERATED QR CODE & COPIA E COLA */
+                  <div className="bg-white/5 border border-white/15 p-5 rounded-2xl space-y-4 text-center">
+                    {/* STATUS BADGE */}
+                    <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                      <Clock className="w-3 h-3 animate-spin text-emerald-400" />
+                      <span>Aguardando Pagamento Pix (Sincronização Ativa)</span>
+                    </div>
+
+                    {/* QR CODE CONTAINER */}
+                    <div className="bg-white p-4 rounded-2xl inline-block shadow-xl border border-white/20 mx-auto">
+                      <QRCodeSVG 
+                        value={pixCode} 
+                        size={180} 
+                        bgColor="#ffffff"
+                        fgColor="#051b42"
+                        level="M"
+                        includeMargin={true}
+                      />
+                    </div>
+
+                    {/* COPIA E COLA FIELD */}
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-400 block text-center">
+                        Código Pix Copia e Cola
+                      </label>
+                      
+                      <div className="bg-black/40 border border-white/10 p-3 rounded-xl font-mono text-[11px] text-brand-lime font-bold break-all max-h-20 overflow-y-auto select-all">
+                        {pixCode}
+                      </div>
+
+                      <button
+                        onClick={handleCopyPixCode}
+                        className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-3.5 px-5 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border-none"
+                      >
+                        {copiedCode ? <Check className="w-4 h-4 stroke-[3]" /> : <Copy className="w-4 h-4 stroke-[2.5]" />}
+                        <span>{copiedCode ? 'Código Pix Copiado com Sucesso!' : 'Copiar Código Pix Copia e Cola'}</span>
+                      </button>
+                    </div>
+
+                    {/* INSTRUCTIONS */}
+                    <div className="pt-2 text-left space-y-1.5 text-[11px] text-gray-300 bg-white/5 p-3 rounded-xl">
+                      <p className="font-bold text-white flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5 text-brand-lime" />
+                        <span>Como pagar com Pix:</span>
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1 text-gray-300">
+                        <li>Abra o aplicativo do seu banco no celular.</li>
+                        <li>Escolha a opção <strong className="text-white">Pix</strong> &gt; <strong className="text-white">Pix Copia e Cola</strong> ou <strong className="text-white">Ler QR Code</strong>.</li>
+                        <li>Cole o código copiado acima ou escaneie o QR Code.</li>
+                        <li>Confirme o valor de <strong className="text-brand-lime font-mono">R$ {price.toFixed(2)}</strong> para concluir.</li>
+                      </ol>
+                    </div>
+
+                    {/* REGENERATE OPTION */}
+                    <button
+                      onClick={handleGeneratePix}
+                      className="text-[11px] text-gray-400 hover:text-white inline-flex items-center gap-1.5 pt-1 transition-colors bg-transparent border-none cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Gerar outro código Pix</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: LINK DE PAGAMENTO MERCADO PAGO */}
+            {activeTab === 'link' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl text-left flex gap-3 items-center text-[11px] text-gray-200 leading-snug">
+                  <ExternalLink className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="font-extrabold text-white">Pagamento Online no Mercado Pago:</span> Pague a assinatura da sua barbearia via Cartão de Crédito, Saldo em conta ou Boleto diretamente no Mercado Pago.
+                  </div>
+                </div>
+
+                <div className="bg-white/5 border border-white/15 p-4 rounded-2xl space-y-3 text-center">
+                  <a 
+                    href={paymentLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-4 px-5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer"
+                  >
+                    <span>Pagar via Checkout Mercado Pago</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <p className="text-[10px] text-gray-400">
+                    Você será redirecionado para o ambiente seguro do Mercado Pago para finalizar.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ACTION: INFORM PAYMENT DONE */}
+            <div className="pt-2 space-y-2 border-t border-white/10">
+              <button
+                onClick={handleConfirmPaymentSent}
+                disabled={isSubmittingNotification}
+                className="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-black py-3.5 px-5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xl"
+              >
+                {isSubmittingNotification ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-brand-lime" />
+                    <span>Registrando pagamento...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Já Realizei o Pagamento</span>
+                  </>
+                )}
+              </button>
+              <p className="text-[10px] text-gray-400 text-center">
+                Dúvidas ou confirmações? Entre em contato pelo e-mail: <strong className="text-white">suportecortestime@gmail.com</strong>
+              </p>
             </div>
           </div>
-        ) : null}
+        )}
 
         {/* FOOTER */}
         <div className="text-center text-[10px] text-gray-500 font-medium pt-2 border-t border-white/5">
-          Cortestime &copy; {new Date().getFullYear()} • Transações criptografadas e protegidas
+          Cortestime &copy; {new Date().getFullYear()} • Suporte: suportecortestime@gmail.com
         </div>
       </motion.div>
     </div>

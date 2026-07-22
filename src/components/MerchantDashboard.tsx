@@ -31,12 +31,14 @@ import {
   Undo,
   Mail,
   Send,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
 import CortesVitrine from './CortesVitrine';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
+import AdminSubscriptionManager from './AdminSubscriptionManager';
 import { firebaseService } from '../services/firebaseService';
 
 interface MerchantDashboardProps {
@@ -101,6 +103,13 @@ export default function MerchantDashboard({
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [showUpgradePlans, setShowUpgradePlans] = useState(false);
   const [checkoutPlan, setCheckoutPlan] = useState<{ name: string; price: number } | null>(null);
+  const [isAdminManagerOpen, setIsAdminManagerOpen] = useState(false);
+
+  const isSuperAdmin = Boolean(
+    merchant?.email?.toLowerCase() === 'suportecortestime@gmail.com' ||
+    merchant?.email?.toLowerCase() === 'cristoffcauaff9@gmail.com' ||
+    merchant?.isAdmin === true
+  );
   
   // Service form
   const [newServiceName, setNewServiceName] = useState('');
@@ -138,6 +147,16 @@ export default function MerchantDashboard({
       setActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'checkout') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('action');
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+      setCheckoutPlan({ name: 'Mensal', price: 19.90 });
+    }
+  }, []);
 
   // Free Mode / Modo Livre state
   const [isFreeModeSheetOpen, setIsFreeModeSheetOpen] = useState(false);
@@ -646,10 +665,10 @@ export default function MerchantDashboard({
               <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/20 rounded-full blur-2xl"></div>
               <div className="space-y-2">
                 <span className="text-[10px] bg-brand-blue text-white px-2.5 py-1 rounded-full uppercase font-bold tracking-wider">
-                  Painel Administrativo
+                  Painel da Barbearia
                 </span>
                 <h2 className="font-display font-extrabold text-2xl md:text-3xl">
-                  {merchant?.nomeBarbearia || onboardingData.businessName || 'Minha Barbearia'}
+                  {(merchant?.nomeBarbearia && merchant.nomeBarbearia !== 'Admin') ? merchant.nomeBarbearia : (onboardingData.businessName && onboardingData.businessName !== 'Admin' ? onboardingData.businessName : 'Minha Barbearia')}
                 </h2>
                 <p className="text-xs text-gray-400">
                   {merchant?.whatsapp 
@@ -662,6 +681,16 @@ export default function MerchantDashboard({
               </div>
 
               <div className="flex gap-2">
+                {isSuperAdmin && (
+                  <button 
+                    onClick={() => setIsAdminManagerOpen(true)}
+                    className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs py-3 px-3.5 rounded-xl flex items-center gap-1.5 uppercase tracking-wide transition-colors cursor-pointer shadow-md"
+                    title="Gestão Manual de Assinaturas e Usuários (SuperAdmin)"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                    <span className="hidden sm:inline">Gestão Assinaturas</span>
+                  </button>
+                )}
                 <button 
                   onClick={() => setIsAppointmentModalOpen(true)}
                   className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-4 rounded-xl flex items-center gap-1.5 uppercase tracking-wide transition-colors"
@@ -1501,6 +1530,32 @@ export default function MerchantDashboard({
               <h2 className="font-display font-extrabold text-2xl text-brand-dark">Painel de Gestão Completo</h2>
               <p className="text-xs text-gray-500">Administre serviços, preços, comissões, profissionais cadastrados e faturamento</p>
             </div>
+
+            {/* ADMIN SUBSCRIPTION MANAGEMENT CARD (SuperAdmin Only) */}
+            {isSuperAdmin && (
+              <div className="bg-amber-500/10 border border-amber-400/30 p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
+                <div className="space-y-1.5 text-left">
+                  <span className="text-[10px] bg-amber-500 text-white px-2.5 py-1 rounded-full uppercase font-black tracking-wider inline-flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>Área do Administrador do Sistema</span>
+                  </span>
+                  <h3 className="font-display font-extrabold text-xl text-brand-dark">
+                    Gestão Manual de Assinaturas & Pix
+                  </h3>
+                  <p className="text-xs text-gray-600 max-w-xl leading-relaxed">
+                    Acesse a lista completa de barbeiros e ative, renove ou cancele planos manualmente, além de conferir e aprovar comprovantes Pix em 1 clique.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setIsAdminManagerOpen(true)}
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-black text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0 border-none"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Gerenciar Assinaturas</span>
+                </button>
+              </div>
+            )}
 
             {/* CORTES VITRINE PROMO CARD */}
             <div className="bg-[#051b42] text-white p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-emerald-500/25 shadow-lg shadow-emerald-500/5">
@@ -2516,6 +2571,19 @@ export default function MerchantDashboard({
               }
             }}
             onClose={() => setCheckoutPlan(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ADMIN SUBSCRIPTION MANAGER MODAL */}
+      <AnimatePresence>
+        {isAdminManagerOpen && merchant && isSuperAdmin && (
+          <AdminSubscriptionManager
+            currentAdmin={merchant}
+            onClose={() => setIsAdminManagerOpen(false)}
+            onUpdateMerchant={(updated) => {
+              if (onUpdateMerchant) onUpdateMerchant(updated);
+            }}
           />
         )}
       </AnimatePresence>
