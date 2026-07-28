@@ -465,7 +465,7 @@ export default function CortesVitrine({
                 </h4>
                 <p className="text-xs leading-relaxed font-medium">
                   {downgradeNotice === 'trial_expired' 
-                    ? 'Seu período de teste de 3 dias do Cortestime Pro chegou ao fim. Para que você continue divulgando seus serviços, sua conta foi alterada automaticamente para o plano gratuito Cortes Vitrine.' 
+                    ? 'Seu período de teste de 7 dias do Cortestime Pro chegou ao fim. Para que você continue divulgando seus serviços, sua conta foi alterada automaticamente para o plano gratuito Cortes Vitrine.' 
                     : 'Sua assinatura Pro venceu ou foi cancelada. Para garantir que seus clientes continuem visualizando sua barbearia, sua conta retornou automaticamente para o plano gratuito Cortes Vitrine.'}
                 </p>
                 <p className="text-xs font-bold underline">

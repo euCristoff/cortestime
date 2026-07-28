@@ -29,7 +29,7 @@ const PORT = 3000;
 app.use(express.json());
 
   // Helper function to call Brevo API
-  async function callBrevo(endpoint: string, method: string, body: any) {
+  async function callBrevo(endpoint: string, method: string, body: any, options: { silentError?: boolean } = {}) {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
       console.warn("BREVO_API_KEY is not configured.");
@@ -59,7 +59,9 @@ app.use(express.json());
         console.error("Isso permitirá que o servidor sincronize seus contatos e envie e-mails de sequência.");
         console.error("==============================================================\n");
       }
-      console.error(`Brevo API Error (${response.status}) on ${endpoint}:`, errorText);
+      if (!options.silentError) {
+        console.error(`Brevo API Error (${response.status}) on ${endpoint}:`, errorText);
+      }
       throw new Error(`Brevo API Error: ${errorText}`);
     }
 
@@ -230,16 +232,17 @@ app.use(express.json());
       };
 
       try {
-        await callBrevo("contacts", "POST", payload);
+        await callBrevo("contacts", "POST", payload, { silentError: true });
       } catch (err: any) {
-        // If Brevo complains about the phone number format, retry without the SMS attribute so the email sync succeeds
+        // If Brevo complains about duplicate SMS or phone format, retry without the SMS attribute so the contact sync succeeds
         if (attributes.SMS && err.message && (
           err.message.toLowerCase().includes("phone") || 
           err.message.toLowerCase().includes("sms") || 
           err.message.toLowerCase().includes("parameter") ||
-          err.message.toLowerCase().includes("invalid")
+          err.message.toLowerCase().includes("invalid") ||
+          err.message.toLowerCase().includes("duplicate")
         )) {
-          console.warn("Retrying Brevo contact sync without SMS attribute due to format error:", err.message);
+          console.log("Brevo contact sync: SMS constraint detected, syncing contact without SMS attribute.");
           delete attributes.SMS;
           await callBrevo("contacts", "POST", {
             email,
@@ -347,18 +350,38 @@ app.use(express.json());
       console.log(`Email '${subject}' successfully sent to ${email}`);
     } catch (error: any) {
       console.error(`Failed to send email '${subject}' to ${email}:`, error);
-      throw error; // Propagate error so test endpoint knows and can report details to client
+      throw error;
     }
   }
 
-  // Check and run email sequence automation
+  // Send Transactional SMS helper via Brevo API
+  async function sendSequenceSMS(mobilePhone: string, content: string) {
+    if (!process.env.BREVO_API_KEY) return;
+    const cleanPhone = mobilePhone ? mobilePhone.replace(/\D/g, '') : '';
+    if (!cleanPhone || cleanPhone.length < 10) return;
+    const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+
+    try {
+      await callBrevo("transactionalSMS/sms", "POST", {
+        type: "transactional",
+        sender: "Cortestime",
+        recipient: formattedPhone,
+        content
+      }, { silentError: true });
+      console.log(`[SMS Sequence] SMS sent to ${formattedPhone}`);
+    } catch (err: any) {
+      console.warn(`[SMS Sequence] Brevo SMS dispatch note for ${formattedPhone}:`, err?.message || err);
+    }
+  }
+
+  // Check and run email and SMS sequence automation (7-Day Trial, Starting Day 3)
   async function runEmailSequenceAutomation() {
     if (!process.env.BREVO_API_KEY) {
-      console.log("Skipping email sequence automation: BREVO_API_KEY not configured.");
+      console.log("Skipping sequence automation: BREVO_API_KEY not configured.");
       return;
     }
 
-    console.log("Running Brevo email sequence automation job...");
+    console.log("Running Brevo email and SMS sequence automation job...");
     try {
       const snap = await getDocs(collection(db, "users"));
       if (snap.empty) {
@@ -374,12 +397,12 @@ app.use(express.json());
           const user = docSnap.data();
           if (!user.email || !user.criadoEm) continue;
 
-          // Skip users with Pro Plan as requested
+          // Skip users with active Pro Plan
           if (user.plano === "pro") {
             continue;
           }
 
-          // Skip the main admin/developer email to avoid spamming your own inbox during development
+          // Skip admin/developer account
           if (user.email === "cristoffcauaff9@gmail.com") {
             continue;
           }
@@ -390,87 +413,127 @@ app.use(express.json());
 
           const uid = docSnap.id;
           const name = user.nomeProprietario || user.nomeBarbearia || "Parceiro";
+          const barbearia = user.nomeBarbearia || "sua barbearia";
           const email = user.email;
+          const whatsapp = user.whatsapp || "";
 
-          // Day 2 Email
-          if (diffDays >= 2 && !user.brevoDay2Sent) {
-            const subject = "✂️ Boas-vindas ao Cortestime! Seu teste grátis começou";
-            const body = wrapInBrandTemplate(
-              `Olá, ${name}!`,
-              `
-                <p>Vimos que você criou sua conta no Cortestime para gerenciar a barbearia <strong>${user.nomeBarbearia || 'sua barbearia'}</strong>. Seja muito bem-vindo!</p>
-                <p>Nesses primeiros dias, aproveite para cadastrar seus barbeiros e definir a lista de serviços oferecidos.</p>
-                <p>Se precisar de qualquer ajuda, nossa equipe está à disposição!</p>
-              `
-            );
-            await sendSequenceEmail(email, name, subject, body);
-            await updateDoc(doc(db, "users", uid), { brevoDay2Sent: true });
+          // --- DAY 3 SEQUENCE (Email + SMS) ---
+          if (diffDays >= 3 && (!user.brevoDay3Sent || !user.brevoSmsDay3Sent)) {
+            if (!user.brevoDay3Sent) {
+              const subject = "✂️ Seu teste de 7 dias no Cortestime: 3º dia de uso! Configurando sua barbearia";
+              const body = wrapInBrandTemplate(
+                `Olá, ${name}!`,
+                `
+                  <p>Você já está no <strong>3º dia do seu teste grátis de 7 dias</strong> do Cortestime para a barbearia <strong>${barbearia}</strong>.</p>
+                  <p>Nesses primeiros dias, aproveite para cadastrar seus barbeiros, ajustar sua lista de serviços e divulgar o link da sua vitrine digital no Instagram!</p>
+                  <p>Se precisar de qualquer ajuda, nossa equipe está pronta para te atender.</p>
+                  <div style="text-align: center; margin: 28px 0;">
+                    <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
+                      Ver Meu Painel Pro
+                    </a>
+                  </div>
+                `
+              );
+              await sendSequenceEmail(email, name, subject, body);
+            }
+
+            if (!user.brevoSmsDay3Sent && whatsapp) {
+              const smsText = `Cortestime: Ola ${name}! Voce esta no 3o dia do teste gratis de 7 dias da barbearia ${barbearia}. Configure seus servicos na plataforma: cortestime.com.br`;
+              await sendSequenceSMS(whatsapp, smsText);
+            }
+
+            await updateDoc(doc(db, "users", uid), { brevoDay3Sent: true, brevoSmsDay3Sent: true });
           }
 
-          // Day 5 Email
-          if (diffDays >= 5 && !user.brevoDay5Sent) {
-            const subject = "📱 Sua vitrine digital está pronta para atrair clientes!";
-            const body = wrapInBrandTemplate(
-              `Olá, ${name}!`,
-              `
-                <p>Sua vitrine digital está prontinha! Que tal baixar seu QR Code personalizado e colocar no balcão da sua barbearia?</p>
-                <p>Você também pode adicionar o link da sua vitrine na bio do Instagram para facilitar os agendamentos online dos seus clientes de forma profissional.</p>
-                <p>Diga adeus para sempre à agenda de papel!</p>
-                <div style="text-align: center; margin: 28px 0;">
-                  <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
-                    Quero Ativar Meu Plano Pro
-                  </a>
-                </div>
-              `
-            );
-            await sendSequenceEmail(email, name, subject, body);
-            await updateDoc(doc(db, "users", uid), { brevoDay5Sent: true });
+          // --- DAY 5 SEQUENCE (Email + SMS) ---
+          if (diffDays >= 5 && (!user.brevoDay5Sent || !user.brevoSmsDay5Sent)) {
+            if (!user.brevoDay5Sent) {
+              const subject = "📱 Restam 2 dias do seu teste de 7 dias! Sua vitrine digital está pronta";
+              const body = wrapInBrandTemplate(
+                `Olá, ${name}!`,
+                `
+                  <p>Faltam apenas <strong>2 dias</strong> para o encerramento do seu teste grátis de 7 dias no Cortestime.</p>
+                  <p>Sua vitrine digital está prontinha! Baixe seu QR Code personalizado para o balcão e adicione o link na bio do Instagram para facilitar os agendamentos online dos seus clientes.</p>
+                  <p>Ative seu Plano Pro para garantir que sua barbearia continue recebendo agendamentos automáticos sem interrupção!</p>
+                  <div style="text-align: center; margin: 28px 0;">
+                    <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
+                      Ativar Meu Plano Pro Agora
+                    </a>
+                  </div>
+                `
+              );
+              await sendSequenceEmail(email, name, subject, body);
+            }
+
+            if (!user.brevoSmsDay5Sent && whatsapp) {
+              const smsText = `Cortestime: Faltam apenas 2 dias do seu teste gratis de 7 dias! Ative o Plano Pro para manter sua agenda online funcionando: cortestime.com.br`;
+              await sendSequenceSMS(whatsapp, smsText);
+            }
+
+            await updateDoc(doc(db, "users", uid), { brevoDay5Sent: true, brevoSmsDay5Sent: true });
           }
 
-          // Day 10 Email
-          if (diffDays >= 10 && !user.brevoDay10Sent) {
-            const subject = "💎 Aumente seu faturamento com os recursos Pro";
-            const body = wrapInBrandTemplate(
-              `Olá, ${name}!`,
-              `
-                <p>Você sabia que barbearias que utilizam os relatórios e a gestão do plano Pro do Cortestime chegam a aumentar seu faturamento em até 30%?</p>
-                <p>Com o plano Pro, você tem acesso a relatórios profissionais de desempenho, automação de comissões para barbeiros e suporte prioritário.</p>
-                <p>Atualize seu plano hoje mesmo e destrave o potencial máximo da sua barbearia!</p>
-                <div style="text-align: center; margin: 28px 0;">
-                  <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
-                    Destravar Recursos Pro
-                  </a>
-                </div>
-              `
-            );
-            await sendSequenceEmail(email, name, subject, body);
-            await updateDoc(doc(db, "users", uid), { brevoDay10Sent: true });
+          // --- DAY 7 SEQUENCE (Email + SMS - Último dia do teste) ---
+          if (diffDays >= 7 && (!user.brevoDay7Sent || !user.brevoSmsDay7Sent)) {
+            if (!user.brevoDay7Sent) {
+              const subject = "⏰ Hoje é o último dia do seu teste grátis de 7 dias! Ative o Plano Pro";
+              const body = wrapInBrandTemplate(
+                `Olá, ${name}!`,
+                `
+                  <p>Hoje é o <strong>7º e último dia</strong> do seu teste grátis no Cortestime.</p>
+                  <p>Não deixe seus clientes sem conseguir agendar horários online de última hora!</p>
+                  <p>Assine o Plano Pro por apenas <strong>R$ 49,90/mês</strong> e continue aproveitando a melhor tecnologia de gestão e agendamento para sua barbearia.</p>
+                  <div style="text-align: center; margin: 28px 0;">
+                    <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
+                      Garantir Meu Acesso Pro
+                    </a>
+                  </div>
+                `
+              );
+              await sendSequenceEmail(email, name, subject, body);
+            }
+
+            if (!user.brevoSmsDay7Sent && whatsapp) {
+              const smsText = `Cortestime: Hoje e o ultimo dia do seu teste gratis de 7 dias! Garanta seu Plano Pro para nao perder agendamentos: cortestime.com.br`;
+              await sendSequenceSMS(whatsapp, smsText);
+            }
+
+            await updateDoc(doc(db, "users", uid), { brevoDay7Sent: true, brevoSmsDay7Sent: true });
           }
 
-          // Day 20 Email
-          if (diffDays >= 20 && !user.brevoDay20Sent) {
-            const subject = "⚡ Não perca seus clientes! Mude para o plano Pro";
-            const body = wrapInBrandTemplate(
-              `Olá, ${name}!`,
-              `
-                <p>Seu período de teste grátis do Cortestime terminou. Não deixe que seus clientes fiquem sem conseguir agendar online de última hora!</p>
-                <p>Assine o plano Pro para manter todos os recursos actives e continuar gerindo seu negócio com a melhor tecnologia.</p>
-                <div style="text-align: center; margin: 28px 0;">
-                  <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
-                    Garantir Meu Acesso Pro
-                  </a>
-                </div>
-              `
-            );
-            await sendSequenceEmail(email, name, subject, body);
-            await updateDoc(doc(db, "users", uid), { brevoDay20Sent: true });
+          // --- DAY 8+ SEQUENCE (Email + SMS - Aviso pós-expiração) ---
+          if (diffDays >= 8 && (!user.brevoDay8Sent || !user.brevoSmsDay8Sent)) {
+            if (!user.brevoDay8Sent) {
+              const subject = "⚡ Seu teste grátis de 7 dias venceu. Mude para o Plano Pro!";
+              const body = wrapInBrandTemplate(
+                `Olá, ${name}!`,
+                `
+                  <p>Seu período de teste grátis de 7 dias no Cortestime chegou ao fim.</p>
+                  <p>Não se preocupe: todos os seus cadastros, serviços e profissionais continuam salvos com total segurança.</p>
+                  <p>Assine o plano Pro agora para reativar seu agendamento online e continuar gerindo seu negócio sem nenhuma complicação.</p>
+                  <div style="text-align: center; margin: 28px 0;">
+                    <a href="${appUrl}?action=checkout" target="_blank" style="background-color: #bffd32; color: #051b42; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: bold; text-decoration: none; padding: 14px 28px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 10px rgba(191, 253, 50, 0.25); text-transform: uppercase; letter-spacing: 0.5px; border: none;">
+                      Reativar Meu Plano Pro
+                    </a>
+                  </div>
+                `
+              );
+              await sendSequenceEmail(email, name, subject, body);
+            }
+
+            if (!user.brevoSmsDay8Sent && whatsapp) {
+              const smsText = `Cortestime: Seu teste de 7 dias expirou. Ative o Plano Pro para continuar recebendo agendamentos na sua barbearia: cortestime.com.br`;
+              await sendSequenceSMS(whatsapp, smsText);
+            }
+
+            await updateDoc(doc(db, "users", uid), { brevoDay8Sent: true, brevoSmsDay8Sent: true });
           }
         } catch (singleUserErr) {
-          console.error(`Error processing email sequence for user ${docSnap.id}:`, singleUserErr);
+          console.error(`Error processing sequence for user ${docSnap.id}:`, singleUserErr);
         }
       }
     } catch (error) {
-      console.error("Error running email sequence automation:", error);
+      console.error("Error running email and SMS sequence automation:", error);
     }
   }
 
@@ -498,53 +561,67 @@ app.use(express.json());
         }
 
         let sent = "";
-        if (forceDays === 2) {
-          const subject = "✂️ Boas-vindas ao Cortestime! Seu teste grátis começou";
+        let whatsapp = "";
+        if (userDoc) {
+          whatsapp = userDoc.data().whatsapp || "";
+        }
+
+        if (forceDays === 3) {
+          const subject = "✂️ Seu teste de 7 dias no Cortestime: 3º dia de uso! Configurando sua barbearia";
           const body = wrapInBrandTemplate(
             `Olá, ${name}!`,
             `
-              <p>Vimos que você criou sua conta no Cortestime para gerenciar a barbearia <strong>${barbearia}</strong>. Seja muito bem-vindo!</p>
-              <p>Nesses primeiros dias, aproveite para cadastrar seus barbeiros e definir a lista de serviços oferecidos.</p>
-              <p>Se precisar de qualquer ajuda, nossa equipe está à disposição!</p>
+              <p>Você já está no <strong>3º dia do seu teste grátis de 7 dias</strong> do Cortestime para a barbearia <strong>${barbearia}</strong>.</p>
+              <p>Nesses primeiros dias, aproveite para cadastrar seus barbeiros, ajustar sua lista de serviços e divulgar o link da sua vitrine digital!</p>
             `
           );
           await sendSequenceEmail(testEmail, name, subject, body);
-          sent += "Day 2 (Boas-vindas)";
+          if (whatsapp) {
+            await sendSequenceSMS(whatsapp, `Cortestime: Ola ${name}! Voce esta no 3o dia do teste gratis de 7 dias da barbearia ${barbearia}: cortestime.com.br`);
+          }
+          sent += "Day 3 (3º dia de teste - Email & SMS)";
         } else if (forceDays === 5) {
-          const subject = "📱 Sua vitrine digital está pronta para atrair clientes!";
+          const subject = "📱 Restam 2 dias do seu teste de 7 dias! Sua vitrine digital está pronta";
           const body = wrapInBrandTemplate(
             `Olá, ${name}!`,
             `
-              <p>Sua vitrine digital está prontinha! Que tal baixar seu QR Code personalizado e colocar no balcão da sua barbearia?</p>
-              <p>Você também pode adicionar o link da sua vitrine na bio do Instagram para facilitar os agendamentos online dos seus clientes de forma profissional.</p>
-              <p>Diga adeus para sempre à agenda de papel!</p>
+              <p>Faltam apenas <strong>2 dias</strong> para o encerramento do seu teste grátis de 7 dias no Cortestime.</p>
+              <p>Ative seu Plano Pro para garantir que sua barbearia continue recebendo agendamentos automáticos sem interrupção!</p>
             `
           );
           await sendSequenceEmail(testEmail, name, subject, body);
-          sent += "Day 5 (Vitrine)";
-        } else if (forceDays === 10) {
-          const subject = "💎 Aumente seu faturamento com os recursos Pro";
+          if (whatsapp) {
+            await sendSequenceSMS(whatsapp, `Cortestime: Faltam apenas 2 dias do seu teste gratis de 7 dias! Ative o Plano Pro: cortestime.com.br`);
+          }
+          sent += "Day 5 (Reta final - Email & SMS)";
+        } else if (forceDays === 7) {
+          const subject = "⏰ Hoje é o último dia do seu teste grátis de 7 dias! Ative o Plano Pro";
           const body = wrapInBrandTemplate(
             `Olá, ${name}!`,
             `
-              <p>Você sabia que barbearias que utilizam os relatórios e a gestão do plano Pro do Cortestime chegam a aumentar seu faturamento em até 30%?</p>
-              <p>Com o plano Pro, você tem acesso a relatórios profissionais de desempenho, automação de comissões para barbeiros e suporte prioritário.</p>
-              <p>Atualize seu plano hoje mesmo e destrave o potencial máximo da sua barbearia!</p>
+              <p>Hoje é o <strong>7º e último dia</strong> do seu teste grátis no Cortestime.</p>
+              <p>Assine o Plano Pro por apenas <strong>R$ 49,90/mês</strong> para manter sua agenda online sempre ativa.</p>
             `
           );
           await sendSequenceEmail(testEmail, name, subject, body);
-          sent += "Day 10 (Recursos Pro)";
-        } else if (forceDays === 20) {
-          const subject = "⚡ Não perca seus clientes! Mude para o plano Pro";
+          if (whatsapp) {
+            await sendSequenceSMS(whatsapp, `Cortestime: Hoje e o ultimo dia do seu teste gratis de 7 dias! Garanta seu Plano Pro: cortestime.com.br`);
+          }
+          sent += "Day 7 (Último dia - Email & SMS)";
+        } else if (forceDays === 8) {
+          const subject = "⚡ Seu teste grátis de 7 dias venceu. Mude para o Plano Pro!";
           const body = wrapInBrandTemplate(
             `Olá, ${name}!`,
             `
-              <p>Seu período de teste grátis do Cortestime terminou. Não deixe que seus clientes fiquem sem conseguir agendar online de última hora!</p>
-              <p>Assine o plano Pro para manter todos os recursos ativos e continuar gerindo seu negócio com a melhor tecnologia.</p>
+              <p>Seu período de teste grátis de 7 dias no Cortestime chegou ao fim.</p>
+              <p>Assine o plano Pro agora para reativar seu agendamento online.</p>
             `
           );
           await sendSequenceEmail(testEmail, name, subject, body);
-          sent += "Day 20 (Fim de Teste)";
+          if (whatsapp) {
+            await sendSequenceSMS(whatsapp, `Cortestime: Seu teste de 7 dias expirou. Ative o Plano Pro e receba agendamentos: cortestime.com.br`);
+          }
+          sent += "Day 8 (Pós-expiração - Email & SMS)";
         }
 
         res.json({ success: true, message: `E-mail de teste enviado para ${testEmail}: ${sent || "Nenhum"}` });

@@ -625,19 +625,19 @@ export default function MerchantDashboard({
         {/* TRIAL WARNING BANNER */}
         {merchant?.plano === 'pro_trial' && getTrialDaysLeft() >= 0 && (
           <div className={`p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 text-sm font-bold shadow-sm text-left ${
-            getTrialDaysLeft() === 3
+            getTrialDaysLeft() >= 6
               ? 'bg-brand-blue/10 text-brand-blue border border-brand-blue/20'
-              : getTrialDaysLeft() === 2 
+              : getTrialDaysLeft() <= 2 
               ? 'bg-yellow-50 text-yellow-800 border border-yellow-100' 
               : 'bg-[#bffd32] text-[#051b42] border border-white/10'
           }`}>
             <div className="flex items-center gap-2.5">
               <span className="text-xl">
-                {getTrialDaysLeft() === 3 ? '🎉' : getTrialDaysLeft() === 2 ? '⏳' : '🔥'}
+                {getTrialDaysLeft() >= 6 ? '🎉' : getTrialDaysLeft() <= 2 ? '⏳' : '🔥'}
               </span>
               <span className="text-xs">
-                {getTrialDaysLeft() === 3 
-                  ? 'Bem-vindo ao Cortestime! Seu período de teste de 3 dias grátis começou hoje. Aproveite!'
+                {getTrialDaysLeft() >= 6 
+                  ? 'Bem-vindo ao Cortestime! Seu período de teste de 7 dias grátis começou hoje. Aproveite!'
                   : `Teste Grátis Ativo: Você possui ${getTrialDaysLeft()} dias restantes para testar todos os recursos do sistema.`
                 }
               </span>
@@ -645,14 +645,14 @@ export default function MerchantDashboard({
             <button 
               onClick={() => setShowUpgradePlans(true)}
               className={`py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider font-extrabold cursor-pointer transition-colors ${
-                getTrialDaysLeft() === 3
+                getTrialDaysLeft() >= 6
                   ? 'bg-brand-blue text-white hover:bg-brand-blue-light'
-                  : getTrialDaysLeft() === 2 
+                  : getTrialDaysLeft() <= 2 
                   ? 'bg-yellow-800 text-white hover:bg-yellow-900' 
                   : 'bg-[#051b42] text-white hover:bg-[#051b42]/90'
               }`}
             >
-              {getTrialDaysLeft() === 3 ? 'Ativar Assinatura' : 'Assinar Plano'}
+              {getTrialDaysLeft() >= 6 ? 'Ativar Assinatura' : 'Assinar Plano'}
             </button>
           </div>
         )}

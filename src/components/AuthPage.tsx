@@ -432,7 +432,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                   {isLogin ? 'Acesse sua barbearia' : 'Cadastre sua barbearia'}
                 </h2>
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mt-1.5">
-                  {isLogin ? 'Pronto para começar?' : 'Teste grátis por 3 dias'}
+                  {isLogin ? 'Pronto para começar?' : 'Teste grátis por 7 dias'}
                 </p>
               </div>
 

@@ -62,7 +62,7 @@ export const firebaseService = {
     );
     const user = userCredential.user;
     
-    // Calculate trial dates: today and 5 days later
+    // Calculate trial dates: today and 7 days later
     const today = new Date();
     const formatDate = (date: Date) => {
       const dd = String(date.getDate()).padStart(2, '0');
@@ -74,7 +74,7 @@ export const firebaseService = {
     const trialInicio = formatDate(today);
     
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 3);
+    expiry.setDate(today.getDate() + 7);
     const trialFim = formatDate(expiry);
     
     const merchant: MerchantUser = {
@@ -202,7 +202,7 @@ export const firebaseService = {
     const trialInicio = formatDate(today);
     
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 3);
+    expiry.setDate(today.getDate() + 7);
     const trialFim = formatDate(expiry);
     
     const merchant: MerchantUser = {
