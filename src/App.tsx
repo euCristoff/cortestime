@@ -29,10 +29,8 @@ function isUserActive(merchant: MerchantUser): boolean {
   return isTrialActive(merchant.trialFim);
 }
 
-function shouldShowDashboard(merchant: MerchantUser): boolean {
-  if (merchant.onboardingCompleted === false && (!merchant.nomeBarbearia || merchant.nomeBarbearia === 'Minha Barbearia')) {
-    return false;
-  }
+function shouldShowDashboard(merchant: MerchantUser | null): boolean {
+  if (!merchant) return false;
   return true;
 }
 
@@ -218,7 +216,7 @@ export default function App() {
                 setCurrentMerchant(cachedMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(cachedMerchant) ? 'dashboard' : 'onboarding') : prev);
+                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
               }
             } catch (e) {}
           }
@@ -274,10 +272,40 @@ export default function App() {
             setCurrentMerchant(updatedMerchant);
             localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
             setFirebaseConnected(true);
-            setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(updatedMerchant) ? 'dashboard' : 'onboarding') : prev);
+            setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
           } catch (fetchErr) {
             console.warn("Background merchant fetch failed, keeping active local session.", fetchErr);
             setFirebaseConnected(true); // Don't block user since we have local storage
+            
+            // If we don't have a cached session merchant yet, build a reliable fallback for the logged-in user
+            if (!currentSessionMerchant) {
+              const today = new Date();
+              const formatDate = (d: Date) => {
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+              };
+              const expiry = new Date();
+              expiry.setDate(today.getDate() + 7);
+
+              const fallbackMerchant: MerchantUser = {
+                uid: fbUser.uid,
+                nomeBarbearia: fbUser.displayName ? `Barbearia de ${fbUser.displayName}` : 'Minha Barbearia',
+                nomeProprietario: fbUser.displayName || fbUser.email?.split('@')[0] || 'Proprietário',
+                email: fbUser.email || '',
+                whatsapp: '',
+                plano: 'pro_trial',
+                trialInicio: formatDate(today),
+                trialFim: formatDate(expiry),
+                status: 'ativo',
+                criadoEm: new Date().toISOString(),
+                onboardingCompleted: true
+              };
+              setCurrentMerchant(fallbackMerchant);
+              localStorage.setItem('cortestime_merchant_session', JSON.stringify(fallbackMerchant));
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
+            }
           }
         } else {
           // fbUser is null. Check if we have a persistent fallback session
@@ -287,7 +315,7 @@ export default function App() {
               const merchant = JSON.parse(saved) as MerchantUser;
               setCurrentMerchant(merchant);
               setFirebaseConnected(true);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(merchant) ? 'dashboard' : 'onboarding') : prev);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
             } catch (e) {
               setCurrentMerchant(null);
             }
@@ -529,11 +557,12 @@ export default function App() {
   };
 
   const handleAuthSuccess = (merchant: MerchantUser) => {
-    setCurrentMerchant(merchant);
+    const updatedMerchant = { ...merchant, onboardingCompleted: true };
+    setCurrentMerchant(updatedMerchant);
     setBypassBlocked(false);
-    localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
+    localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
     setIsLoading(false);
-    setViewMode(shouldShowDashboard(merchant) ? 'dashboard' : 'onboarding');
+    setViewMode('dashboard');
   };
 
   const isExpired = currentMerchant && (currentMerchant.plano === 'pro_trial' || currentMerchant.plano === 'trial') 
