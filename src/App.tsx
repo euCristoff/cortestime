@@ -208,44 +208,62 @@ export default function App() {
                 setCurrentMerchant(cachedMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
               }
             } catch (e) {}
           }
 
           // 2. Fetch fresh profile from Firebase in the background
           try {
-            const merchant = await firebaseService.getMerchant(fbUser.uid);
+            let merchant = await firebaseService.getMerchant(fbUser.uid);
+            
+            // Fallback: query by email
+            if (!merchant && fbUser.email) {
+              merchant = await firebaseService.getMerchantByEmail(fbUser.email);
+            }
+
             if (merchant) {
-              setCurrentMerchant(merchant);
-              localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
+              const updatedMerchant = { ...merchant, uid: fbUser.uid };
+              setCurrentMerchant(updatedMerchant);
+              localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
               setFirebaseConnected(true);
-              setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (updatedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
             } else {
-              // Se o perfil do Firestore não foi encontrado mas já temos o merchant na memória ou no localStorage, não limpamos
-              const saved = localStorage.getItem('cortestime_merchant_session');
-              if (saved) {
-                try {
-                  const cachedMerchant = JSON.parse(saved) as MerchantUser;
-                  if (cachedMerchant.uid === fbUser.uid) {
-                    setCurrentMerchant(cachedMerchant);
-                    setViewMode(cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
-                    setFirebaseConnected(true);
-                    return;
-                  }
-                } catch (e) {}
+              // User exists in Firebase Auth, but has no Firestore profile document yet
+              const today = new Date();
+              const formatDate = (d: Date) => {
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+              };
+              const expiry = new Date();
+              expiry.setDate(today.getDate() + 7);
+
+              const newMerchant: MerchantUser = {
+                uid: fbUser.uid,
+                nomeBarbearia: fbUser.displayName ? `Barbearia de ${fbUser.displayName}` : 'Minha Barbearia',
+                nomeProprietario: fbUser.displayName || fbUser.email?.split('@')[0] || 'Proprietário',
+                email: fbUser.email || '',
+                whatsapp: '',
+                plano: 'pro_trial',
+                trialInicio: formatDate(today),
+                trialFim: formatDate(expiry),
+                status: 'ativo',
+                criadoEm: new Date().toISOString(),
+                onboardingCompleted: false
+              };
+
+              try {
+                await firebaseService.saveMerchantProfile(newMerchant);
+              } catch (saveErr) {
+                console.warn("Failed to auto-repair missing merchant profile:", saveErr);
               }
 
-              // Não redireciona para a landing page se o usuário estiver no processo de login/cadastro ou onboarding
-              setViewMode(prev => {
-                if (prev === 'auth' || prev === 'onboarding') return prev;
-                return 'landing';
-              });
-
-              setCurrentMerchant(prev => {
-                if (prev && prev.uid === fbUser.uid) return prev;
-                return null;
-              });
+              setCurrentMerchant(newMerchant);
+              localStorage.setItem('cortestime_merchant_session', JSON.stringify(newMerchant));
+              setFirebaseConnected(true);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'onboarding' : prev);
             }
           } catch (fetchErr) {
             console.warn("Background merchant fetch failed, using offline cache.", fetchErr);
@@ -255,10 +273,14 @@ export default function App() {
           // fbUser is null. Check if we have a persistent fallback session
           const saved = localStorage.getItem('cortestime_merchant_session');
           if (saved) {
-            const merchant = JSON.parse(saved) as MerchantUser;
-            setCurrentMerchant(merchant);
-            setFirebaseConnected(true);
-            setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+            try {
+              const merchant = JSON.parse(saved) as MerchantUser;
+              setCurrentMerchant(merchant);
+              setFirebaseConnected(true);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (merchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
+            } catch (e) {
+              setCurrentMerchant(null);
+            }
           } else {
             setCurrentMerchant(null);
             // Fallback to static defaults when logged out (so the client booking doesn't crash)
@@ -592,13 +614,22 @@ export default function App() {
       {viewMode === 'landing' && (
         <LandingPage 
           onStartTrial={() => {
-            setAuthMode('signup');
-            setViewMode('auth');
+            if (currentMerchant) {
+              setViewMode(currentMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+            } else {
+              setAuthMode('signup');
+              setViewMode('auth');
+            }
           }}
           onLogin={() => {
-            setAuthMode('login');
-            setViewMode('auth');
+            if (currentMerchant) {
+              setViewMode(currentMerchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+            } else {
+              setAuthMode('login');
+              setViewMode('auth');
+            }
           }}
+          currentMerchant={currentMerchant}
           firebaseConnected={firebaseConnected}
         />
       )}

@@ -127,15 +127,61 @@ export const firebaseService = {
     const user = userCredential.user;
     
     const docRef = doc(db, "users", user.uid);
-    const snap = await withTimeout(
-      getDoc(docRef), 
-      15000, 
-      "Não foi possível ler as informações de cadastro do banco de dados (Tempo esgotado)."
-    );
-    if (!snap.exists()) {
-      throw new Error("Cadastro da barbearia não encontrado no banco de dados.");
+    let snap = null;
+    try {
+      snap = await withTimeout(
+        getDoc(docRef), 
+        15000, 
+        "Não foi possível ler as informações de cadastro do banco de dados (Tempo esgotado)."
+      );
+    } catch (e) {
+      console.warn("Could not fetch doc by UID during signIn, attempting fallback...", e);
     }
-    return snap.data() as MerchantUser;
+
+    if (snap && snap.exists()) {
+      return snap.data() as MerchantUser;
+    }
+
+    // Try finding profile by email if doc by UID is missing
+    const existingByEmail = await this.getMerchantByEmail(user.email || email);
+    if (existingByEmail) {
+      const updatedMerchant = { ...existingByEmail, uid: user.uid };
+      await setDoc(docRef, updatedMerchant, { merge: true }).catch(() => {});
+      return updatedMerchant;
+    }
+
+    // Auto-create fallback profile if no document exists in Firestore
+    const today = new Date();
+    const formatDate = (date: Date) => {
+      const dd = String(date.getDate()).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    };
+    const trialInicio = formatDate(today);
+    const expiry = new Date();
+    expiry.setDate(today.getDate() + 7);
+    const trialFim = formatDate(expiry);
+
+    const fallbackMerchant: MerchantUser = {
+      uid: user.uid,
+      nomeBarbearia: user.displayName ? `Barbearia de ${user.displayName}` : "Minha Barbearia",
+      nomeProprietario: user.displayName || email.split('@')[0] || "Proprietário",
+      email: user.email || email,
+      whatsapp: "",
+      plano: 'pro_trial',
+      trialInicio,
+      trialFim,
+      status: 'ativo',
+      criadoEm: new Date().toISOString(),
+      onboardingCompleted: false
+    };
+
+    await setDoc(docRef, fallbackMerchant, { merge: true }).catch(err => {
+      console.warn("Error creating fallback merchant profile in signIn:", err);
+    });
+
+    return fallbackMerchant;
   },
 
   async signInWithGoogle(): Promise<void> {
@@ -153,16 +199,32 @@ export const firebaseService = {
     const user = userCredential.user;
     
     const docRef = doc(db, "users", user.uid);
-    const snap = await withTimeout(
-      getDoc(docRef),
-      15000,
-      "Tempo limite esgotado ao buscar perfil do usuário no banco de dados."
-    );
-    if (snap.exists()) {
-      return { user, isNew: false, merchant: snap.data() as MerchantUser };
-    } else {
-      return { user, isNew: true };
+    let snap = null;
+    try {
+      snap = await withTimeout(
+        getDoc(docRef),
+        15000,
+        "Tempo limite esgotado ao buscar perfil do usuário no banco de dados."
+      );
+    } catch (e) {
+      console.warn("Error fetching Google user doc by UID:", e);
     }
+
+    if (snap && snap.exists()) {
+      return { user, isNew: false, merchant: snap.data() as MerchantUser };
+    }
+
+    // Check by email fallback
+    if (user.email) {
+      const existingByEmail = await this.getMerchantByEmail(user.email);
+      if (existingByEmail) {
+        const updatedMerchant = { ...existingByEmail, uid: user.uid };
+        await setDoc(docRef, updatedMerchant, { merge: true }).catch(() => {});
+        return { user, isNew: false, merchant: updatedMerchant };
+      }
+    }
+
+    return { user, isNew: true };
   },
 
   async handleRedirectResult(): Promise<{ user: FirebaseUser; isNew: boolean; merchant?: MerchantUser } | null> {
@@ -178,16 +240,31 @@ export const firebaseService = {
     const user = userCredential.user;
     
     const docRef = doc(db, "users", user.uid);
-    const snap = await withTimeout(
-      getDoc(docRef),
-      15000,
-      "Tempo esgotado ao buscar perfil do usuário após redirecionamento."
-    );
-    if (snap.exists()) {
-      return { user, isNew: false, merchant: snap.data() as MerchantUser };
-    } else {
-      return { user, isNew: true };
+    let snap = null;
+    try {
+      snap = await withTimeout(
+        getDoc(docRef),
+        15000,
+        "Tempo esgotado ao buscar perfil do usuário após redirecionamento."
+      );
+    } catch (e) {
+      console.warn("Error fetching redirect user doc by UID:", e);
     }
+
+    if (snap && snap.exists()) {
+      return { user, isNew: false, merchant: snap.data() as MerchantUser };
+    }
+
+    if (user.email) {
+      const existingByEmail = await this.getMerchantByEmail(user.email);
+      if (existingByEmail) {
+        const updatedMerchant = { ...existingByEmail, uid: user.uid };
+        await setDoc(docRef, updatedMerchant, { merge: true }).catch(() => {});
+        return { user, isNew: false, merchant: updatedMerchant };
+      }
+    }
+
+    return { user, isNew: true };
   },
 
   async saveGoogleMerchantProfile(user: FirebaseUser, nomeBarbearia: string, nomeProprietario: string, whatsapp: string): Promise<MerchantUser> {
@@ -232,16 +309,43 @@ export const firebaseService = {
   },
 
   async getMerchant(uid: string): Promise<MerchantUser | null> {
-    const docRef = doc(db, "users", uid);
-    const snap = await withTimeout(
-      getDoc(docRef), 
-      15000, 
-      "Não foi possível carregar o perfil da barbearia (tempo esgotado)."
-    );
-    if (snap.exists()) {
-      return snap.data() as MerchantUser;
+    try {
+      const docRef = doc(db, "users", uid);
+      const snap = await withTimeout(
+        getDoc(docRef), 
+        15000, 
+        "Não foi possível carregar o perfil da barbearia (tempo esgotado)."
+      );
+      if (snap.exists()) {
+        return snap.data() as MerchantUser;
+      }
+    } catch (e) {
+      console.warn("getMerchant error for UID:", uid, e);
     }
     return null;
+  },
+
+  async getMerchantByEmail(email: string): Promise<MerchantUser | null> {
+    if (!email) return null;
+    try {
+      const q = query(collection(db, "users"), where("email", "==", email.toLowerCase().trim()));
+      const snap = await withTimeout(getDocs(q), 15000);
+      if (!snap.empty) {
+        return snap.docs[0].data() as MerchantUser;
+      }
+    } catch (e) {
+      console.warn("getMerchantByEmail error:", e);
+    }
+    return null;
+  },
+
+  async saveMerchantProfile(merchant: MerchantUser): Promise<void> {
+    const docRef = doc(db, "users", merchant.uid);
+    await withTimeout(
+      setDoc(docRef, merchant, { merge: true }),
+      15000,
+      "Tempo limite excedido ao salvar perfil da barbearia."
+    );
   },
 
   async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {

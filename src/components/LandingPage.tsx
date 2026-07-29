@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import LogoIcon from './LogoIcon';
+import { MerchantUser } from '../types';
 import { 
   Calendar, 
   Users, 
@@ -14,16 +15,18 @@ import {
   Menu,
   Shield,
   Smartphone,
-  ChevronRight
+  ChevronRight,
+  User
 } from 'lucide-react';
 
 interface LandingPageProps {
   onStartTrial: () => void;
   onLogin: () => void;
   firebaseConnected?: boolean | null;
+  currentMerchant?: MerchantUser | null;
 }
 
-export default function LandingPage({ onStartTrial, onLogin, firebaseConnected }: LandingPageProps) {
+export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, currentMerchant }: LandingPageProps) {
   return (
     <div id="landing-page" className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1E1E1E]">
       
@@ -38,19 +41,34 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected }
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            onClick={onLogin}
-            className="text-xs md:text-sm font-bold text-[#051b42] hover:text-brand-blue px-3.5 py-2 rounded-full hover:bg-gray-100 transition-all cursor-pointer"
-          >
-            Entrar
-          </button>
+          {currentMerchant ? (
+            <button 
+              onClick={onLogin}
+              className="bg-[#051b42] hover:bg-brand-blue text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              id="btn-landing-minha-conta"
+            >
+              <User className="w-4 h-4 text-brand-lime" />
+              <span>Acessar Meu Painel ({currentMerchant.nomeBarbearia || 'Barbearia'})</span>
+            </button>
+          ) : (
+            <>
+              <button 
+                onClick={onLogin}
+                className="text-xs md:text-sm font-bold text-[#051b42] hover:text-brand-blue px-3.5 py-2 rounded-full hover:bg-gray-100 transition-all cursor-pointer"
+                id="btn-landing-entrar"
+              >
+                Entrar
+              </button>
 
-          <button 
-            onClick={onStartTrial}
-            className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-full transition-colors uppercase tracking-wider cursor-pointer shadow-sm"
-          >
-            Teste Grátis
-          </button>
+              <button 
+                onClick={onStartTrial}
+                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-full transition-colors uppercase tracking-wider cursor-pointer shadow-sm"
+                id="btn-landing-teste-gratis"
+              >
+                Teste Grátis
+              </button>
+            </>
+          )}
           <button className="p-2 hover:bg-gray-100 rounded-full transition-colors md:hidden">
             <Menu className="w-6 h-6 text-brand-dark" />
           </button>
