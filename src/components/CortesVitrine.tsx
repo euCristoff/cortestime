@@ -23,6 +23,8 @@ import {
   Loader2,
   Download,
   Copy,
+  Upload,
+  Image as ImageIcon,
   X
 } from 'lucide-react';
 import { MerchantUser, Service } from '../types';
@@ -66,7 +68,23 @@ export default function CortesVitrine({
   const [instagram, setInstagram] = useState(merchant.vitrineInstagram || '@cortestime_barber');
   const [linkBio, setLinkBio] = useState(merchant.vitrineLinkBio || 'instagram.com/cortestime_barber');
   const [logoText, setLogoText] = useState(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
+  const [logoImage, setLogoImage] = useState(merchant.vitrineLogoImage || '');
   const [slogan, setSlogan] = useState(merchant.vitrineSlogan || 'Corte, Barba & Estilo de Alto Padrão');
+
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert('A imagem é muito grande. Escolha uma foto com menos de 3MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   const [capa, setCapa] = useState(merchant.vitrineCapa || 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&auto=format&fit=crop&q=80');
   const [linkPersonalizado, setLinkPersonalizado] = useState(merchant.vitrineLinkPersonalizado || merchant.nomeBarbearia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase());
   
@@ -140,6 +158,7 @@ export default function CortesVitrine({
         vitrineInstagram: instagram,
         vitrineLinkBio: linkBio,
         vitrineLogo: logoText,
+        vitrineLogoImage: logoImage,
         vitrineSlogan: slogan,
         vitrineCapa: capa,
         vitrineLinkPersonalizado: linkPersonalizado,
@@ -236,7 +255,11 @@ export default function CortesVitrine({
             {/* Profile Info */}
             <div className="text-center pb-6 border-b border-gray-100 -mt-14 relative z-10">
               <div className="w-20 h-20 rounded-full bg-[#051b42] text-[#bffd32] border-4 border-white flex items-center justify-center font-sans font-black text-2xl mx-auto shadow-md mb-3 overflow-hidden">
-                {logoText.charAt(0).toUpperCase()}
+                {logoImage ? (
+                  <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
+                ) : (
+                  logoText.charAt(0).toUpperCase()
+                )}
               </div>
               <h2 className="font-sans font-extrabold text-xl tracking-tight text-[#051b42]">
                 {logoText}
@@ -619,7 +642,7 @@ export default function CortesVitrine({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Logo / Nome de Exibição</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Nome de Exibição da Vitrine</label>
                   <input 
                     type="text" 
                     value={logoText}
@@ -639,6 +662,63 @@ export default function CortesVitrine({
                       onChange={e => setInstagram(`@${e.target.value}`)}
                       placeholder="cortestime_barber"
                       className="w-full bg-transparent text-white border-none focus:outline-none py-4 text-xs font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Foto / Imagem da Logo */}
+              <div className="space-y-3 bg-[#051b42]/60 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-brand-lime" />
+                    <span>Foto / Imagem da Logo da Vitrine</span>
+                  </label>
+                  {logoImage && (
+                    <button 
+                      type="button"
+                      onClick={() => setLogoImage('')}
+                      className="text-[11px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remover Foto</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {/* Preview Circular Avatar */}
+                  <div className="w-16 h-16 rounded-full bg-[#051b42] text-[#bffd32] border-2 border-brand-lime/40 flex items-center justify-center font-sans font-black text-xl shrink-0 overflow-hidden shadow-md">
+                    {logoImage ? (
+                      <img src={logoImage} alt="Preview logo" className="w-full h-full object-cover" />
+                    ) : (
+                      logoText.charAt(0).toUpperCase()
+                    )}
+                  </div>
+
+                  <div className="flex-1 w-full space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-2.5 px-4 rounded-xl text-xs cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-sm">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Carregar Foto da Logo</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleLogoFileUpload} 
+                          className="hidden" 
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">Ou insira o link direto da foto (URL):</span>
+                    </div>
+                    <input 
+                      type="text" 
+                      value={logoImage}
+                      onChange={e => setLogoImage(e.target.value)}
+                      placeholder="Ex: https://exemplo.com/logo-barbearia.png"
+                      className="w-full bg-[#051b42] text-white border border-white/10 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
                     />
                   </div>
                 </div>
@@ -877,7 +957,11 @@ export default function CortesVitrine({
                   {/* Profile Info */}
                   <div className="text-center pb-6 border-b border-gray-200 -mt-8 relative z-10">
                     <div className="w-16 h-16 rounded-full bg-[#051b42] text-[#bffd32] border-2 border-[#faf9f6] flex items-center justify-center font-sans font-black text-xl mx-auto shadow-md mb-2 overflow-hidden">
-                      {logoText.charAt(0).toUpperCase()}
+                      {logoImage ? (
+                        <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
+                      ) : (
+                        logoText.charAt(0).toUpperCase()
+                      )}
                     </div>
                     <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42]">
                       {logoText}

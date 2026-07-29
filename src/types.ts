@@ -73,6 +73,7 @@ export interface MerchantUser {
   
   // Optional vitrine fields
   vitrineLogo?: string;
+  vitrineLogoImage?: string;
   vitrineSlogan?: string;
   vitrineCapa?: string;
   vitrineLinkPersonalizado?: string;
