@@ -25,6 +25,7 @@ import {
   Copy,
   Upload,
   Image as ImageIcon,
+  RotateCcw,
   X
 } from 'lucide-react';
 import { MerchantUser, Service } from '../types';
@@ -48,6 +49,8 @@ const DEFAULT_HAIRCUTS = [
   'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?w=400&auto=format&fit=crop&q=80',
   'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80'
 ];
+
+const DEFAULT_COVER_URL = 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&auto=format&fit=crop&q=80';
 
 export default function CortesVitrine({ 
   merchant, 
@@ -85,7 +88,23 @@ export default function CortesVitrine({
       reader.readAsDataURL(file);
     }
   };
-  const [capa, setCapa] = useState(merchant.vitrineCapa || 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&auto=format&fit=crop&q=80');
+
+  const handleCapaFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert('A imagem é muito grande. Escolha uma foto com menos de 3MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapa(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const [capa, setCapa] = useState(merchant.vitrineCapa || DEFAULT_COVER_URL);
   const [linkPersonalizado, setLinkPersonalizado] = useState(merchant.vitrineLinkPersonalizado || merchant.nomeBarbearia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase());
   
   // Local state for products
@@ -775,15 +794,82 @@ export default function CortesVitrine({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Foto de Capa (URL)</label>
-                <input 
-                  type="text" 
-                  value={capa}
-                  onChange={e => setCapa(e.target.value)}
-                  placeholder="Link de uma imagem bonita do Unsplash ou outra fonte"
-                  className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
-                />
+              {/* Foto de Capa / Banner da Vitrine */}
+              <div className="space-y-3 bg-[#051b42]/60 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-brand-lime" />
+                    <span>Banner / Foto de Capa da Vitrine</span>
+                  </label>
+                  {capa !== DEFAULT_COVER_URL && (
+                    <button 
+                      type="button"
+                      onClick={() => setCapa(DEFAULT_COVER_URL)}
+                      className="text-[11px] text-gray-400 hover:text-brand-lime font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Restaurar Padrão</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Banner Preview */}
+                <div className="h-28 w-full rounded-xl overflow-hidden relative border border-white/10 shadow-inner">
+                  <img src={capa || DEFAULT_COVER_URL} alt="Preview Capa" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-2.5">
+                    <span className="text-[10px] font-bold text-white bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">
+                      {capa === DEFAULT_COVER_URL || !capa ? 'Banner Padrão' : 'Banner Personalizado'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* File Upload & Gallery Selection */}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-2.5 px-4 rounded-xl text-xs cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Carregar Foto do Aparelho</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleCapaFileUpload} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+
+                  {/* Select from Galeria if photos exist */}
+                  {gallery && gallery.length > 0 && (
+                    <div className="pt-2 border-t border-white/5">
+                      <span className="text-[10px] text-gray-300 font-bold uppercase block mb-1.5">Ou selecione uma foto da sua Galeria de Cortes:</span>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                        {gallery.map((imgUrl, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setCapa(imgUrl)}
+                            className={`w-14 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer relative ${capa === imgUrl ? 'border-brand-lime scale-105 shadow-md ring-2 ring-brand-lime/50' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                            title="Usar esta foto como Banner"
+                          >
+                            <img src={imgUrl} alt={`Galeria ${idx + 1}`} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Direct Link Input */}
+                  <div className="pt-1">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Ou insira o link/URL da imagem:</span>
+                    <input 
+                      type="text" 
+                      value={capa}
+                      onChange={e => setCapa(e.target.value)}
+                      placeholder="Ex: https://images.unsplash.com/..."
+                      className="w-full bg-[#051b42] text-white border border-white/10 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1.5">

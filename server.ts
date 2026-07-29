@@ -24,7 +24,9 @@ const firebaseConfig = {
 };
 
 const fbApp = initializeApp(firebaseConfig);
-const db = initializeFirestore(fbApp, {});
+const db = initializeFirestore(fbApp, {
+  experimentalForceLongPolling: true,
+});
 
 const app = express();
 const PORT = 3000;
