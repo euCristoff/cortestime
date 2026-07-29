@@ -541,11 +541,28 @@ export const firebaseService = {
 
   async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
     const docRef = doc(db, "users", uid);
-    await withTimeout(
-      updateDoc(docRef, data),
-      15000,
-      "Tempo limite esgotado ao atualizar perfil."
+    
+    // Sanitize data: remove undefined values which cause Firestore updateDoc/setDoc to fail
+    const cleanData = JSON.parse(
+      JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
     );
+
+    try {
+      await withTimeout(
+        setDoc(docRef, cleanData, { merge: true }),
+        15000,
+        "Tempo limite esgotado ao atualizar perfil."
+      );
+    } catch (err) {
+      console.error("Erro ao atualizar perfil no Firestore:", err);
+      // Fallback: Tenta updateDoc se setDoc falhar por algum motivo específico de regra
+      try {
+        await updateDoc(docRef, cleanData);
+      } catch (err2) {
+        console.error("Fallback updateDoc também falhou:", err2);
+        throw err;
+      }
+    }
 
     // Sync with Brevo asynchronously if key details or subscription plans are updated
     if (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined) {

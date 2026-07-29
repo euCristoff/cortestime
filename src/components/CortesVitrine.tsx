@@ -52,6 +52,78 @@ const DEFAULT_HAIRCUTS = [
 
 const DEFAULT_COVER_URL = 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&auto=format&fit=crop&q=80';
 
+function compressImageFile(file: File, maxWidth = 900, maxHeight = 900, quality = 0.75): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve('');
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => resolve((e.target?.result as string) || '');
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve((e.target?.result as string) || '');
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = (e.target?.result as string) || '';
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressDataUrl(dataUrl: string, maxWidth = 800, maxHeight = 800, quality = 0.75): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:image') || dataUrl.length < 80000) {
+    return Promise.resolve(dataUrl);
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onerror = () => resolve(dataUrl);
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      if (height > maxHeight) {
+        width = Math.round((width * maxHeight) / height);
+        height = maxHeight;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
 export default function CortesVitrine({ 
   merchant, 
   services, 
@@ -74,33 +146,35 @@ export default function CortesVitrine({
   const [logoImage, setLogoImage] = useState(merchant.vitrineLogoImage || '');
   const [slogan, setSlogan] = useState(merchant.vitrineSlogan || 'Corte, Barba & Estilo de Alto Padrão');
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 3 * 1024 * 1024) {
-        alert('A imagem é muito grande. Escolha uma foto com menos de 3MB.');
+      if (file.size > 10 * 1024 * 1024) {
+        alert('A imagem é muito grande. Escolha uma foto com menos de 10MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 400, 400, 0.8);
+        if (compressed) setLogoImage(compressed);
+      } catch (err) {
+        console.error('Erro ao processar logo:', err);
+      }
     }
   };
 
-  const handleCapaFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCapaFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 3 * 1024 * 1024) {
-        alert('A imagem é muito grande. Escolha uma foto com menos de 3MB.');
+      if (file.size > 10 * 1024 * 1024) {
+        alert('A imagem é muito grande. Escolha uma foto com menos de 10MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCapa(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 1000, 600, 0.75);
+        if (compressed) setCapa(compressed);
+      } catch (err) {
+        console.error('Erro ao processar foto de capa:', err);
+      }
     }
   };
 
@@ -170,19 +244,27 @@ export default function CortesVitrine({
     setIsSaving(true);
     setSaveSuccess(false);
     try {
+      // Compress large images in background before saving to prevent Firestore 1MB limit crash
+      const compressedLogo = await compressDataUrl(logoImage, 400, 400, 0.8);
+      const compressedCapa = await compressDataUrl(capa, 1000, 600, 0.75);
+      
+      const compressedGallery = await Promise.all(
+        gallery.map(img => compressDataUrl(img, 800, 800, 0.7))
+      );
+
       const dataToUpdate: Partial<MerchantUser> = {
-        vitrineHorarios: horarios,
-        vitrineLocalizacao: localizacao,
-        vitrineWhatsApp: whatsapp,
-        vitrineInstagram: instagram,
-        vitrineLinkBio: linkBio,
-        vitrineLogo: logoText,
-        vitrineLogoImage: logoImage,
-        vitrineSlogan: slogan,
-        vitrineCapa: capa,
-        vitrineLinkPersonalizado: linkPersonalizado,
-        vitrineProdutos: products,
-        vitrineGaleria: gallery,
+        vitrineHorarios: horarios || '',
+        vitrineLocalizacao: localizacao || '',
+        vitrineWhatsApp: whatsapp || '',
+        vitrineInstagram: instagram || '',
+        vitrineLinkBio: linkBio || '',
+        vitrineLogo: logoText || '',
+        vitrineLogoImage: compressedLogo || '',
+        vitrineSlogan: slogan || '',
+        vitrineCapa: compressedCapa || DEFAULT_COVER_URL,
+        vitrineLinkPersonalizado: linkPersonalizado || '',
+        vitrineProdutos: products || [],
+        vitrineGaleria: compressedGallery || [],
       };
 
       await firebaseService.updateMerchantProfile(merchant.uid, dataToUpdate);
@@ -196,9 +278,33 @@ export default function CortesVitrine({
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error saving vitrine:', e);
-      alert('Não foi possível salvar os dados. Verifique sua conexão com o Firebase.');
+      // Always sync state locally so user doesn't lose modifications
+      if (onUpdateMerchant) {
+        onUpdateMerchant({
+          ...merchant,
+          vitrineHorarios: horarios,
+          vitrineLocalizacao: localizacao,
+          vitrineWhatsApp: whatsapp,
+          vitrineInstagram: instagram,
+          vitrineLinkBio: linkBio,
+          vitrineLogo: logoText,
+          vitrineLogoImage: logoImage,
+          vitrineSlogan: slogan,
+          vitrineCapa: capa,
+          vitrineLinkPersonalizado: linkPersonalizado,
+          vitrineProdutos: products,
+          vitrineGaleria: gallery,
+        });
+      }
+
+      const errorStr = String(e?.message || e || '');
+      if (errorStr.includes('exceeds maximum size') || errorStr.includes('1048576')) {
+        alert('As imagens da vitrine ou galeria estão muito pesadas. Tente remover algumas fotos da galeria ou escolher fotos menores.');
+      } else {
+        alert('Não foi possível salvar os dados no servidor. Suas alterações foram mantidas nesta sessão.');
+      }
     } finally {
       setIsSaving(false);
     }
