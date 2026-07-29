@@ -29,6 +29,13 @@ function isUserActive(merchant: MerchantUser): boolean {
   return isTrialActive(merchant.trialFim);
 }
 
+function shouldShowDashboard(merchant: MerchantUser): boolean {
+  if (merchant.onboardingCompleted === false && (!merchant.nomeBarbearia || merchant.nomeBarbearia === 'Minha Barbearia')) {
+    return false;
+  }
+  return true;
+}
+
 export default function App() {
   const [currentMerchant, setCurrentMerchant] = useState<MerchantUser | null>(() => {
     try {
@@ -46,7 +53,7 @@ export default function App() {
       const saved = localStorage.getItem('cortestime_merchant_session');
       if (saved) {
         const merchant = JSON.parse(saved) as MerchantUser;
-        return merchant.onboardingCompleted ? 'dashboard' : 'onboarding';
+        return shouldShowDashboard(merchant) ? 'dashboard' : 'onboarding';
       }
     } catch (e) {}
     return 'landing';
@@ -201,14 +208,17 @@ export default function App() {
         if (fbUser) {
           // 1. Immediately check if we have a locally cached session to load instantly
           const cachedSession = localStorage.getItem('cortestime_merchant_session');
+          let currentSessionMerchant: MerchantUser | null = null;
+
           if (cachedSession) {
             try {
               const cachedMerchant = JSON.parse(cachedSession) as MerchantUser;
               if (cachedMerchant.uid === fbUser.uid) {
+                currentSessionMerchant = cachedMerchant;
                 setCurrentMerchant(cachedMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (cachedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
+                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(cachedMerchant) ? 'dashboard' : 'onboarding') : prev);
               }
             } catch (e) {}
           }
@@ -222,51 +232,51 @@ export default function App() {
               merchant = await firebaseService.getMerchantByEmail(fbUser.email);
             }
 
-            if (merchant) {
-              const updatedMerchant = { ...merchant, uid: fbUser.uid };
-              setCurrentMerchant(updatedMerchant);
-              localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
-              setFirebaseConnected(true);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (updatedMerchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
-            } else {
-              // User exists in Firebase Auth, but has no Firestore profile document yet
-              const today = new Date();
-              const formatDate = (d: Date) => {
-                const dd = String(d.getDate()).padStart(2, '0');
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const yyyy = d.getFullYear();
-                return `${dd}/${mm}/${yyyy}`;
-              };
-              const expiry = new Date();
-              expiry.setDate(today.getDate() + 7);
+            if (!merchant) {
+              // If we already have a session merchant for this UID, don't overwrite it with a blank profile!
+              if (currentSessionMerchant) {
+                merchant = currentSessionMerchant;
+              } else {
+                // User exists in Firebase Auth, auto-create initial profile
+                const today = new Date();
+                const formatDate = (d: Date) => {
+                  const dd = String(d.getDate()).padStart(2, '0');
+                  const mm = String(d.getMonth() + 1).padStart(2, '0');
+                  const yyyy = d.getFullYear();
+                  return `${dd}/${mm}/${yyyy}`;
+                };
+                const expiry = new Date();
+                expiry.setDate(today.getDate() + 7);
 
-              const newMerchant: MerchantUser = {
-                uid: fbUser.uid,
-                nomeBarbearia: fbUser.displayName ? `Barbearia de ${fbUser.displayName}` : 'Minha Barbearia',
-                nomeProprietario: fbUser.displayName || fbUser.email?.split('@')[0] || 'Proprietário',
-                email: fbUser.email || '',
-                whatsapp: '',
-                plano: 'pro_trial',
-                trialInicio: formatDate(today),
-                trialFim: formatDate(expiry),
-                status: 'ativo',
-                criadoEm: new Date().toISOString(),
-                onboardingCompleted: false
-              };
+                merchant = {
+                  uid: fbUser.uid,
+                  nomeBarbearia: fbUser.displayName ? `Barbearia de ${fbUser.displayName}` : 'Minha Barbearia',
+                  nomeProprietario: fbUser.displayName || fbUser.email?.split('@')[0] || 'Proprietário',
+                  email: fbUser.email || '',
+                  whatsapp: '',
+                  plano: 'pro_trial',
+                  trialInicio: formatDate(today),
+                  trialFim: formatDate(expiry),
+                  status: 'ativo',
+                  criadoEm: new Date().toISOString(),
+                  onboardingCompleted: true
+                };
 
-              try {
-                await firebaseService.saveMerchantProfile(newMerchant);
-              } catch (saveErr) {
-                console.warn("Failed to auto-repair missing merchant profile:", saveErr);
+                try {
+                  await firebaseService.saveMerchantProfile(merchant);
+                } catch (saveErr) {
+                  console.warn("Failed to auto-repair missing merchant profile:", saveErr);
+                }
               }
-
-              setCurrentMerchant(newMerchant);
-              localStorage.setItem('cortestime_merchant_session', JSON.stringify(newMerchant));
-              setFirebaseConnected(true);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'onboarding' : prev);
             }
+
+            const updatedMerchant = { ...merchant, uid: fbUser.uid };
+            setCurrentMerchant(updatedMerchant);
+            localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
+            setFirebaseConnected(true);
+            setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(updatedMerchant) ? 'dashboard' : 'onboarding') : prev);
           } catch (fetchErr) {
-            console.warn("Background merchant fetch failed, using offline cache.", fetchErr);
+            console.warn("Background merchant fetch failed, keeping active local session.", fetchErr);
             setFirebaseConnected(true); // Don't block user since we have local storage
           }
         } else {
@@ -277,7 +287,7 @@ export default function App() {
               const merchant = JSON.parse(saved) as MerchantUser;
               setCurrentMerchant(merchant);
               setFirebaseConnected(true);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (merchant.onboardingCompleted ? 'dashboard' : 'onboarding') : prev);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? (shouldShowDashboard(merchant) ? 'dashboard' : 'onboarding') : prev);
             } catch (e) {
               setCurrentMerchant(null);
             }
@@ -522,7 +532,8 @@ export default function App() {
     setCurrentMerchant(merchant);
     setBypassBlocked(false);
     localStorage.setItem('cortestime_merchant_session', JSON.stringify(merchant));
-    setViewMode(merchant.onboardingCompleted ? 'dashboard' : 'onboarding');
+    setIsLoading(false);
+    setViewMode(shouldShowDashboard(merchant) ? 'dashboard' : 'onboarding');
   };
 
   const isExpired = currentMerchant && (currentMerchant.plano === 'pro_trial' || currentMerchant.plano === 'trial') 

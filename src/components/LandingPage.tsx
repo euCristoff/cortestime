@@ -104,10 +104,17 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
             className="flex flex-col sm:flex-row gap-4 mt-2"
           >
             <button 
-              onClick={onStartTrial}
-              className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-extrabold text-sm sm:text-base px-8 py-4 rounded-full shadow-lg shadow-brand-lime/20 hover:shadow-brand-lime/30 transition-all text-center uppercase tracking-wide"
+              onClick={currentMerchant ? onLogin : onStartTrial}
+              className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-extrabold text-sm sm:text-base px-8 py-4 rounded-full shadow-lg shadow-brand-lime/20 hover:shadow-brand-lime/30 transition-all text-center uppercase tracking-wide cursor-pointer flex items-center justify-center gap-2"
             >
-              Teste Grátis por 7 dias
+              {currentMerchant ? (
+                <>
+                  <User className="w-5 h-5 text-brand-blue" />
+                  <span>Acessar Painel da {currentMerchant.nomeBarbearia || 'Barbearia'}</span>
+                </>
+              ) : (
+                'Teste Grátis por 7 dias'
+              )}
             </button>
           </motion.div>
 
