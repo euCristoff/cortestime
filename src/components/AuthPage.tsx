@@ -32,6 +32,21 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
   const renderError = (errStr: string | null) => {
     if (!errStr) return null;
 
+    if (errStr.startsWith("account-exists:")) {
+      const msg = errStr.replace("account-exists:", "");
+      return (
+        <div className="p-3.5 bg-blue-50 text-blue-900 rounded-2xl text-xs space-y-1.5 border border-blue-200">
+          <div className="flex items-center gap-2 font-bold text-blue-800">
+            <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>Conta já registrada</span>
+          </div>
+          <p className="text-blue-700 leading-relaxed text-left font-normal">
+            {msg}
+          </p>
+        </div>
+      );
+    }
+
     if (errStr.startsWith("unauthorized-domain:")) {
       const currentHost = window.location.hostname;
       const domains = [currentHost];
@@ -175,23 +190,11 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     setError(null);
     setIsLoading(true);
     try {
-      const isIframe = window.self !== window.top;
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-      // Se for dispositivo móvel e NÃO estiver em um iframe (como no site em produção),
-      // o signInWithRedirect é recomendado e não sofre bloqueio de popups.
-      if (isMobile && !isIframe) {
-        await firebaseService.signInWithGoogle();
-        return; // getRedirectResult no useEffect cuidará do restante ao retornar
-      }
-
-      // Caso contrário (Desktop ou dentro do preview/iframe do AI Studio), usa popup
+      // 1. Tenta popup diretamente para evitar perda de contexto e de redirecionamento em navegadores móveis (Safari iOS / Vercel)
       const result = await firebaseService.signInWithGooglePopup();
       if (result.merchant) {
-        // Usuário existente, entra com sucesso
         onAuthSuccess(result.merchant);
       } else if (result.user) {
-        // Usuário novo do Google, cria o perfil automaticamente e entra direto no painel
         const today = new Date();
         const formatDate = (d: Date) => {
           const dd = String(d.getDate()).padStart(2, '0');
@@ -216,23 +219,22 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
           onboardingCompleted: true
         };
 
-        try {
-          await firebaseService.saveMerchantProfile(newMerchant);
-        } catch (saveErr) {
+        firebaseService.saveMerchantProfile(newMerchant).catch(saveErr => {
           console.warn("Erro ao salvar perfil do Google no popup:", saveErr);
-        }
+        });
         onAuthSuccess(newMerchant);
       }
     } catch (err: any) {
       console.error("Google Auth error:", err);
       let friendlyMessage = err.message || "Erro ao iniciar o login com o Google.";
+      
       if (
         err.code === "auth/popup-blocked" || 
         err.code === "auth/popup-closed-by-user" || 
         (err.message && err.message.includes("popup-closed-by-user"))
       ) {
         const isIframe = window.self !== window.top;
-        // Se falhou no popup e não está no iframe, tenta redirecionar como plano de fundo (fallback)
+        // Se falhou por popup bloqueado e não estamos dentro do iframe do editor, usa redirect como fallback
         if (!isIframe) {
           try {
             await firebaseService.signInWithGoogle();
@@ -241,7 +243,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
             console.error("Redirect fallback error:", redirectErr);
           }
         }
-        friendlyMessage = "O popup de login do Google foi bloqueado ou fechado pelo navegador. Por favor, tente novamente ou use o login por E-mail e Senha.";
+        friendlyMessage = "O popup do Google foi fechado ou bloqueado pelo seu navegador. Tente novamente ou entre com E-mail e Senha.";
       } else if (err.code === "auth/unauthorized-domain" || (err.message && err.message.includes("unauthorized-domain"))) {
         friendlyMessage = `unauthorized-domain:${window.location.hostname}`;
       }
@@ -305,9 +307,9 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       
       // Customize Firebase specific auth error messages
       if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
-        friendlyMessage = "E-mail ou senha incorretos. Verifique suas credenciais.";
+        friendlyMessage = "E-mail ou senha incorretos. Se sua conta foi criada com o Google, utilize o botão 'Entrar com o Google'.";
       } else if (err.code === "auth/email-already-in-use") {
-        friendlyMessage = "Este e-mail já possui uma conta cadastrada. Direcionamos você para a tela de login para que possa entrar.";
+        friendlyMessage = "account-exists:Este e-mail já possui uma conta cadastrada. Redirecionamos você para a tela de login para que possa entrar com sua senha ou pelo Google.";
         setIsLogin(true);
       } else if (err.code === "auth/invalid-email") {
         friendlyMessage = "Formato de e-mail inválido.";

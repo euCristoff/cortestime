@@ -14,23 +14,16 @@ const prodConfig = {
   measurementId: "G-J15M5HFBYQ"
 };
 
-// Determina se estamos rodando no ambiente de preview do AI Studio ou localhost
-const isDev = typeof window !== "undefined" && (
-  window.location.hostname.includes("localhost") || 
-  window.location.hostname.includes("127.0.0.1") || 
-  window.location.hostname.includes("run.app") ||
-  window.location.hostname.includes("webcontainer")
-);
-
-const activeConfig = isDev ? appletConfig : prodConfig;
+// Sempre usa a configuração oficial do Cortestimey
+const activeConfig = prodConfig;
 
 // Inicializa o Firebase com a configuração ativa
 const app = initializeApp(activeConfig);
 
-// Sempre usa a base de dados default ou nomeada dependendo do ambiente
+// Inicializa o Firestore
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, isDev ? (appletConfig.firestoreDatabaseId || undefined) : undefined);
+});
 
 // Inicializa o Auth com a instância ativa
 export const auth = getAuth(app);

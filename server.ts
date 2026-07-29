@@ -12,16 +12,16 @@ import {
 
 // Firebase Config same as src/firebase.ts
 const firebaseConfig = {
-  apiKey: "AIzaSyARuWfsZIwy75KaGmWw0_IiulZ_Lp-bgH8",
-  authDomain: "positive-decoder-ndzmz.firebaseapp.com",
-  projectId: "positive-decoder-ndzmz",
-  storageBucket: "positive-decoder-ndzmz.firebasestorage.app",
-  messagingSenderId: "576867565081",
-  appId: "1:576867565081:web:e829e40f91fb500902f488",
+  apiKey: "AIzaSyADa-hOGVn76WPx0PMGzIYNO79Q_1qHEFA",
+  authDomain: "cortestimey.firebaseapp.com",
+  projectId: "cortestimey",
+  storageBucket: "cortestimey.firebasestorage.app",
+  messagingSenderId: "661972450235",
+  appId: "1:661972450235:web:a0a21f3e89e70679a3e29e",
 };
 
 const fbApp = initializeApp(firebaseConfig);
-const db = initializeFirestore(fbApp, {}, "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2");
+const db = initializeFirestore(fbApp, {});
 
 const app = express();
 const PORT = 3000;
@@ -532,8 +532,12 @@ app.use(express.json());
           console.error(`Error processing sequence for user ${docSnap.id}:`, singleUserErr);
         }
       }
-    } catch (error) {
-      console.error("Error running email and SMS sequence automation:", error);
+    } catch (error: any) {
+      if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
+        console.log("Email and SMS sequence automation paused: Firestore collection read requires active client session or backend admin credential.");
+      } else {
+        console.error("Error running email and SMS sequence automation:", error?.message || error);
+      }
     }
   }
 

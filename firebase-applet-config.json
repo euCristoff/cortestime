@@ -1,11 +1,10 @@
 {
-  "projectId": "positive-decoder-ndzmz",
-  "appId": "1:576867565081:web:e829e40f91fb500902f488",
-  "apiKey": "AIzaSyARuWfsZIwy75KaGmWw0_IiulZ_Lp-bgH8",
-  "authDomain": "positive-decoder-ndzmz.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-barberflow-ad72a5af-c542-494c-b68b-a33897de01d2",
-  "storageBucket": "positive-decoder-ndzmz.firebasestorage.app",
-  "messagingSenderId": "576867565081",
-  "measurementId": "",
-  "oAuthClientId": "576867565081-ik1an83sb7norbl2shjmu7mernp6pet4.apps.googleusercontent.com"
+  "projectId": "cortestimey",
+  "appId": "1:661972450235:web:a0a21f3e89e70679a3e29e",
+  "apiKey": "AIzaSyADa-hOGVn76WPx0PMGzIYNO79Q_1qHEFA",
+  "authDomain": "cortestimey.firebaseapp.com",
+  "firestoreDatabaseId": "",
+  "storageBucket": "cortestimey.firebasestorage.app",
+  "messagingSenderId": "661972450235",
+  "measurementId": "G-J15M5HFBYQ"
 }
