@@ -123,6 +123,11 @@ export default function App() {
   const [publicVitrineServices, setPublicVitrineServices] = useState<Service[]>([]);
   const [isPublicVitrineLoading, setIsPublicVitrineLoading] = useState(false);
 
+  // Set default document title on mount
+  useEffect(() => {
+    document.title = "Cortestime — Agendamento para Barbearias";
+  }, []);
+
   // Check for public vitrine slug on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -132,6 +137,19 @@ export default function App() {
       firebaseService.getMerchantBySlug(slug).then(async (m) => {
         if (m) {
           setPublicVitrineMerchant(m);
+          const vitrineTitle = `${m.vitrineLogo || m.nomeBarbearia} — Vitrine & Agendamento | Cortestime`;
+          document.title = vitrineTitle;
+
+          // Update OG meta tags dynamically for client
+          const ogTitle = document.querySelector('meta[property="og:title"]');
+          if (ogTitle) ogTitle.setAttribute('content', vitrineTitle);
+          const ogDesc = document.querySelector('meta[property="og:description"]');
+          if (ogDesc) ogDesc.setAttribute('content', m.vitrineSlogan || `Agende seu horário na ${m.nomeBarbearia} pelo Cortestime.`);
+          if (m.vitrineLogoImage || m.vitrineCapa) {
+            const ogImg = document.querySelector('meta[property="og:image"]');
+            if (ogImg) ogImg.setAttribute('content', m.vitrineLogoImage || m.vitrineCapa || '');
+          }
+
           try {
             const fetchedServices = await firebaseService.getServices(m.uid);
             setPublicVitrineServices(fetchedServices.length > 0 ? fetchedServices : defaultServices);

@@ -1,13 +1,16 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { initializeApp } from "firebase/app";
 import { 
   initializeFirestore, 
   collection, 
   getDocs, 
   doc, 
-  updateDoc 
+  updateDoc,
+  query,
+  where
 } from "firebase/firestore";
 
 // Firebase Config same as src/firebase.ts
@@ -1121,9 +1124,47 @@ app.use(express.json());
   } else {
     if (!process.env.VERCEL) {
       const distPath = path.join(process.cwd(), "dist");
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(distPath, "index.html"));
+      app.use(express.static(distPath, { index: false }));
+
+      app.get("*", async (req, res) => {
+        try {
+          const indexPath = path.join(distPath, "index.html");
+          if (!fs.existsSync(indexPath)) {
+            return res.status(404).send("Not found");
+          }
+          let html = fs.readFileSync(indexPath, "utf-8");
+
+          // Check if request is for a specific vitrine slug
+          const querySlug = (req.query.v || req.query.vitrine) as string;
+          if (querySlug) {
+            try {
+              const q = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", querySlug));
+              const snap = await getDocs(q);
+              if (!snap.empty) {
+                const m = snap.docs[0].data();
+                const title = `${m.vitrineLogo || m.nomeBarbearia || 'Barbearia'} — Vitrine & Agendamento | Cortestime`;
+                const desc = m.vitrineSlogan || `Agende seu horário na ${m.nomeBarbearia} pelo Cortestime.`;
+                const img = m.vitrineLogoImage || m.vitrineCapa || "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=1200&h=630&auto=format&fit=crop&q=80";
+
+                html = html
+                  .replace(/<title>.*?<\/title>/gi, `<title>${title}</title>`)
+                  .replace(/<meta property="og:title" content=".*?"\s*\/?>/gi, `<meta property="og:title" content="${title}" />`)
+                  .replace(/<meta property="og:description" content=".*?"\s*\/?>/gi, `<meta property="og:description" content="${desc}" />`)
+                  .replace(/<meta property="og:image" content=".*?"\s*\/?>/gi, `<meta property="og:image" content="${img}" />`)
+                  .replace(/<meta name="twitter:title" content=".*?"\s*\/?>/gi, `<meta name="twitter:title" content="${title}" />`)
+                  .replace(/<meta name="twitter:description" content=".*?"\s*\/?>/gi, `<meta name="twitter:description" content="${desc}" />`)
+                  .replace(/<meta name="twitter:image" content=".*?"\s*\/?>/gi, `<meta name="twitter:image" content="${img}" />`);
+              }
+            } catch (err) {
+              console.warn("Error augmenting metadata for vitrine link:", err);
+            }
+          }
+
+          res.setHeader("Content-Type", "text/html");
+          res.send(html);
+        } catch (err) {
+          res.sendFile(path.join(distPath, "index.html"));
+        }
       });
 
       const serverPort = process.env.PORT || PORT;
