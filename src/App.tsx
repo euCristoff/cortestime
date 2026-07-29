@@ -201,6 +201,54 @@ export default function App() {
 
   // Listen to Auth State Changes (with LocalStorage session persistence)
   useEffect(() => {
+    // Process pending Google Redirect result first at the top level
+    firebaseService.handleRedirectResult().then(async (redirectResult) => {
+      if (redirectResult) {
+        console.log("Google redirect result processed at root:", redirectResult);
+        let m: MerchantUser;
+        if (redirectResult.merchant) {
+          m = { ...redirectResult.merchant, onboardingCompleted: true };
+        } else {
+          // Auto-create or repair profile for Google user
+          const today = new Date();
+          const formatDate = (d: Date) => {
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+          };
+          const expiry = new Date();
+          expiry.setDate(today.getDate() + 7);
+
+          m = {
+            uid: redirectResult.user.uid,
+            nomeBarbearia: redirectResult.user.displayName ? `Barbearia de ${redirectResult.user.displayName}` : 'Minha Barbearia',
+            nomeProprietario: redirectResult.user.displayName || redirectResult.user.email?.split('@')[0] || 'Proprietário',
+            email: redirectResult.user.email || '',
+            whatsapp: '',
+            plano: 'pro_trial',
+            trialInicio: formatDate(today),
+            trialFim: formatDate(expiry),
+            status: 'ativo',
+            criadoEm: new Date().toISOString(),
+            onboardingCompleted: true
+          };
+
+          try {
+            await firebaseService.saveMerchantProfile(m);
+          } catch (e) {
+            console.warn("Error saving redirect merchant profile:", e);
+          }
+        }
+        setCurrentMerchant(m);
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(m));
+        setIsLoading(false);
+        setViewMode('dashboard');
+      }
+    }).catch(err => {
+      console.warn("handleRedirectResult error in App startup:", err);
+    });
+
     const unsubscribe = firebaseService.onAuthChanged(async (fbUser) => {
       try {
         if (fbUser) {
@@ -212,11 +260,11 @@ export default function App() {
             try {
               const cachedMerchant = JSON.parse(cachedSession) as MerchantUser;
               if (cachedMerchant.uid === fbUser.uid) {
-                currentSessionMerchant = cachedMerchant;
-                setCurrentMerchant(cachedMerchant);
+                currentSessionMerchant = { ...cachedMerchant, onboardingCompleted: true };
+                setCurrentMerchant(currentSessionMerchant);
                 setFirebaseConnected(true);
                 setIsLoading(false); // Stop loading immediately
-                setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
+                setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
               }
             } catch (e) {}
           }
@@ -268,11 +316,11 @@ export default function App() {
               }
             }
 
-            const updatedMerchant = { ...merchant, uid: fbUser.uid };
+            const updatedMerchant = { ...merchant, uid: fbUser.uid, onboardingCompleted: true };
             setCurrentMerchant(updatedMerchant);
             localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
             setFirebaseConnected(true);
-            setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
+            setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
           } catch (fetchErr) {
             console.warn("Background merchant fetch failed, keeping active local session.", fetchErr);
             setFirebaseConnected(true); // Don't block user since we have local storage
@@ -304,7 +352,7 @@ export default function App() {
               };
               setCurrentMerchant(fallbackMerchant);
               localStorage.setItem('cortestime_merchant_session', JSON.stringify(fallbackMerchant));
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
             }
           }
         } else {
@@ -315,7 +363,7 @@ export default function App() {
               const merchant = JSON.parse(saved) as MerchantUser;
               setCurrentMerchant(merchant);
               setFirebaseConnected(true);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth') ? 'dashboard' : prev);
+              setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
             } catch (e) {
               setCurrentMerchant(null);
             }

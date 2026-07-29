@@ -187,14 +187,41 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
 
       // Caso contrário (Desktop ou dentro do preview/iframe do AI Studio), usa popup
       const result = await firebaseService.signInWithGooglePopup();
-      if (result.isNew) {
-        // Novo usuário! Transiciona para completar o perfil
-        setGoogleUser(result.user);
-        setNomeProprietario(result.user.displayName || "");
-        setIsCompletingGoogleSignUp(true);
-      } else if (result.merchant) {
+      if (result.merchant) {
         // Usuário existente, entra com sucesso
         onAuthSuccess(result.merchant);
+      } else if (result.user) {
+        // Usuário novo do Google, cria o perfil automaticamente e entra direto no painel
+        const today = new Date();
+        const formatDate = (d: Date) => {
+          const dd = String(d.getDate()).padStart(2, '0');
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const yyyy = d.getFullYear();
+          return `${dd}/${mm}/${yyyy}`;
+        };
+        const expiry = new Date();
+        expiry.setDate(today.getDate() + 7);
+
+        const newMerchant: MerchantUser = {
+          uid: result.user.uid,
+          nomeBarbearia: result.user.displayName ? `Barbearia de ${result.user.displayName}` : 'Minha Barbearia',
+          nomeProprietario: result.user.displayName || result.user.email?.split('@')[0] || 'Proprietário',
+          email: result.user.email || '',
+          whatsapp: '',
+          plano: 'pro_trial',
+          trialInicio: formatDate(today),
+          trialFim: formatDate(expiry),
+          status: 'ativo',
+          criadoEm: new Date().toISOString(),
+          onboardingCompleted: true
+        };
+
+        try {
+          await firebaseService.saveMerchantProfile(newMerchant);
+        } catch (saveErr) {
+          console.warn("Erro ao salvar perfil do Google no popup:", saveErr);
+        }
+        onAuthSuccess(newMerchant);
       }
     } catch (err: any) {
       console.error("Google Auth error:", err);
