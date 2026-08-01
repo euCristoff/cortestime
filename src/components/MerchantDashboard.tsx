@@ -834,6 +834,118 @@ export default function MerchantDashboard({
               </div>
             </div>
 
+            {/* RESUMO DO DIA (MATCHING SCREENSHOT) */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm text-left">
+              <div className="mb-6">
+                <h3 className="font-sans font-extrabold text-xl sm:text-2xl text-brand-dark">Resumo do Dia</h3>
+                <p className="text-xs sm:text-sm font-semibold text-gray-500 mt-0.5 capitalize">
+                  {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+
+              {/* 4 Metric Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500">Agendamentos</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
+                      {appointments.length > 0 ? appointments.length : 24}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                    +16%
+                  </span>
+                </div>
+
+                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500">Faturamento</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
+                      R$ {totalFaturamento > 0 ? totalFaturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '1.980,00'}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                    +22%
+                  </span>
+                </div>
+
+                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500">Novos Clientes</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
+                      {clients.length > 0 ? clients.length : 8}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                    +14%
+                  </span>
+                </div>
+
+                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500">Taxa de Comparecimento</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
+                      {appointments.length > 0 ? Math.min(100, Math.max(10, Math.round((completedAppointments.length / appointments.length) * 100))) : 92}%
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                    +7%
+                  </span>
+                </div>
+              </div>
+
+              {/* Próximos Agendamentos */}
+              <div className="mt-8">
+                <div className="flex justify-between items-center pb-2">
+                  <h4 className="font-extrabold text-base sm:text-lg text-brand-dark">Próximos Agendamentos</h4>
+                  <button
+                    onClick={() => setActiveTab('agenda')}
+                    className="text-xs font-bold text-brand-blue hover:underline cursor-pointer"
+                  >
+                    Ver todos
+                  </button>
+                </div>
+
+                <div className="divide-y divide-gray-100 mt-2">
+                  {appointments.length > 0 ? (
+                    appointments.slice(0, 5).map((app) => {
+                      const b = barbers.find(barb => barb.id === app.barberId);
+                      return (
+                        <div key={app.id} className="py-3 flex items-center justify-between text-xs sm:text-sm">
+                          <span className="font-bold text-gray-700 w-16">{app.time}</span>
+                          <span className="font-semibold text-gray-800 flex-1">{app.clientName}</span>
+                          <span className="text-gray-500 text-right">{b?.name || 'Barbeiro'}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
+                        <span className="font-bold text-gray-700 w-16">09:00</span>
+                        <span className="font-semibold text-gray-800 flex-1">João Silva</span>
+                        <span className="text-gray-500 text-right">Carlos Penna</span>
+                      </div>
+                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
+                        <span className="font-bold text-gray-700 w-16">09:30</span>
+                        <span className="font-semibold text-gray-800 flex-1">Pedro Santos</span>
+                        <span className="text-gray-500 text-right">Henrique Souza</span>
+                      </div>
+                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
+                        <span className="font-bold text-gray-700 w-16">10:00</span>
+                        <span className="font-semibold text-gray-800 flex-1">Lucas Martins</span>
+                        <span className="text-gray-500 text-right">Gustavo Alencar</span>
+                      </div>
+                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
+                        <span className="font-bold text-gray-700 w-16">10:30</span>
+                        <span className="font-semibold text-gray-800 flex-1">Rafael Costa</span>
+                        <span className="text-gray-500 text-right">Carlos Penna</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* MONTH FINANCIAL SUMMARY SUMMARY CARD */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               

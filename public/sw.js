@@ -12,8 +12,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Notificação Cortestime',
     body: 'Você tem uma nova atualização na sua barbearia.',
-    icon: '/assets/logo.png', // Fallback icon
-    badge: '/assets/logo.png'
+    icon: '/icon-192x192.png',
+    badge: '/badge.png'
   };
 
   if (event.data) {
@@ -26,8 +26,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/assets/logo.png',
-    badge: data.badge || '/assets/logo.png',
+    icon: data.icon || '/icon-192x192.png',
+    badge: data.badge || '/badge.png',
     vibrate: [200, 100, 200],
     data: {
       url: data.url || '/'
@@ -66,8 +66,8 @@ self.addEventListener('message', (event) => {
     
     const options = {
       body,
-      icon: icon || '/assets/logo.png',
-      badge: badge || '/assets/logo.png',
+      icon: icon || '/icon-192x192.png',
+      badge: badge || '/badge.png',
       vibrate: [150, 100, 150],
       tag: tag || 'cortestime-alert',
       renotify: true

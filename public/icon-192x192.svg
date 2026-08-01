@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#082354"/>
+      <stop offset="100%" stop-color="#03112c"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4ff5e"/>
+      <stop offset="100%" stop-color="#a4e810"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#bffd32" stroke-width="6" stroke-opacity="0.2"/>
+  <g>
+    <!-- Left Handle -->
+    <circle cx="184" cy="340" r="38" stroke="url(#lime)" stroke-width="24" fill="none"/>
+    <!-- Right Handle -->
+    <circle cx="328" cy="340" r="38" stroke="url(#lime)" stroke-width="24" fill="none"/>
+    <!-- Left Blade to Right Tip -->
+    <path d="M200 306 L320 144" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+    <!-- Right Blade to Left Tip -->
+    <path d="M312 306 L192 144" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+    <!-- Center Pivot Screw -->
+    <circle cx="256" cy="230" r="16" fill="url(#lime)"/>
+    <circle cx="256" cy="230" r="6" fill="#051b42"/>
+  </g>
+</svg>

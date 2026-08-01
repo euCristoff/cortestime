@@ -50,30 +50,39 @@ export const notificationService = {
     if (!this.isSupported() || Notification.permission !== 'granted') {
       // Fallback to standard web notification if SW not ready
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/assets/logo.png', tag });
+        new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
       }
       return;
     }
 
     try {
       const registration = await navigator.serviceWorker.ready;
-      if (registration && registration.active) {
+      if (registration && 'showNotification' in registration) {
+        await registration.showNotification(title, {
+          body,
+          icon: '/icon-192x192.png',
+          badge: '/badge.png',
+          tag,
+          renotify: true
+        });
+      } else if (registration && registration.active) {
         registration.active.postMessage({
           type: 'SHOW_NOTIFICATION',
           payload: {
             title,
             body,
-            icon: '/assets/logo.png',
+            icon: '/icon-192x192.png',
+            badge: '/badge.png',
             tag
           }
         });
       } else {
         // Fallback
-        new Notification(title, { body, icon: '/assets/logo.png', tag });
+        new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
       }
     } catch (e) {
-      console.error('Error sending message to Service Worker:', e);
-      new Notification(title, { body, icon: '/assets/logo.png', tag });
+      console.error('Error sending notification via Service Worker:', e);
+      new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
     }
   },
 

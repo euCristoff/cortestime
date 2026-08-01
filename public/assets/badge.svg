@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="96" height="96">
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left Handle -->
+    <circle cx="184" cy="340" r="38" stroke-width="28"/>
+    <!-- Right Handle -->
+    <circle cx="328" cy="340" r="38" stroke-width="28"/>
+    <!-- Left Blade to Right Tip -->
+    <path d="M200 306 L320 144" stroke-width="28"/>
+    <!-- Right Blade to Left Tip -->
+    <path d="M312 306 L192 144" stroke-width="28"/>
+    <!-- Center Pivot Screw -->
+    <circle cx="256" cy="230" r="14" fill="#ffffff"/>
+  </g>
+</svg>

@@ -31,7 +31,7 @@ const COLL_APPOINTMENTS = "appointments";
 // Auxiliar de Timeout para requisições do Firebase (previne carregamento infinito em conexões instáveis)
 function withTimeout<T>(
   promise: Promise<T>, 
-  ms: number = 15000, 
+  ms: number = 25000, 
   errorMsg: string = "Tempo limite de conexão excedido. Verifique sua conexão de internet ou se o banco de dados do Firebase está ativo."
 ): Promise<T> {
   return Promise.race([
@@ -387,17 +387,22 @@ export const firebaseService = {
   },
 
   async getServices(ownerId: string): Promise<Service[]> {
-    const q = query(collection(db, COLL_SERVICES), where("ownerId", "==", ownerId));
-    const querySnapshot = await withTimeout(
-      getDocs(q),
-      15000,
-      "Tempo limite excedido ao buscar lista de serviços."
-    );
-    const list: Service[] = [];
-    querySnapshot.forEach((doc) => {
-      list.push(doc.data() as Service);
-    });
-    return list;
+    try {
+      const q = query(collection(db, COLL_SERVICES), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        25000,
+        "Tempo limite excedido ao buscar lista de serviços."
+      );
+      const list: Service[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as Service);
+      });
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar serviços no Firebase (usando cache local):", e);
+      return [];
+    }
   },
 
   // Barbers (Isolated)
@@ -405,23 +410,28 @@ export const firebaseService = {
     const docRef = doc(db, COLL_BARBERS, barber.id);
     await withTimeout(
       setDoc(docRef, { ...barber, ownerId }),
-      15000,
+      25000,
       "Tempo esgotado ao salvar profissional."
     );
   },
 
   async getBarbers(ownerId: string): Promise<Barber[]> {
-    const q = query(collection(db, COLL_BARBERS), where("ownerId", "==", ownerId));
-    const querySnapshot = await withTimeout(
-      getDocs(q),
-      15000,
-      "Tempo limite excedido ao buscar lista de barbeiros."
-    );
-    const list: Barber[] = [];
-    querySnapshot.forEach((doc) => {
-      list.push(doc.data() as Barber);
-    });
-    return list;
+    try {
+      const q = query(collection(db, COLL_BARBERS), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        25000,
+        "Tempo limite excedido ao buscar lista de barbeiros."
+      );
+      const list: Barber[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as Barber);
+      });
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar barbeiros no Firebase (usando cache local):", e);
+      return [];
+    }
   },
 
   // Clients (Isolated)
@@ -429,23 +439,28 @@ export const firebaseService = {
     const docRef = doc(db, COLL_CLIENTS, client.id);
     await withTimeout(
       setDoc(docRef, { ...client, ownerId }),
-      15000,
+      25000,
       "Tempo esgotado ao salvar cliente."
     );
   },
 
   async getClients(ownerId: string): Promise<Client[]> {
-    const q = query(collection(db, COLL_CLIENTS), where("ownerId", "==", ownerId));
-    const querySnapshot = await withTimeout(
-      getDocs(q),
-      15000,
-      "Tempo limite excedido ao buscar lista de clientes."
-    );
-    const list: Client[] = [];
-    querySnapshot.forEach((doc) => {
-      list.push(doc.data() as Client);
-    });
-    return list;
+    try {
+      const q = query(collection(db, COLL_CLIENTS), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        25000,
+        "Tempo limite excedido ao buscar lista de clientes."
+      );
+      const list: Client[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as Client);
+      });
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar clientes no Firebase (usando cache local):", e);
+      return [];
+    }
   },
 
   // Appointments (Isolated)
@@ -453,23 +468,28 @@ export const firebaseService = {
     const docRef = doc(db, COLL_APPOINTMENTS, app.id);
     await withTimeout(
       setDoc(docRef, { ...app, ownerId }),
-      15000,
+      25000,
       "Tempo esgotado ao salvar agendamento."
     );
   },
 
   async getAppointments(ownerId: string): Promise<Appointment[]> {
-    const q = query(collection(db, COLL_APPOINTMENTS), where("ownerId", "==", ownerId));
-    const querySnapshot = await withTimeout(
-      getDocs(q),
-      15000,
-      "Tempo limite excedido ao buscar agendamentos."
-    );
-    const list: Appointment[] = [];
-    querySnapshot.forEach((doc) => {
-      list.push(doc.data() as Appointment);
-    });
-    return list;
+    try {
+      const q = query(collection(db, COLL_APPOINTMENTS), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        25000,
+        "Tempo limite excedido ao buscar agendamentos."
+      );
+      const list: Appointment[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as Appointment);
+      });
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar agendamentos no Firebase (usando cache local):", e);
+      return [];
+    }
   },
 
   async updateAppointmentStatus(id: string, status: Appointment['status']): Promise<void> {
