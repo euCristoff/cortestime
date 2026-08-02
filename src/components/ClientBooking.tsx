@@ -38,7 +38,7 @@ export default function ClientBooking({
   const today = new Date();
   const getDates = () => {
     const dates = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 14; i++) {
       const d = new Date();
       d.setDate(today.getDate() + i);
       dates.push(d);
@@ -48,11 +48,12 @@ export default function ClientBooking({
   const weekDates = getDates();
   const [selectedDate, setSelectedDate] = useState<Date>(weekDates[0]);
 
-  // Hours slots
+  // Hours slots (intervalo de 30 em 30 min: 08:00, 08:30, 09:00, 09:30...)
   const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
-    '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
-    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
+    '20:00'
   ];
   const [selectedTime, setSelectedTime] = useState<string>('09:00');
 
@@ -328,12 +329,17 @@ export default function ClientBooking({
                       animate={{ opacity: 1, height: 'auto' }}
                       className="space-y-4 pt-2"
                     >
-                      <h3 className="font-display font-bold text-lg text-brand-dark">Selecione o Dia</h3>
+                      <div className="flex justify-between items-baseline">
+                        <h3 className="font-display font-bold text-lg text-brand-dark">Selecione o Dia</h3>
+                        <span className="text-xs text-brand-blue font-extrabold">
+                          {selectedDate.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
                       
                       {/* Dates horizontal scroll */}
                       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
                         {weekDates.map((date, idx) => {
-                          const isSelected = selectedDate.getDate() === date.getDate();
+                          const isSelected = selectedDate.toDateString() === date.toDateString();
                           return (
                             <button 
                               key={idx}

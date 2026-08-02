@@ -41,6 +41,7 @@ export interface Appointment {
 export interface OnboardingData {
   fullName: string;
   cellphone: string;
+  whatsapp?: string;
   email: string;
   businessName: string;
   objectives: string[];
@@ -49,6 +50,8 @@ export interface OnboardingData {
   street: string;
   number: string;
   complement: string;
+  city?: string;
+  state?: string;
 }
 
 export interface MerchantUser {
@@ -57,10 +60,10 @@ export interface MerchantUser {
   nomeProprietario: string;
   email: string;
   whatsapp: string;
-  plano: 'vitrine' | 'pro_trial' | 'pro' | 'trial';
+  plano: 'vitrine' | 'pro_trial' | 'pro' | 'trial' | 'partner';
   trialInicio: string; // DD/MM/YYYY
   trialFim: string; // DD/MM/YYYY
-  status: 'ativo' | 'suspenso' | 'expirado';
+  status: 'ativo' | 'suspenso' | 'expirado' | 'inativo';
   criadoEm: string;
   onboardingCompleted?: boolean;
   isAdmin?: boolean;
@@ -79,10 +82,45 @@ export interface MerchantUser {
   vitrineLinkPersonalizado?: string;
   vitrineHorarios?: string;
   vitrineLocalizacao?: string;
+  vitrineEndereco?: string | { cep?: string; rua?: string; numero?: string; bairro?: string; cidade?: string; estado?: string };
   vitrineWhatsApp?: string;
   vitrineInstagram?: string;
+  vitrineFacebook?: string;
   vitrineLinkBio?: string;
   vitrineProdutos?: { id: string; name: string; price: number; imageUrl?: string }[];
   vitrineGaleria?: string[];
+  
+  // Invite code / Draft vitrine redemption fields
+  codigoConviteResgatado?: string;
+  vitrineDraftResgatada?: boolean;
+  draftJustClaimed?: boolean;
+
+  // Partner Campaign fields
+  isPartner?: boolean;
+  hasPartnerBadge?: boolean; // ⭐ Barbearia Indicada (permanente)
+  partnerBenefitsExpiry?: string; // Expiration date for 30-day gallery and reviews
+  partnerStoryConfirmed?: boolean;
+  partnerWelcomeShown?: boolean;
+}
+
+export interface DraftVitrine {
+  id: string;
+  codigo: string; // e.g. "BARBER-7XK29"
+  nomeBarbearia: string;
+  nomeProprietario?: string;
+  whatsapp?: string;
+  instagram?: string;
+  endereco?: string;
+  slogan?: string;
+  logoUrl?: string;
+  capaUrl?: string;
+  horarios?: string;
+  servicos?: { name: string; price: number; durationMin: number }[];
+  usado: boolean;
+  resgatadoPorEmail?: string;
+  resgatadoPorUid?: string;
+  dataResgate?: string;
+  criadoEm: string;
+  criadoPorAdmin?: string;
 }
 

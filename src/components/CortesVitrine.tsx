@@ -26,6 +26,8 @@ import {
   Upload,
   Image as ImageIcon,
   RotateCcw,
+  Lock,
+  ShieldCheck,
   X
 } from 'lucide-react';
 import { MerchantUser, Service } from '../types';
@@ -201,6 +203,7 @@ export default function CortesVitrine({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [showUpgradePlans, setShowUpgradePlans] = useState(false);
+  const [showReviewsProModal, setShowReviewsProModal] = useState(false);
   const [subscribingPlan, setSubscribingPlan] = useState<string | null>(null);
   const [checkoutPlan, setCheckoutPlan] = useState<{ name: string; price: number } | null>(null);
 
@@ -476,6 +479,126 @@ export default function CortesVitrine({
               </div>
             )}
 
+            {/* Customer Reviews Section */}
+            <div className="py-6 border-b border-gray-100 space-y-3 text-left">
+              <div className="flex items-center justify-between">
+                <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-3 py-1 rounded-full text-amber-900 text-xs font-extrabold shadow-2xs">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>4,9 de 5 (127 avaliações)</span>
+                </div>
+                {merchant.plano === 'vitrine' && (
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded-md">
+                    Recurso Pro
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-sm font-extrabold text-brand-dark flex items-center gap-1.5">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <span>Avaliações dos Clientes</span>
+                </h4>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  Mostre avaliações reais dos seus clientes para gerar mais confiança e aumentar os agendamentos.
+                </p>
+              </div>
+
+              {merchant.plano === 'vitrine' ? (
+                /* Locked / Blurred layout for Free Vitrine Plan */
+                <div className="relative rounded-2xl overflow-hidden border border-gray-200/80 bg-gray-50/70 p-4 space-y-3">
+                  {/* Blurred mock reviews */}
+                  <div className="filter blur-[2px] opacity-60 space-y-2.5 select-none pointer-events-none">
+                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <p className="text-xs font-medium text-gray-700">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
+                      <span className="text-[10px] text-gray-400 font-bold block">— Lucas Silva</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <p className="text-xs font-medium text-gray-700">"Melhor corte da cidade! Pontualidade nota 10."</p>
+                      <span className="text-[10px] text-gray-400 font-bold block">— Mateus Oliveira</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <p className="text-xs font-medium text-gray-700">"Voltarei com certeza. Atendimento top de linha!"</p>
+                      <span className="text-[10px] text-gray-400 font-bold block">— Gabriel Costa</span>
+                    </div>
+                  </div>
+
+                  {/* Lock overlay banner */}
+                  <div className="absolute inset-0 z-10 bg-black/45 backdrop-blur-[1.5px] flex flex-col items-center justify-center p-4 text-center space-y-3">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-black/80 border border-white/10 px-3.5 py-1.5 rounded-full shadow-lg">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Recurso exclusivo do Cortestime Pro</span>
+                    </span>
+                    <button
+                      onClick={() => setShowReviewsProModal(true)}
+                      className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-black text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider shadow-xl transition-all transform hover:scale-105 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-4 h-4 fill-current" />
+                      <span>Desbloquear com o Pro</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Unlocked reviews view for Pro Plan */
+                <div className="space-y-2.5">
+                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-gray-400 font-medium">Há 2 dias</span>
+                    </div>
+                    <p className="text-xs font-medium text-gray-800">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
+                    <span className="text-[10px] text-gray-500 font-extrabold block">— Lucas Silva</span>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-gray-400 font-medium">Há 5 dias</span>
+                    </div>
+                    <p className="text-xs font-medium text-gray-800">"Melhor corte da cidade! Pontualidade nota 10."</p>
+                    <span className="text-[10px] text-gray-500 font-extrabold block">— Mateus Oliveira</span>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(5)].map((_, i) => (
+                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <span className="text-[10px] text-gray-400 font-medium">Há 1 semana</span>
+                    </div>
+                    <p className="text-xs font-medium text-gray-800">"Voltarei com certeza. Atendimento top de linha!"</p>
+                    <span className="text-[10px] text-gray-500 font-extrabold block">— Gabriel Costa</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Contact shortcuts */}
             <div className="py-6 space-y-3">
               {onBookOnline && (
@@ -559,6 +682,12 @@ export default function CortesVitrine({
                 <span className="bg-emerald-500/25 text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full tracking-wider uppercase">
                   Grátis
                 </span>
+                {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
+                  <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-black px-2.5 py-0.5 rounded-full tracking-wider uppercase flex items-center gap-1">
+                    <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
+                    <span>Barbearia Indicada</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-400 mt-0.5">
                 {isOnlyView ? `Painel Digital • ${merchant.nomeBarbearia}` : 'Divulgue sua barbearia com o mini-site gratuito'}
@@ -1155,8 +1284,14 @@ export default function CortesVitrine({
                         logoText.charAt(0).toUpperCase()
                       )}
                     </div>
-                    <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42]">
-                      {logoText}
+                    <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42] flex items-center justify-center gap-1.5 flex-wrap">
+                      <span>{logoText}</span>
+                      {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
+                        <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                          <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+                          <span>Barbearia Indicada</span>
+                        </span>
+                      )}
                     </h2>
                     {slogan && (
                       <p className="text-[11px] text-gray-500 italic mt-1 font-medium max-w-[220px] mx-auto leading-tight">
@@ -1441,7 +1576,7 @@ export default function CortesVitrine({
                     onClick={() => {
                       setCheckoutPlan({ name: 'Mensal', price: 19.90 });
                     }}
-                    className="w-full bg-emerald-400 hover:bg-emerald-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
+                    className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors shadow-sm"
                   >
                     Assinar Mensal
                   </button>
@@ -1532,6 +1667,100 @@ export default function CortesVitrine({
                 Ao concluir a assinatura, sua conta será migrada imediatamente para o plano Pro, ativando todas as ferramentas sem perda de dados.
               </div>
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* REVIEWS PRO BENEFITS MODAL */}
+      <AnimatePresence>
+        {showReviewsProModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#051b42] border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full text-left space-y-6 shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowReviewsProModal(false)}
+                className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 text-white hover:text-amber-400 rounded-full transition-colors cursor-pointer border border-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-2">
+                <span className="bg-amber-500/20 text-amber-400 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider border border-amber-400/20 inline-flex items-center gap-1">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>Avaliações de Clientes Pro</span>
+                </span>
+                <h3 className="font-sans font-extrabold text-2xl text-white">Desbloqueie a Prova Social e Venda Mais</h3>
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  Avaliações reais de clientes aumentam dramaticamente a taxa de conversão da sua Vitrine Digital.
+                </p>
+              </div>
+
+              <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3 text-xs text-gray-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-1 bg-amber-400/20 rounded-lg text-amber-400 shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-white block font-bold">Exibir avaliações reais dos clientes</strong>
+                    <span className="text-gray-400 text-[11px]">Seus clientes deixam comentários e nota de 1 a 5 estrelas.</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="p-1 bg-amber-400/20 rounded-lg text-amber-400 shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-white block font-bold">Aumentar a confiança de novos clientes</strong>
+                    <span className="text-gray-400 text-[11px]">Quem acessa seu link da bio tem certeza do excelente serviço.</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="p-1 bg-amber-400/20 rounded-lg text-amber-400 shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-white block font-bold">Melhorar a conversão da Vitrine</strong>
+                    <span className="text-gray-400 text-[11px]">Transforme visitantes do Instagram em clientes pagantes.</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="p-1 bg-amber-400/20 rounded-lg text-amber-400 shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <strong className="text-white block font-bold">Personalizar avaliações em destaque</strong>
+                    <span className="text-gray-400 text-[11px]">Escolha os elogios mais marcantes para fixar no topo.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={() => {
+                    setShowReviewsProModal(false);
+                    setShowUpgradePlans(true);
+                  }}
+                  className="w-full bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-black py-4 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-transform hover:scale-[1.02]"
+                >
+                  <Sparkles className="w-4 h-4 fill-current" />
+                  <span>Conhecer o Cortestime Pro</span>
+                </button>
+
+                <button
+                  onClick={() => setShowReviewsProModal(false)}
+                  className="w-full bg-transparent hover:bg-white/5 text-gray-400 font-bold py-2 rounded-xl text-xs transition-colors"
+                >
+                  Voltar para a Vitrine
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

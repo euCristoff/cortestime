@@ -6,6 +6,7 @@ import {
   getDocs, 
   collection, 
   updateDoc,
+  deleteDoc,
   query,
   where
 } from "firebase/firestore";
@@ -20,13 +21,14 @@ import {
   getRedirectResult,
   signInWithPopup
 } from "firebase/auth";
-import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData } from "../types";
+import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData, DraftVitrine } from "../types";
 
 // Collection Names
 const COLL_SERVICES = "services";
 const COLL_BARBERS = "barbers";
 const COLL_CLIENTS = "clients";
 const COLL_APPOINTMENTS = "appointments";
+const COLL_DRAFT_VITRINES = "draft_vitrines";
 
 // Auxiliar de Timeout para requisições do Firebase (previne carregamento infinito em conexões instáveis)
 function withTimeout<T>(
@@ -54,7 +56,25 @@ export const firebaseService = {
   },
 
   // Auth operations
-  async signUp(email: string, password: string, nomeBarbearia: string, nomeProprietario: string, whatsapp: string): Promise<MerchantUser> {
+  async signUp(
+    email: string, 
+    password: string, 
+    nomeBarbearia: string, 
+    nomeProprietario: string, 
+    whatsapp: string,
+    inviteCode?: string
+  ): Promise<MerchantUser> {
+    let draft: DraftVitrine | null = null;
+    const hasCode = Boolean(inviteCode && inviteCode.trim());
+    const normCode = inviteCode ? inviteCode.trim().toUpperCase() : '';
+
+    if (hasCode) {
+      draft = await this.getDraftVitrineByCode(normCode);
+      if (draft && draft.usado) {
+        throw new Error("Este código de convite já foi utilizado por outro usuário.");
+      }
+    }
+
     const userCredential = await withTimeout(
       createUserWithEmailAndPassword(auth, email, password), 
       30000, 
@@ -62,7 +82,7 @@ export const firebaseService = {
     );
     const user = userCredential.user;
     
-    // Calculate trial dates: today and 7 days later
+    // Calculate dates
     const today = new Date();
     const formatDate = (date: Date) => {
       const dd = String(date.getDate()).padStart(2, '0');
@@ -73,23 +93,68 @@ export const firebaseService = {
     
     const trialInicio = formatDate(today);
     
-    const expiry = new Date();
-    expiry.setDate(today.getDate() + 7);
-    const trialFim = formatDate(expiry);
+    const expiry7Days = new Date();
+    expiry7Days.setDate(today.getDate() + 7);
+    const trialFim = formatDate(expiry7Days);
+
+    const expiry30Days = new Date();
+    expiry30Days.setDate(today.getDate() + 30);
+    const partnerBenefitsExpiry = formatDate(expiry30Days);
     
     const merchant: MerchantUser = {
       uid: user.uid,
-      nomeBarbearia,
-      nomeProprietario,
+      nomeBarbearia: draft?.nomeBarbearia || nomeBarbearia,
+      nomeProprietario: draft?.nomeProprietario || nomeProprietario,
       email,
-      whatsapp,
-      plano: 'pro_trial',
+      whatsapp: draft?.whatsapp || whatsapp,
+      plano: hasCode ? 'partner' : 'pro_trial',
       trialInicio,
       trialFim,
       status: 'ativo',
       criadoEm: new Date().toISOString(),
-      onboardingCompleted: false
+      onboardingCompleted: false,
+
+      // Partner campaign fields
+      isPartner: hasCode,
+      hasPartnerBadge: hasCode,
+      partnerBenefitsExpiry: hasCode ? partnerBenefitsExpiry : undefined,
+      partnerWelcomeShown: false,
+      codigoConviteResgatado: normCode || undefined,
+
+      ...(draft ? {
+        vitrineLogo: draft.logoUrl || '',
+        vitrineCapa: draft.capaUrl || '',
+        vitrineSlogan: draft.slogan || '',
+        vitrineHorarios: draft.horarios || '',
+        vitrineLocalizacao: draft.endereco || '',
+        vitrineWhatsApp: draft.whatsapp || whatsapp,
+        vitrineInstagram: draft.instagram || '',
+        codigoConviteResgatado: draft.codigo,
+        vitrineDraftResgatada: true,
+        draftJustClaimed: true
+      } : {})
     };
+
+    // Populate draft services if present
+    if (draft && draft.servicos && draft.servicos.length > 0) {
+      for (const s of draft.servicos) {
+        try {
+          await this.saveService({
+            name: s.name,
+            price: s.price,
+            durationMin: s.durationMin,
+            commissionPercent: 50
+          }, user.uid);
+        } catch (e) {
+          console.warn("Error saving draft service during signup:", e);
+        }
+      }
+    }
+
+    // Mark code as claimed
+    if (draft) {
+      await this.claimDraftVitrine(draft.codigo, user.uid, email);
+    }
     
     // Save to Firestore 'users' collection
     await withTimeout(
@@ -606,6 +671,245 @@ export const firebaseService = {
       } catch (err) {
         console.error("Failed to run Brevo fetch in update:", err);
       }
+    }
+  },
+
+  // Draft Vitrines / Invite Codes operations
+  async getDraftVitrineByCode(codigo: string): Promise<DraftVitrine | null> {
+    if (!codigo) return null;
+    const norm = codigo.trim().toUpperCase();
+
+    // 1. Try Firestore
+    try {
+      const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", norm));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docData = snap.docs[0].data() as DraftVitrine;
+        return { ...docData, id: snap.docs[0].id };
+      }
+    } catch (err) {
+      console.warn("Firestore draft vitrine fetch error, checking LocalStorage:", err);
+    }
+
+    // 2. Check LocalStorage fallback
+    try {
+      const raw = localStorage.getItem("cortestime_draft_vitrines");
+      if (raw) {
+        const list: DraftVitrine[] = JSON.parse(raw);
+        const found = list.find(d => d.codigo && d.codigo.trim().toUpperCase() === norm);
+        if (found) return found;
+      }
+    } catch (e) {
+      console.error("LocalStorage draft vitrines parse error:", e);
+    }
+
+    return null;
+  },
+
+  async claimDraftVitrine(codigo: string, userUid: string, userEmail: string): Promise<boolean> {
+    if (!codigo) return false;
+    const norm = codigo.trim().toUpperCase();
+    const dataResgate = new Date().toISOString();
+
+    // Update in Firestore
+    try {
+      const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", norm));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docRef = snap.docs[0].ref;
+        await updateDoc(docRef, {
+          usado: true,
+          resgatadoPorEmail: userEmail,
+          resgatadoPorUid: userUid,
+          dataResgate
+        });
+      }
+    } catch (err) {
+      console.warn("Firestore update draft vitrine error:", err);
+    }
+
+    // Update LocalStorage
+    try {
+      const raw = localStorage.getItem("cortestime_draft_vitrines");
+      let list: DraftVitrine[] = raw ? JSON.parse(raw) : [];
+      list = list.map(item => {
+        if (item.codigo && item.codigo.trim().toUpperCase() === norm) {
+          return {
+            ...item,
+            usado: true,
+            resgatadoPorEmail: userEmail,
+            resgatadoPorUid: userUid,
+            dataResgate
+          };
+        }
+        return item;
+      });
+      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
+    } catch (e) {
+      console.error("Error updating LocalStorage draft vitrine:", e);
+    }
+
+    return true;
+  },
+
+  async createDraftVitrine(draftData: Partial<DraftVitrine>): Promise<DraftVitrine> {
+    const rawCode = draftData.codigo && draftData.codigo.trim() 
+      ? draftData.codigo.trim().toUpperCase() 
+      : `BARBER-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+    const id = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    const newDraft: DraftVitrine = {
+      id,
+      codigo: rawCode,
+      nomeBarbearia: draftData.nomeBarbearia || 'Nova Barbearia',
+      nomeProprietario: draftData.nomeProprietario || '',
+      whatsapp: draftData.whatsapp || '',
+      instagram: draftData.instagram || '',
+      endereco: draftData.endereco || '',
+      slogan: draftData.slogan || '',
+      logoUrl: draftData.logoUrl || '',
+      capaUrl: draftData.capaUrl || '',
+      horarios: draftData.horarios || 'Seg-Sáb: 08:00 - 20:00',
+      servicos: draftData.servicos || [
+        { name: 'Corte de Cabelo', price: 35, durationMin: 30 },
+        { name: 'Barba Completa', price: 25, durationMin: 20 },
+        { name: 'Combo Cabelo + Barba', price: 55, durationMin: 45 }
+      ],
+      usado: false,
+      criadoEm: new Date().toISOString(),
+      criadoPorAdmin: draftData.criadoPorAdmin || 'Admin'
+    };
+
+    // Save in Firestore
+    try {
+      await setDoc(doc(db, COLL_DRAFT_VITRINES, id), newDraft);
+    } catch (err) {
+      console.warn("Firestore save draft vitrine error, saved to LocalStorage:", err);
+    }
+
+    // Save in LocalStorage
+    try {
+      const raw = localStorage.getItem("cortestime_draft_vitrines");
+      const list: DraftVitrine[] = raw ? JSON.parse(raw) : [];
+      list.unshift(newDraft);
+      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
+    } catch (e) {
+      console.error("Error saving draft vitrine to LocalStorage:", e);
+    }
+
+    return newDraft;
+  },
+
+  async getAllDraftVitrines(): Promise<DraftVitrine[]> {
+    let firestoreList: DraftVitrine[] = [];
+    try {
+      const snap = await getDocs(collection(db, COLL_DRAFT_VITRINES));
+      firestoreList = snap.docs.map(docSnap => docSnap.data() as DraftVitrine);
+    } catch (err) {
+      console.warn("Error fetching draft vitrines from Firestore:", err);
+    }
+
+    let localList: DraftVitrine[] = [];
+    try {
+      const raw = localStorage.getItem("cortestime_draft_vitrines");
+      if (raw) {
+        localList = JSON.parse(raw);
+      } else {
+        // Seed initial sample draft vitrines if none exist!
+        localList = [
+          {
+            id: 'draft_sample_1',
+            codigo: 'BARBER-7XK29',
+            nomeBarbearia: 'Barbearia Premium Club',
+            nomeProprietario: 'Ricardo Alves',
+            whatsapp: '(11) 98888-7777',
+            instagram: '@barbearia.premium.club',
+            endereco: 'Av. Paulista, 1000 - São Paulo, SP',
+            slogan: 'Estilo e tradição para o homem moderno',
+            horarios: 'Seg - Sáb: 09:00 às 20:00',
+            logoUrl: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&q=80',
+            capaUrl: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=1200&q=80',
+            servicos: [
+              { name: 'Corte Social / Fade', price: 40, durationMin: 35 },
+              { name: 'Barba Alinhada na Toalha Quente', price: 30, durationMin: 25 },
+              { name: 'Combo Executivo (Cabelo + Barba)', price: 65, durationMin: 50 }
+            ],
+            usado: false,
+            criadoEm: new Date().toISOString(),
+            criadoPorAdmin: 'Admin Cortestime'
+          },
+          {
+            id: 'draft_sample_2',
+            codigo: 'CORTES-AB123',
+            nomeBarbearia: 'Studio Cortes & Estilo',
+            nomeProprietario: 'Mateus Silva',
+            whatsapp: '(21) 99777-6655',
+            instagram: '@studiocortes.estilo',
+            endereco: 'Rua das Flores, 250 - Rio de Janeiro, RJ',
+            slogan: 'Sua melhor versão começa aqui',
+            horarios: 'Ter - Sáb: 08:30 às 19:30',
+            servicos: [
+              { name: 'Corte Masculino Moderno', price: 35, durationMin: 30 },
+              { name: 'Barboterapia Especial', price: 35, durationMin: 30 }
+            ],
+            usado: false,
+            criadoEm: new Date().toISOString(),
+            criadoPorAdmin: 'Admin Cortestime'
+          },
+          {
+            id: 'draft_sample_3',
+            codigo: 'PREMIUM-019',
+            nomeBarbearia: 'Barberia Don Corleone',
+            nomeProprietario: 'Gabriel Santos',
+            whatsapp: '(31) 99555-4433',
+            instagram: '@barberia.doncorleone',
+            endereco: 'Rua Bahia, 500 - Belo Horizonte, MG',
+            slogan: 'A verdadeira experiência clássica',
+            horarios: 'Seg - Sáb: 09:00 às 21:00',
+            servicos: [
+              { name: 'Corte Tesoura e Máquina', price: 45, durationMin: 40 },
+              { name: 'Sobrancelha Navalhada', price: 15, durationMin: 15 }
+            ],
+            usado: false,
+            criadoEm: new Date().toISOString(),
+            criadoPorAdmin: 'Admin Cortestime'
+          }
+        ];
+        localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(localList));
+      }
+    } catch (e) {
+      console.error("Error reading LocalStorage draft vitrines:", e);
+    }
+
+    // Merge lists by id/codigo, preferring used status if any
+    const map = new Map<string, DraftVitrine>();
+    for (const item of [...localList, ...firestoreList]) {
+      const key = item.codigo ? item.codigo.trim().toUpperCase() : item.id;
+      const existing = map.get(key);
+      if (!existing || item.usado) {
+        map.set(key, item);
+      }
+    }
+
+    return Array.from(map.values());
+  },
+
+  async deleteDraftVitrine(draftId: string, codigo: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, COLL_DRAFT_VITRINES, draftId));
+    } catch (e) {
+      console.warn("Firestore delete draft error:", e);
+    }
+
+    try {
+      const raw = localStorage.getItem("cortestime_draft_vitrines");
+      if (raw) {
+        let list: DraftVitrine[] = JSON.parse(raw);
+        list = list.filter(item => item.id !== draftId && item.codigo.trim().toUpperCase() !== codigo.trim().toUpperCase());
+        localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
+      }
+    } catch (e) {
+      console.error("LocalStorage delete draft error:", e);
     }
   }
 };

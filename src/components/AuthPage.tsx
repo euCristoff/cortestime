@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import LogoIcon from './LogoIcon';
-import { Mail, Lock, Building2, User, Phone, Eye, EyeOff, Sparkles, ArrowLeft, BadgeAlert } from 'lucide-react';
+import { Mail, Lock, Building2, User, Phone, Eye, EyeOff, Sparkles, ArrowLeft, BadgeAlert, Ticket, CheckCircle2, Gift, Star, Award, Check } from 'lucide-react';
 import { MerchantUser } from '../types';
 
 interface AuthPageProps {
@@ -16,6 +16,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
 
   // Google Auth specific state
   const [isCompletingGoogleSignUp, setIsCompletingGoogleSignUp] = useState<boolean>(false);
@@ -27,6 +28,30 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  const [codigoConvite, setCodigoConvite] = useState('');
+  const [draftVitrineInfo, setDraftVitrineInfo] = useState<any | null>(null);
+
+  const handleInviteCodeChange = async (codeVal: string) => {
+    setCodigoConvite(codeVal);
+    if (!codeVal.trim()) {
+      setDraftVitrineInfo(null);
+      return;
+    }
+    const norm = codeVal.trim().toUpperCase();
+    if (norm.length >= 4) {
+      const found = await firebaseService.getDraftVitrineByCode(norm);
+      if (found && !found.usado) {
+        setDraftVitrineInfo(found);
+        if (found.nomeBarbearia && !nomeBarbearia) setNomeBarbearia(found.nomeBarbearia);
+        if (found.nomeProprietario && !nomeProprietario) setNomeProprietario(found.nomeProprietario);
+        if (found.whatsapp && !whatsapp) setWhatsapp(found.whatsapp);
+      } else {
+        setDraftVitrineInfo(null);
+      }
+    } else {
+      setDraftVitrineInfo(null);
+    }
+  };
 
   // Renderiza erros de forma amigável, especialmente o erro de domínio não autorizado do Firebase
   const renderError = (errStr: string | null) => {
@@ -279,16 +304,35 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     }
   };
 
+  const executeSignUp = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp, codigoConvite);
+      onAuthSuccess(merchant);
+    } catch (err: any) {
+      console.error("SignUp error:", err);
+      let friendlyMessage = err.message || "Ocorreu um erro ao realizar o cadastro.";
+      if (err.code === "auth/email-already-in-use") {
+        friendlyMessage = "account-exists:Este e-mail já possui uma conta cadastrada. Redirecionamos você para a tela de login para que possa entrar com sua senha ou pelo Google.";
+        setIsLogin(true);
+      }
+      setError(friendlyMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
 
     try {
       if (isLogin) {
         if (!email || !senha) {
           throw new Error("Por favor, preencha todos os campos.");
         }
+        setIsLoading(true);
         const merchant = await firebaseService.signIn(email, senha);
         onAuthSuccess(merchant);
       } else {
@@ -298,8 +342,14 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         if (senha.length < 6) {
           throw new Error("A senha deve conter no mínimo 6 caracteres.");
         }
-        const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp);
-        onAuthSuccess(merchant);
+
+        // If invite code is filled and welcome modal hasn't been shown yet, display welcome modal
+        if (codigoConvite && codigoConvite.trim() && !showWelcomeModal) {
+          setShowWelcomeModal(true);
+          return;
+        }
+
+        await executeSignUp();
       }
     } catch (err: any) {
       console.error("Auth error:", err);
@@ -321,7 +371,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       
       setError(friendlyMessage);
     } finally {
-      setIsLoading(false);
+      if (isLogin) setIsLoading(false);
     }
   };
 
@@ -523,6 +573,39 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                         />
                       </div>
                     </div>
+
+                    {/* Código de Convite (Resgatar Vitrine) */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-600">Código de convite (opcional)</label>
+                        <span className="text-[10px] text-brand-blue font-bold flex items-center gap-1">
+                          <Ticket className="w-3 h-3" /> Resgate de Vitrine
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
+                          <Gift className="w-4 h-4 text-brand-blue" />
+                        </span>
+                        <input 
+                          type="text" 
+                          value={codigoConvite}
+                          onChange={e => handleInviteCodeChange(e.target.value)}
+                          placeholder="Ex: BARBER-7XK29"
+                          className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-blue focus:outline-none transition-colors text-sm bg-gray-50 uppercase font-mono tracking-wider"
+                        />
+                      </div>
+                      {draftVitrineInfo && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Vitrine encontrada: {draftVitrineInfo.nomeBarbearia}</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-700 leading-relaxed">
+                            🎉 Esta Vitrine pré-pronta e seus serviços serão vinculados à sua conta automaticamente!
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
 
@@ -654,6 +737,79 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       <footer className="max-w-md mx-auto w-full text-center text-[11px] text-gray-400">
         &copy; {new Date().getFullYear()} Cortestime S.A. Todos os direitos reservados.
       </footer>
+
+      {/* TELA DE BOAS-VINDAS DA CAMPANHA PARCEIRAS */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-50 bg-[#051b42]/85 backdrop-blur-md flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            className="bg-white rounded-[32px] p-6 md:p-8 max-w-md w-full shadow-2xl space-y-6 text-left border border-gray-100 my-auto relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto text-amber-500">
+                <Sparkles className="w-7 h-7 text-amber-500 animate-pulse" />
+              </div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">
+                🎉 Parabéns!
+              </h2>
+              <p className="text-xs text-gray-600 font-medium leading-relaxed max-w-xs mx-auto">
+                Você foi selecionado para participar da campanha <strong className="text-brand-blue">Barbearias Parceiras Cortestime</strong>.
+              </p>
+            </div>
+
+            <div className="p-4 bg-gray-50/90 rounded-2xl border border-gray-100 space-y-3">
+              <span className="text-[10px] font-black uppercase tracking-wider text-brand-blue block">
+                Você recebeu benefícios exclusivos:
+              </span>
+
+              <ul className="space-y-2.5 text-xs text-gray-700 font-semibold">
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>7 dias</strong> de Agenda Pro (Cortestime)</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
+                  <span>Selo permanente <strong>"Barbearia Indicada"</strong> na sua Vitrine</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Galeria ilimitada</strong> por 30 dias</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Sistema de <strong>avaliações desbloqueado</strong> por 30 dias</span>
+                </li>
+              </ul>
+
+              <p className="text-[11px] text-gray-400 italic pt-1 border-t border-gray-200/60">
+                * Esses benefícios são exclusivos para parceiros convidados.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                executeSignUp();
+              }}
+              disabled={isLoading}
+              className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-4 px-6 rounded-2xl shadow-lg shadow-brand-blue/20 transition-all uppercase text-xs tracking-wider cursor-pointer flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" />
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-brand-lime" />
+                  <span>Criar minha Vitrine</span>
+                </>
+              )}
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

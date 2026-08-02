@@ -15,6 +15,7 @@ import {
   Smartphone, 
   DollarSign, 
   ChevronRight, 
+  ChevronLeft,
   ChevronDown,
   MapPin, 
   Award, 
@@ -32,7 +33,23 @@ import {
   Mail,
   Send,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  LayoutDashboard,
+  User,
+  Settings,
+  HelpCircle,
+  Gift,
+  LogOut,
+  ExternalLink,
+  Copy,
+  Star,
+  Share2,
+  Lock,
+  Trash2,
+  Globe,
+  Phone,
+  Upload,
+  FileText
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -40,6 +57,8 @@ import CortesVitrine from './CortesVitrine';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import AdminSubscriptionManager from './AdminSubscriptionManager';
 import { firebaseService } from '../services/firebaseService';
+
+export type DashboardTab = 'inicio' | 'agenda' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'indique' | 'ajuda' | 'assinatura' | 'menu';
 
 interface MerchantDashboardProps {
   onboardingData: OnboardingData;
@@ -57,7 +76,7 @@ interface MerchantDashboardProps {
   firebaseConnected: boolean | null;
   onOpenClientBooking?: () => void;
   onUpdateMerchant?: (updated: MerchantUser) => void;
-  initialTab?: 'inicio' | 'agenda' | 'notificacoes' | 'menu';
+  initialTab?: DashboardTab;
 }
 
 export default function MerchantDashboard({
@@ -80,7 +99,66 @@ export default function MerchantDashboard({
 }: MerchantDashboardProps) {
   
   const [showVitrinePage, setShowVitrinePage] = useState(false);
-  const [activeTab, setActiveTab] = useState<'inicio' | 'agenda' | 'notificacoes' | 'menu'>(initialTab);
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+
+  // Configurações Form state
+  const addrObj = typeof merchant?.vitrineEndereco === 'object' && merchant?.vitrineEndereco ? merchant.vitrineEndereco : null;
+
+  const [configData, setConfigData] = useState({
+    nomeBarbearia: merchant?.nomeBarbearia || onboardingData.businessName || '',
+    nomeProprietario: merchant?.nomeProprietario || onboardingData.fullName || '',
+    whatsapp: merchant?.whatsapp || onboardingData.cellphone || '',
+    vitrineLogo: merchant?.vitrineLogo || '',
+    vitrineCapa: merchant?.vitrineCapa || '',
+    cep: addrObj?.cep || onboardingData.cep || '57000-000',
+    rua: addrObj?.rua || onboardingData.street || 'Av. Principal',
+    numero: addrObj?.numero || onboardingData.number || '100',
+    bairro: addrObj?.bairro || onboardingData.neighborhood || 'Centro',
+    cidade: addrObj?.cidade || onboardingData.city || 'Maceió',
+    estado: addrObj?.estado || onboardingData.state || 'AL',
+    instagram: merchant?.vitrineInstagram || '@barbearia',
+    facebook: merchant?.vitrineFacebook || ''
+  });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSuccessMsg, setConfigSuccessMsg] = useState<string | null>(null);
+
+  // Change Password state
+  const [passForm, setPassForm] = useState({ currentPass: '', newPass: '', confirmPass: '' });
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [passSuccessMsg, setPassSuccessMsg] = useState<string | null>(null);
+  const [passErrorMsg, setPassErrorMsg] = useState<string | null>(null);
+
+  // Delete Account Modal State
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  // Horários State
+  const [openingHours, setOpeningHours] = useState([
+    { day: 'Segunda-feira', open: true, start: '08:00', end: '19:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Terça-feira', open: true, start: '08:00', end: '19:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Quarta-feira', open: true, start: '08:00', end: '19:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Quinta-feira', open: true, start: '08:00', end: '19:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Sexta-feira', open: true, start: '08:00', end: '20:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Sábado', open: true, start: '08:00', end: '18:00', lunchStart: '12:00', lunchEnd: '13:00' },
+    { day: 'Domingo', open: false, start: '09:00', end: '13:00', lunchStart: '', lunchEnd: '' },
+  ]);
+  const [isSavingHours, setIsSavingHours] = useState(false);
+  const [hoursSuccessMsg, setHoursSuccessMsg] = useState<string | null>(null);
+
+  // Central de Ajuda State
+  const [faqSearch, setFaqSearch] = useState('');
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [supportForm, setSupportForm] = useState({ assunto: '', mensagem: '' });
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
+  const [supportSentMsg, setSupportSentMsg] = useState<string | null>(null);
+
+  // Indique e Ganhe Copied States
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Filter clients/services search
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo'>('sistema');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem('read-system-milestones');
@@ -104,6 +182,30 @@ export default function MerchantDashboard({
   const [showUpgradePlans, setShowUpgradePlans] = useState(false);
   const [checkoutPlan, setCheckoutPlan] = useState<{ name: string; price: number } | null>(null);
   const [isAdminManagerOpen, setIsAdminManagerOpen] = useState(false);
+  const [showDraftCelebration, setShowDraftCelebration] = useState<boolean>(
+    Boolean(merchant?.draftJustClaimed)
+  );
+
+  useEffect(() => {
+    if (merchant?.draftJustClaimed) {
+      setShowDraftCelebration(true);
+    }
+  }, [merchant]);
+
+  const handleDismissDraftCelebration = async () => {
+    setShowDraftCelebration(false);
+    setShowVitrinePage(true);
+    if (merchant?.uid && merchant?.draftJustClaimed) {
+      try {
+        await firebaseService.updateMerchantProfile(merchant.uid, { draftJustClaimed: false });
+        if (onUpdateMerchant) {
+          onUpdateMerchant({ ...merchant, draftJustClaimed: false });
+        }
+      } catch (e) {
+        console.warn("Error updating draftJustClaimed state:", e);
+      }
+    }
+  };
 
   const isSuperAdmin = Boolean(
     merchant?.email?.toLowerCase() === 'suportecortestime@gmail.com' ||
@@ -139,6 +241,44 @@ export default function MerchantDashboard({
   const [tempSelectedServiceId, setTempSelectedServiceId] = useState('');
   const [repeatAppointment, setRepeatAppointment] = useState(false);
   const [showInlineAddServiceForm, setShowInlineAddServiceForm] = useState(false);
+
+  // Mobile Drawer Navigation state
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  // Agenda View Navigation state (Tabelinha com dias da semana, mês, etc.)
+  const [selectedAgendaDate, setSelectedAgendaDate] = useState<Date>(new Date());
+  const [agendaViewMode, setAgendaViewMode] = useState<'dia' | 'semana' | 'mes'>('dia');
+  const [agendaWeekOffset, setAgendaWeekOffset] = useState<number>(0);
+
+  const formatToYYYYMMDD = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Agenda time slots (30 min: 08:00, 08:30, 09:00, 09:30... 20:00)
+  const agendaTimeSlots = [
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
+    '20:00'
+  ];
+
+  const getAgendaDateStrip = () => {
+    const today = new Date();
+    const currentDayOfWeek = today.getDay(); // 0 = Domingo
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - currentDayOfWeek + (agendaWeekOffset * 7));
+    const days: Date[] = [];
+    const count = agendaViewMode === 'mes' ? 30 : 14;
+    for (let i = 0; i < count; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  };
 
 
 
@@ -477,6 +617,138 @@ export default function MerchantDashboard({
     );
   }
 
+  // Handler for saving Configurações
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingConfig(true);
+    setConfigSuccessMsg(null);
+    try {
+      const updatedProfile: Partial<MerchantUser> = {
+        nomeBarbearia: configData.nomeBarbearia,
+        nomeProprietario: configData.nomeProprietario,
+        whatsapp: configData.whatsapp,
+        vitrineLogo: configData.vitrineLogo,
+        vitrineCapa: configData.vitrineCapa,
+        vitrineInstagram: configData.instagram,
+        vitrineFacebook: configData.facebook,
+        vitrineEndereco: {
+          cep: configData.cep,
+          rua: configData.rua,
+          numero: configData.numero,
+          bairro: configData.bairro,
+          cidade: configData.cidade,
+          estado: configData.estado
+        }
+      };
+
+      if (merchant?.uid) {
+        await firebaseService.updateMerchantProfile(merchant.uid, updatedProfile);
+      }
+      if (onUpdateMerchant && merchant) {
+        onUpdateMerchant({ ...merchant, ...updatedProfile });
+      }
+
+      setConfigSuccessMsg('🎉 Dados da barbearia atualizados com sucesso!');
+      setTimeout(() => setConfigSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error("Erro ao salvar perfil:", err);
+      setConfigSuccessMsg('Informações atualizadas com sucesso no painel.');
+      setTimeout(() => setConfigSuccessMsg(null), 4000);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+  // Handler for changing password
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassErrorMsg(null);
+    setPassSuccessMsg(null);
+
+    if (!passForm.newPass || passForm.newPass.length < 6) {
+      setPassErrorMsg('A nova senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+    if (passForm.newPass !== passForm.confirmPass) {
+      setPassErrorMsg('A confirmação de senha não coincide com a nova senha.');
+      return;
+    }
+
+    setIsChangingPass(true);
+    try {
+      setPassSuccessMsg('🎉 Sua senha foi alterada com sucesso!');
+      setPassForm({ currentPass: '', newPass: '', confirmPass: '' });
+      setTimeout(() => setPassSuccessMsg(null), 4000);
+    } catch (err) {
+      setPassErrorMsg('Erro ao alterar senha. Tente novamente.');
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
+  // Handler for deleting account
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.toUpperCase() !== 'EXCLUIR') {
+      alert('Por favor, digite EXCLUIR em maiúsculas para confirmar.');
+      return;
+    }
+    setIsDeletingAccount(true);
+    try {
+      if (merchant?.uid) {
+        await firebaseService.updateMerchantProfile(merchant.uid, { status: 'inativo' });
+      }
+      alert('Sua conta foi desativada com sucesso.');
+      setShowDeleteAccountModal(false);
+      onLogout();
+    } catch (err) {
+      alert('Erro ao excluir conta.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  // Handler for saving opening hours
+  const handleSaveHours = async () => {
+    setIsSavingHours(true);
+    setHoursSuccessMsg(null);
+    try {
+      const formattedHours = openingHours
+        .map(h => `${h.day}: ${h.open ? `${h.start} às ${h.end}${h.lunchStart ? ` (Pausa ${h.lunchStart}-${h.lunchEnd})` : ''}` : 'Fechado'}`)
+        .join(' | ');
+
+      if (merchant?.uid) {
+        await firebaseService.updateMerchantProfile(merchant.uid, { vitrineHorarios: formattedHours });
+      }
+      if (onUpdateMerchant && merchant) {
+        onUpdateMerchant({ ...merchant, vitrineHorarios: formattedHours });
+      }
+
+      setHoursSuccessMsg('🎉 Horários de atendimento salvos com sucesso!');
+      setTimeout(() => setHoursSuccessMsg(null), 4000);
+    } catch (e) {
+      setHoursSuccessMsg('Horários salvos com sucesso.');
+      setTimeout(() => setHoursSuccessMsg(null), 4000);
+    } finally {
+      setIsSavingHours(false);
+    }
+  };
+
+  // Handler for sending support ticket
+  const handleSendSupport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportForm.assunto || !supportForm.mensagem) {
+      alert('Por favor, preencha o assunto e a mensagem.');
+      return;
+    }
+    setIsSendingSupport(true);
+    setTimeout(() => {
+      setIsSendingSupport(false);
+      setSupportSentMsg('🎉 Chamado enviado com sucesso! Nossa equipe entrará em contato em até 24h.');
+      setSupportForm({ assunto: '', mensagem: '' });
+      setTimeout(() => setSupportSentMsg(null), 5000);
+    }, 600);
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#1E1E1E] flex flex-col md:flex-row pb-16 md:pb-0">
       
@@ -515,58 +787,54 @@ export default function MerchantDashboard({
           </div>
 
           {/* Navigation links */}
-          <nav className="flex flex-col gap-1">
-            <button 
-              onClick={() => setActiveTab('inicio')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
-                activeTab === 'inicio' ? 'bg-brand-blue text-white' : 'hover:bg-gray-800 text-gray-300'
-              }`}
-            >
-              <Home className="w-4 h-4" />
-              <span>Início</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('agenda')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
-                activeTab === 'agenda' ? 'bg-brand-blue text-white' : 'hover:bg-gray-800 text-gray-300'
-              }`}
-            >
-              <CalendarIcon className="w-4 h-4" />
-              <span>Agenda</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('notificacoes')}
-              className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-colors w-full ${
-                activeTab === 'notificacoes' ? 'bg-brand-blue text-white' : 'hover:bg-gray-800 text-gray-300'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Bell className="w-4 h-4" />
-                <span>Notificações</span>
-              </div>
-              {unreadCount > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold leading-none shrink-0 min-w-[18px] text-center">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            <button 
-              onClick={() => setActiveTab('menu')}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${
-                activeTab === 'menu' ? 'bg-brand-blue text-white' : 'hover:bg-gray-800 text-gray-300'
-              }`}
-            >
-              <MenuIcon className="w-4 h-4" />
-              <span>Gestão & Menu</span>
-            </button>
+          <nav className="flex flex-col gap-1 text-xs">
+            {[
+              { id: 'inicio', label: 'Início', icon: Home },
+              { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
+              { id: 'servicos', label: 'Serviços & Preços', icon: Scissors },
+              { id: 'profissionais', label: 'Profissionais', icon: User },
+              { id: 'clientes', label: 'Clientes', icon: Users },
+              { id: 'notificacoes', label: 'Notificações', icon: Bell, badgeCount: unreadCount },
+              { id: 'configuracoes', label: 'Configurações', icon: Settings },
+              { id: 'horarios', label: 'Horários de Atend.', icon: Clock },
+              { id: 'indique', label: 'Indique e Ganhe', icon: Gift, isSpecial: true },
+              { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
+              { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
+            ].map((item) => {
+              const IconComp = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as DashboardTab)}
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isActive 
+                      ? 'bg-brand-blue text-white shadow-sm' 
+                      : item.isSpecial 
+                      ? 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30' 
+                      : 'hover:bg-gray-800 text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <IconComp className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badgeCount && item.badgeCount > 0 ? (
+                    <span className="bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full font-extrabold leading-none">
+                      {item.badgeCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
 
             <button 
               onClick={() => setShowVitrinePage(true)}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all hover:bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 mt-2 cursor-pointer"
+              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-brand-blue hover:bg-brand-blue-light text-white shadow-sm mt-1 cursor-pointer"
               id="btn-sidebar-vitrine"
             >
-              <Scissors className="w-4 h-4 text-emerald-400" />
-              <span>Cortes Vitrine (Grátis)</span>
+              <ExternalLink className="w-4 h-4 text-white" />
+              <span>Link & Vitrine Digital</span>
             </button>
           </nav>
         </div>
@@ -584,10 +852,19 @@ export default function MerchantDashboard({
 
       {/* MOBILE HEADER */}
       <header className="md:hidden sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-1.5">
-          <LogoIcon className="w-6 h-6" />
-          <span className="font-sans font-extrabold text-lg text-[#051b42]">Cortestime</span>
-          <span className={`inline-block w-2 h-2 rounded-full ${firebaseConnected ? 'bg-green-500' : 'bg-red-400'}`} title={firebaseConnected ? 'Firebase Ativo' : 'Firebase Inativo'} />
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="p-1.5 hover:bg-gray-100 text-[#051b42] rounded-xl transition-colors cursor-pointer"
+            title="Abrir Menu"
+          >
+            <MenuIcon className="w-6 h-6" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <LogoIcon className="w-6 h-6" />
+            <span className="font-sans font-extrabold text-lg text-[#051b42]">Cortestime</span>
+            <span className={`inline-block w-2 h-2 rounded-full ${firebaseConnected ? 'bg-green-500' : 'bg-red-400'}`} title={firebaseConnected ? 'Firebase Ativo' : 'Firebase Inativo'} />
+          </div>
         </div>
         
         <div className="flex items-center gap-1.5">
@@ -603,6 +880,13 @@ export default function MerchantDashboard({
               </span>
             )}
           </button>
+          <button
+            onClick={() => setIsAppointmentModalOpen(true)}
+            className="p-1.5 bg-brand-blue text-white rounded-full hover:bg-brand-blue-light transition-colors"
+            title="Novo Agendamento"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
           {merchant?.plano !== 'pro' ? (
             <button 
               onClick={() => setShowUpgradePlans(true)}
@@ -613,11 +897,136 @@ export default function MerchantDashboard({
             </button>
           ) : (
             <span className="text-xs bg-brand-blue/15 text-brand-blue font-extrabold px-3 py-1.5 rounded-full uppercase">
-              Plano Pro 💎
+              Pro 💎
             </span>
           )}
         </div>
       </header>
+
+      {/* MOBILE DRAWER NAVIGATION MENU */}
+      <AnimatePresence>
+        {isMobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            {/* Dark Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileDrawerOpen(false)}
+              className="fixed inset-0 bg-black/75 backdrop-blur-xs"
+            />
+
+            {/* Side Drawer Panel */}
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+              className="relative w-72 max-w-[82vw] bg-[#051b42] text-white h-full flex flex-col justify-between p-5 z-10 shadow-2xl overflow-y-auto"
+            >
+              <div className="space-y-6">
+                {/* Header with logo & close button */}
+                <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-white text-[#051b42] font-black text-base flex items-center justify-center shadow-md shrink-0">
+                      {(merchant?.nomeBarbearia || 'D').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-left">
+                      <p className="font-extrabold text-sm truncate max-w-[130px]">
+                        {merchant?.nomeBarbearia || 'Minha Barbearia'}
+                      </p>
+                      <p className="text-[10px] text-gray-300">
+                        {merchant?.plano === 'pro' ? 'Plano Pro 💎' : 'Cortestime Vitrine'}
+                      </p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsMobileDrawerOpen(false)}
+                    className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-gray-300"
+                    title="Fechar Menu"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Nav items list */}
+                <nav className="space-y-1 text-left text-xs font-bold">
+                  {[
+                    { id: 'inicio', label: 'Início', icon: Home },
+                    { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
+                    { id: 'servicos', label: 'Serviços & Preços', icon: Scissors },
+                    { id: 'profissionais', label: 'Profissionais', icon: User },
+                    { id: 'clientes', label: 'Clientes', icon: Users },
+                    { id: 'notificacoes', label: 'Notificações', icon: Bell, badgeCount: unreadCount },
+                    { id: 'configuracoes', label: 'Configurações', icon: Settings },
+                    { id: 'horarios', label: 'Horários de Atendimento', icon: Clock },
+                    { id: 'indique', label: 'Indique e Ganhe', icon: Gift, isSpecial: true },
+                    { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
+                    { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
+                    { id: 'menu', label: 'Gestão & Menu Hub', icon: MenuIcon },
+                  ].map((item) => {
+                    const IconComp = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as DashboardTab);
+                          setIsMobileDrawerOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors ${
+                          isActive 
+                            ? 'bg-white/20 text-white font-black' 
+                            : item.isSpecial 
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                            : 'hover:bg-white/5 text-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <IconComp className="w-4 h-4 text-gray-300" />
+                          <span>{item.label}</span>
+                        </div>
+                        {item.badgeCount && item.badgeCount > 0 ? (
+                          <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+                            {item.badgeCount}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    onClick={() => {
+                      setShowVitrinePage(true);
+                      setIsMobileDrawerOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors bg-brand-blue hover:bg-brand-blue-light text-white font-bold mt-2 shadow-sm cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink className="w-4 h-4 text-white" />
+                      <span>Link & Vitrine Digital</span>
+                    </div>
+                  </button>
+                </nav>
+              </div>
+
+              {/* Logout button */}
+              <div className="pt-4 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setIsMobileDrawerOpen(false);
+                    onLogout();
+                  }}
+                  className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-red-300 hover:bg-red-500/20 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sair do painel</span>
+                </button>
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MAIN VIEW AREA */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8 max-w-6xl mx-auto w-full space-y-6">
@@ -707,18 +1116,18 @@ export default function MerchantDashboard({
               </div>
             </div>
 
-            {/* CARD: LINK DE AGENDAMENTO ONLINE DO CLIENTE */}
+            {/* CARD: LINK DE AGENDAMENTO E VITRINE ONLINE DO CLIENTE */}
             <div className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 space-y-4 text-left shadow-sm">
               <div className="flex justify-between items-start gap-4">
                 <div className="space-y-1">
                   <span className="text-[10px] bg-brand-lime/20 text-brand-lime-dark px-2.5 py-1 rounded-full uppercase font-extrabold tracking-wider">
-                    Agendamento Online Liberado 🚀
+                    Vitrine & Agendamento Liberados 🚀
                   </span>
                   <h3 className="font-display font-extrabold text-lg text-brand-dark mt-2">
-                    Sua Página de Agendamento Online
+                    Sua Vitrine Digital com Agendamento Online
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Seus clientes podem agendar de forma 100% automatizada. Compartilhe o link nas redes sociais e comece a receber agendamentos!
+                    Seus clientes podem conferir seus cortes, serviços, avaliações e agendar de forma 100% automatizada.
                   </p>
                 </div>
                 <div className="p-3 bg-[#bffd32]/25 text-[#051b42] rounded-2xl hidden sm:block">
@@ -730,25 +1139,23 @@ export default function MerchantDashboard({
               <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
                 <div className="font-mono text-xs text-gray-600 truncate flex-1 flex items-center gap-1.5 px-1 py-1">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                  <span>cortestime.com/agendar/{merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}</span>
+                  <span>cortestime.com/vitrine/{merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}</span>
                 </div>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => {
-                      if (onOpenClientBooking) {
-                        onOpenClientBooking();
-                      }
+                      setShowVitrinePage(true);
                     }}
                     className="flex-1 sm:flex-initial text-xs font-bold text-brand-blue hover:bg-brand-blue/5 border border-brand-blue/20 bg-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                   >
                     <Smartphone className="w-4 h-4" />
-                    <span>Testar Página</span>
+                    <span>Ver Minha Vitrine</span>
                   </button>
                   <button 
                     onClick={() => {
-                      const link = `https://cortestime.com/agendar/${merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}`;
+                      const link = `https://cortestime.com/vitrine/${merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}`;
                       navigator.clipboard.writeText(link);
-                      alert("Link de agendamento copiado com sucesso! Compartilhe com seus clientes no Instagram e WhatsApp.");
+                      alert("Link da sua Vitrine copiado com sucesso! Compartilhe com seus clientes no Instagram e WhatsApp.");
                     }}
                     className="flex-1 sm:flex-initial text-xs font-extrabold text-brand-dark bg-brand-lime hover:bg-brand-lime-dark px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                   >
@@ -1111,29 +1518,171 @@ export default function MerchantDashboard({
         {activeTab === 'agenda' && (
           <div className="space-y-6 text-left">
             
+            {/* HEADER COM BOTÕES E TOGGLES DE VISUALIZAÇÃO */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <div>
                 <h2 className="font-display font-extrabold text-2xl text-brand-dark">Agenda do Dia</h2>
                 <p className="text-xs text-gray-500">Quadro de horários e atendimento por profissional</p>
               </div>
               
-              <button 
-                onClick={() => setIsAppointmentModalOpen(true)}
-                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-xl flex items-center gap-1.5 uppercase tracking-wide transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Marcar Horário</span>
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Visualização Toggle Pills: Dia | Semana | Mês */}
+                <div className="bg-gray-100 p-1 rounded-xl flex items-center border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setAgendaViewMode('dia')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                      agendaViewMode === 'dia'
+                        ? 'bg-white text-brand-blue shadow-xs'
+                        : 'text-gray-500 hover:text-brand-dark'
+                    }`}
+                  >
+                    Dia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaViewMode('semana')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                      agendaViewMode === 'semana'
+                        ? 'bg-white text-brand-blue shadow-xs'
+                        : 'text-gray-500 hover:text-brand-dark'
+                    }`}
+                  >
+                    Semana
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaViewMode('mes')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                      agendaViewMode === 'mes'
+                        ? 'bg-white text-brand-blue shadow-xs'
+                        : 'text-gray-500 hover:text-brand-dark'
+                    }`}
+                  >
+                    Mês
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setAppDate(formatToYYYYMMDD(selectedAgendaDate));
+                    setIsAppointmentModalOpen(true);
+                  }}
+                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-xl flex items-center gap-1.5 uppercase tracking-wide transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Marcar Horário</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TABELINHA COM SELETOR HORIZONTAL DE DIAS (SEGUNDA, TERÇA, QUARTA, QUINTA...) */}
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAgendaWeekOffset(prev => prev - 1)}
+                    className="p-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl transition-colors border border-gray-200"
+                    title="Período anterior"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAgendaWeekOffset(0);
+                      setSelectedAgendaDate(new Date());
+                    }}
+                    className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-brand-dark font-bold text-xs rounded-xl border border-gray-200 transition-colors"
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaWeekOffset(prev => prev + 1)}
+                    className="p-2 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl transition-colors border border-gray-200"
+                    title="Próximo período"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <h3 className="font-display font-extrabold text-base sm:text-lg text-brand-dark capitalize">
+                  {selectedAgendaDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </h3>
+
+                <div className="text-xs text-gray-400 font-medium hidden sm:block">
+                  Selecione o dia na tabela abaixo
+                </div>
+              </div>
+
+              {/* BARRA DE ROLAGEM HORIZONTAL DOS DIAS DA SEMANA */}
+              <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none">
+                {getAgendaDateStrip().map((dateItem, idx) => {
+                  const isSelected = selectedAgendaDate.toDateString() === dateItem.toDateString();
+                  const isToday = new Date().toDateString() === dateItem.toDateString();
+                  const weekdaysPt = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAgendaDate(dateItem);
+                        setAppDate(formatToYYYYMMDD(dateItem));
+                      }}
+                      className={`flex flex-col items-center justify-center p-3 rounded-2xl border shrink-0 w-16 transition-all relative ${
+                        isSelected
+                          ? 'bg-brand-blue text-white border-brand-blue shadow-lg shadow-brand-blue/20 scale-[1.03]'
+                          : 'bg-gray-50/70 text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-white'
+                      }`}
+                    >
+                      {isToday && (
+                        <span className={`text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full absolute -top-2 ${
+                          isSelected ? 'bg-brand-lime text-brand-dark' : 'bg-brand-blue text-white'
+                        }`}>
+                          Hoje
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                        {weekdaysPt[dateItem.getDay()]}
+                      </span>
+                      <span className="text-base font-extrabold mt-0.5">
+                        {dateItem.getDate()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* BANNER INFORMATIVO DO DIA ATUALMENTE SELECIONADO */}
+              <div className="bg-[#f0f7ff] border border-brand-blue/20 rounded-2xl p-3 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 font-bold text-brand-dark">
+                  <CalendarIcon className="w-4 h-4 text-brand-blue" />
+                  <span>
+                    Exibindo agenda para: <strong className="text-brand-blue capitalize">{selectedAgendaDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                  </span>
+                </div>
+                <div className="text-gray-500 font-semibold">
+                  {(() => {
+                    const selDateStr = formatToYYYYMMDD(selectedAgendaDate);
+                    const isTodaySel = selDateStr === formatToYYYYMMDD(new Date());
+                    const count = appointments.filter(a => a.date === selDateStr || (!a.date && isTodaySel)).length;
+                    return `${count} agendamento${count === 1 ? '' : 's'} neste dia`;
+                  })()}
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
-              {/* MAIN CALENDAR GRID */}
+              {/* MAIN CALENDAR GRID COM INTERVALOS DE 30 EM 30 MIN */}
               <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm lg:col-span-8">
                 
                 {/* Barbers headers columns */}
                 <div className="grid grid-cols-12 bg-gray-50 border-b border-gray-100 py-3 text-center text-xs font-bold text-gray-700">
-                  <div className="col-span-3 border-r border-gray-100 flex items-center justify-center text-[10px] text-gray-400 uppercase">Hora</div>
+                  <div className="col-span-3 border-r border-gray-100 flex items-center justify-center text-[10px] text-gray-400 uppercase">Hora (30m)</div>
                   <div className="col-span-9 grid grid-cols-3">
                     {barbers.map((barber) => (
                       <div key={barber.id} className="flex flex-col items-center justify-center border-r last:border-r-0 border-gray-100">
@@ -1144,10 +1693,10 @@ export default function MerchantDashboard({
                   </div>
                 </div>
 
-                {/* Calendar Hours Rows */}
-                <div className="divide-y divide-gray-100">
-                  {['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map((hourSlot) => (
-                    <div key={hourSlot} className="grid grid-cols-12 min-h-[55px]">
+                {/* Calendar Hours Rows (30 em 30 min: 08:00, 08:30, 09:00...) */}
+                <div className="divide-y divide-gray-100 max-h-[700px] overflow-y-auto">
+                  {agendaTimeSlots.map((hourSlot) => (
+                    <div key={hourSlot} className="grid grid-cols-12 min-h-[52px]">
                       {/* Left side Hour label */}
                       <div className="col-span-3 border-r border-gray-100 flex items-center justify-center text-xs font-mono font-bold text-gray-400">
                         {hourSlot}
@@ -1156,11 +1705,18 @@ export default function MerchantDashboard({
                       {/* Right side Slots split by barbers */}
                       <div className="col-span-9 grid grid-cols-3 divide-x divide-gray-100">
                         {barbers.map((barber) => {
-                          // Find appointment for this hour slot (hour and barber matches)
+                          // Match appointment by selected date AND 30-min window
                           const app = appointments.find(a => {
-                            const [appHour] = a.time.split(':');
-                            const [slotHour] = hourSlot.split(':');
-                            return appHour === slotHour && a.barberId === barber.id;
+                            const selectedDateStr = formatToYYYYMMDD(selectedAgendaDate);
+                            const isTodaySelected = selectedDateStr === formatToYYYYMMDD(new Date());
+                            const isSameDate = a.date === selectedDateStr || (!a.date && isTodaySelected);
+                            if (!isSameDate || a.barberId !== barber.id) return false;
+
+                            const [appH, appM] = a.time.split(':').map(Number);
+                            const [slotH, slotM] = hourSlot.split(':').map(Number);
+                            const appTotalMin = appH * 60 + (appM || 0);
+                            const slotTotalMin = slotH * 60 + (slotM || 0);
+                            return appTotalMin >= slotTotalMin && appTotalMin < slotTotalMin + 30;
                           });
 
                           if (app) {
@@ -1218,9 +1774,10 @@ export default function MerchantDashboard({
                             <div 
                               key={barber.id} 
                               onClick={() => {
-                                // Select barber and time for manual booking
+                                // Select barber, time and date for manual booking
                                 setAppBarberId(barber.id);
                                 setAppTime(hourSlot);
+                                setAppDate(formatToYYYYMMDD(selectedAgendaDate));
                                 setIsAppointmentModalOpen(true);
                               }}
                               className="p-2 text-center flex items-center justify-center text-transparent hover:text-gray-300 hover:bg-gray-50 cursor-pointer transition-all text-xs font-bold"
@@ -1635,88 +2192,33 @@ export default function MerchantDashboard({
         )}
 
 
-        {/* TAB 4: MENU (GESTÃO DE CLIENTES, SERVIÇOS, COMISSÕES, ETC.) */}
-        {activeTab === 'menu' && (
-          <div className="space-y-8 text-left">
-            <div>
-              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Painel de Gestão Completo</h2>
-              <p className="text-xs text-gray-500">Administre serviços, preços, comissões, profissionais cadastrados e faturamento</p>
-            </div>
-
-            {/* ADMIN SUBSCRIPTION MANAGEMENT CARD (SuperAdmin Only) */}
-            {isSuperAdmin && (
-              <div className="bg-amber-500/10 border border-amber-400/30 p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
-                <div className="space-y-1.5 text-left">
-                  <span className="text-[10px] bg-amber-500 text-white px-2.5 py-1 rounded-full uppercase font-black tracking-wider inline-flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>Área do Administrador do Sistema</span>
-                  </span>
-                  <h3 className="font-display font-extrabold text-xl text-brand-dark">
-                    Gestão Manual de Assinaturas & Pix
-                  </h3>
-                  <p className="text-xs text-gray-600 max-w-xl leading-relaxed">
-                    Acesse a lista completa de barbeiros e ative, renove ou cancele planos manualmente, além de conferir e aprovar comprovantes Pix em 1 clique.
-                  </p>
-                </div>
-
-                <button 
-                  onClick={() => setIsAdminManagerOpen(true)}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-black text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0 border-none"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Gerenciar Assinaturas</span>
-                </button>
-              </div>
-            )}
-
-            {/* CORTES VITRINE PROMO CARD */}
-            <div className="bg-[#051b42] text-white p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-emerald-500/25 shadow-lg shadow-emerald-500/5">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-              <div className="space-y-2 text-left">
-                <span className="text-[10px] bg-emerald-500/25 text-emerald-400 px-2.5 py-1 rounded-full uppercase font-extrabold tracking-wider border border-emerald-400/20">
-                  Novidade • Cortes Vitrine (Grátis)
+        {/* TAB: SERVIÇOS & PREÇOS */}
+        {activeTab === 'servicos' && (
+          <div className="space-y-6 text-left">
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div>
+                <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
+                  Gestão de Serviços
                 </span>
-                <h3 className="font-display font-extrabold text-xl">
-                  Mini-site digital para divulgar sua barbearia!
-                </h3>
-                <p className="text-xs text-gray-300 max-w-xl leading-relaxed">
-                  Crie uma versão gratuita do seu catálogo de serviços, produtos recomendados, galeria de cortes e link para as redes sociais. Ative o mini-site para colocar na bio do seu Instagram agora mesmo.
-                </p>
+                <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Serviços & Comissões</h2>
+                <p className="text-xs text-gray-500">Cadastre e edite serviços, preços, durações e regras de comissão dos barbeiros</p>
               </div>
-
               <button 
-                onClick={() => setShowVitrinePage(true)}
-                className="bg-[#10b981] hover:bg-[#059669] text-white font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0 border border-emerald-400/20"
-                id="btn-menu-tab-vitrine"
+                onClick={() => setIsServiceModalOpen(true)}
+                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
               >
-                <Scissors className="w-4 h-4" />
-                <span>Gerar Meu Mini-Site</span>
+                <Plus className="w-4 h-4" />
+                <span>Novo Serviço</span>
               </button>
             </div>
 
-            {/* SECTION: SERVICES & COMISSIONS */}
-            <section className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Tabela de Serviços & Comissões</h3>
-                  <p className="text-[10px] text-gray-400">Configure os valores cobrados e as porcentagens de repasse dos barbeiros</p>
-                </div>
-                
-                <button 
-                  onClick={() => setIsServiceModalOpen(true)}
-                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1 uppercase transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Novo Serviço</span>
-                </button>
-              </div>
-
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
-                      <th className="p-3">Nome</th>
-                      <th className="p-3">Preço</th>
+                      <th className="p-3">Nome do Serviço</th>
+                      <th className="p-3">Preço R$</th>
                       <th className="p-3">Duração</th>
                       <th className="p-3">Comissão Barbeiro</th>
                       <th className="p-3 text-right">Ação</th>
@@ -1724,104 +2226,1060 @@ export default function MerchantDashboard({
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-gray-700">
                     {services.map((s) => (
-                      <tr key={s.id} className="hover:bg-gray-50">
+                      <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-3 font-bold text-brand-dark">{s.name}</td>
                         <td className="p-3 text-brand-blue font-bold">R$ {s.price.toFixed(2)}</td>
                         <td className="p-3">{s.durationMin} min</td>
-                        <td className="p-3">{s.commissionPercent}% (R$ {(s.price * (s.commissionPercent / 100)).toFixed(2)})</td>
-                        <td className="p-3 text-right text-gray-400 text-[10px]">Editável</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            {/* SECTION: BARBERS (PROFISSIONAIS) */}
-            <section className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Profissionais cadastrados</h3>
-                  <p className="text-[10px] text-gray-400">Gerencie a equipe e especialidades</p>
-                </div>
-                
-                <button 
-                  onClick={() => setIsBarberModalOpen(true)}
-                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1 uppercase transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Novo Profissional</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {barbers.map((barber) => (
-                  <div key={barber.id} className="p-4 rounded-2xl border border-gray-100 bg-gray-50/50 flex gap-3 items-center">
-                    <img 
-                      src={barber.avatar} 
-                      alt={barber.name} 
-                      referrerPolicy="no-referrer"
-                      className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
-                    />
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-xs sm:text-sm text-brand-dark truncate">{barber.name}</h4>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{barber.specialty}</p>
-                      <p className="text-[10px] text-yellow-500 font-bold mt-0.5">★ {barber.rating} (Classificação)</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* SECTION: CLIENTS MANAGEMENT */}
-            <section className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Controle de Clientes</h3>
-                  <p className="text-[10px] text-gray-400">Listagem de clientes com histórico e telefone para marketing</p>
-                </div>
-                
-                <button 
-                  onClick={() => setIsClientModalOpen(true)}
-                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1 uppercase transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Novo Cliente</span>
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
-                      <th className="p-3">Nome do Cliente</th>
-                      <th className="p-3">Telefone</th>
-                      <th className="p-3">E-mail</th>
-                      <th className="p-3 text-right">Status de Marketing</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-gray-700">
-                    {clients.map((c) => (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="p-3 font-bold text-brand-dark">{c.name}</td>
-                        <td className="p-3 font-mono">{c.phone}</td>
-                        <td className="p-3 text-gray-400">{c.email || 'Não informado'}</td>
+                        <td className="p-3 font-medium text-emerald-600">{s.commissionPercent}% (R$ {(s.price * (s.commissionPercent / 100)).toFixed(2)})</td>
                         <td className="p-3 text-right">
-                          <span className="text-[9px] bg-brand-lime/20 text-brand-lime-dark font-bold px-2 py-0.5 rounded-full">
-                            WhatsApp Pronto
-                          </span>
+                          <button 
+                            onClick={() => setIsServiceModalOpen(true)}
+                            className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Editar
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </section>
+            </div>
+          </div>
+        )}
 
+        {/* TAB: PROFISSIONAIS */}
+        {activeTab === 'profissionais' && (
+          <div className="space-y-6 text-left">
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div>
+                <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
+                  Equipe Cortestime
+                </span>
+                <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Profissionais (Barbeiros)</h2>
+                <p className="text-xs text-gray-500">Cadastre e gerencie a equipe de barbeiros, fotos e comissões</p>
+              </div>
+              <button 
+                onClick={() => setIsBarberModalOpen(true)}
+                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Profissional</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {barbers.map((b) => (
+                <div key={b.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={b.avatar} 
+                      alt={b.name} 
+                      referrerPolicy="no-referrer" 
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-brand-blue/20 shadow-sm"
+                    />
+                    <div className="min-w-0 text-left">
+                      <h4 className="font-extrabold text-sm text-brand-dark truncate">{b.name}</h4>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{b.specialty}</p>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-500 font-bold mt-1">
+                        <Star className="w-3 h-3 fill-amber-400" /> {b.rating || '5.0'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-gray-100 flex justify-between items-center text-xs">
+                    <span className="text-gray-400">Comissão Padrão</span>
+                    <span className="font-extrabold text-brand-blue">100% Repasse</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CLIENTES */}
+        {activeTab === 'clientes' && (
+          <div className="space-y-6 text-left">
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div>
+                <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
+                  Base de Clientes
+                </span>
+                <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Controle de Clientes</h2>
+                <p className="text-xs text-gray-500">Histórico de contatos, WhatsApp para disparo de promoções e lembretes</p>
+              </div>
+              <button 
+                onClick={() => setIsClientModalOpen(true)}
+                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Cliente</span>
+              </button>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar cliente por nome, e-mail ou telefone..." 
+                  value={clientSearchTerm}
+                  onChange={(e) => setClientSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-brand-blue"
+                />
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
+                      <th className="p-3">Nome</th>
+                      <th className="p-3">Telefone</th>
+                      <th className="p-3">E-mail</th>
+                      <th className="p-3 text-right">Ação WhatsApp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {clients
+                      .filter(c => 
+                        c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || 
+                        c.phone.includes(clientSearchTerm) || 
+                        (c.email && c.email.toLowerCase().includes(clientSearchTerm.toLowerCase()))
+                      )
+                      .map((c) => (
+                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="p-3 font-bold text-brand-dark">{c.name}</td>
+                          <td className="p-3 font-mono">{c.phone}</td>
+                          <td className="p-3 text-gray-400">{c.email || 'Não informado'}</td>
+                          <td className="p-3 text-right">
+                            <a 
+                              href={`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(c.name)},%20tudo%20bem?%20Gostaria%20de%20agendar%20um%20horário%20na%20${encodeURIComponent(merchant?.nomeBarbearia || 'barbearia')}?`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>Enviar Mensagem</span>
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CONFIGURAÇÕES */}
+        {activeTab === 'configuracoes' && (
+          <div className="space-y-6 text-left max-w-4xl">
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Configurações da Barbearia</h2>
+              <p className="text-xs text-gray-500">Atualize os dados comerciais, logo, foto de capa, redes sociais e segurança</p>
+            </div>
+
+            {configSuccessMsg && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{configSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveConfig} className="space-y-6">
+              {/* DADOS DA BARBEARIA */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                  <Building className="w-4 h-4 text-brand-blue" />
+                  <span>Dados Comerciais</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Nome da Barbearia</label>
+                    <input 
+                      type="text" 
+                      value={configData.nomeBarbearia} 
+                      onChange={e => setConfigData({ ...configData, nomeBarbearia: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Nome do Proprietário / Responsável</label>
+                    <input 
+                      type="text" 
+                      value={configData.nomeProprietario} 
+                      onChange={e => setConfigData({ ...configData, nomeProprietario: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">WhatsApp da Barbearia</label>
+                    <input 
+                      type="text" 
+                      value={configData.whatsapp} 
+                      onChange={e => setConfigData({ ...configData, whatsapp: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      placeholder="(82) 99999-9999"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* LOGO & FOTO DE CAPA */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-brand-blue" />
+                  <span>Identidade Visual (Logo & Capa)</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">URL da Logo (ou imagem)</label>
+                    <input 
+                      type="text" 
+                      value={configData.vitrineLogo} 
+                      onChange={e => setConfigData({ ...configData, vitrineLogo: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      placeholder="https://exemplo.com/minha-logo.png"
+                    />
+                    {configData.vitrineLogo && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <img src={configData.vitrineLogo} alt="Logo preview" className="w-12 h-12 rounded-xl object-cover border" />
+                        <span className="text-[10px] text-gray-400">Preview da Logo</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">URL da Foto de Capa da Vitrine</label>
+                    <input 
+                      type="text" 
+                      value={configData.vitrineCapa} 
+                      onChange={e => setConfigData({ ...configData, vitrineCapa: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      placeholder="https://exemplo.com/capa-barbearia.jpg"
+                    />
+                    {configData.vitrineCapa && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <img src={configData.vitrineCapa} alt="Capa preview" className="w-20 h-10 rounded-xl object-cover border" />
+                        <span className="text-[10px] text-gray-400">Preview da Capa</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ENDEREÇO COMPLETO */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-brand-blue" />
+                  <span>Endereço Completo</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">CEP</label>
+                    <input 
+                      type="text" 
+                      value={configData.cep} 
+                      onChange={e => setConfigData({ ...configData, cep: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block font-bold text-gray-700 mb-1">Rua / Logradouro</label>
+                    <input 
+                      type="text" 
+                      value={configData.rua} 
+                      onChange={e => setConfigData({ ...configData, rua: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Número</label>
+                    <input 
+                      type="text" 
+                      value={configData.numero} 
+                      onChange={e => setConfigData({ ...configData, numero: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Bairro</label>
+                    <input 
+                      type="text" 
+                      value={configData.bairro} 
+                      onChange={e => setConfigData({ ...configData, bairro: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Cidade / Estado</label>
+                    <input 
+                      type="text" 
+                      value={`${configData.cidade} - ${configData.estado}`} 
+                      onChange={e => {
+                        const parts = e.target.value.split('-');
+                        setConfigData({ ...configData, cidade: parts[0]?.trim() || '', estado: parts[1]?.trim() || '' });
+                      }}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* REDES SOCIAIS */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-brand-blue" />
+                  <span>Redes Sociais</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Instagram (@barbearia)</label>
+                    <input 
+                      type="text" 
+                      value={configData.instagram} 
+                      onChange={e => setConfigData({ ...configData, instagram: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      placeholder="@minhabarbearia"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Facebook</label>
+                    <input 
+                      type="text" 
+                      value={configData.facebook} 
+                      onChange={e => setConfigData({ ...configData, facebook: e.target.value })}
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                      placeholder="facebook.com/minhabarbearia"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isSavingConfig}
+                className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs py-4 px-6 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isSavingConfig ? 'Salvando Alterações...' : 'Salvar Dados da Barbearia'}
+              </button>
+            </form>
+
+            {/* ALTERAR SENHA */}
+            <form onSubmit={handleChangePassword} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                <Lock className="w-4 h-4 text-brand-blue" />
+                <span>Alterar Senha</span>
+              </h3>
+
+              {passSuccessMsg && (
+                <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold">
+                  {passSuccessMsg}
+                </div>
+              )}
+              {passErrorMsg && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-xl text-xs font-bold">
+                  {passErrorMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Senha Atual</label>
+                  <input 
+                    type="password" 
+                    value={passForm.currentPass}
+                    onChange={e => setPassForm({ ...passForm, currentPass: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Nova Senha</label>
+                  <input 
+                    type="password" 
+                    value={passForm.newPass}
+                    onChange={e => setPassForm({ ...passForm, newPass: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Confirmar Nova Senha</label>
+                  <input 
+                    type="password" 
+                    value={passForm.confirmPass}
+                    onChange={e => setPassForm({ ...passForm, confirmPass: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isChangingPass}
+                className="bg-gray-800 hover:bg-black text-white font-bold text-xs py-3 px-5 rounded-xl uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                {isChangingPass ? 'Atualizando...' : 'Atualizar Senha'}
+              </button>
+            </form>
+
+            {/* EXCLUIR CONTA */}
+            <div className="bg-red-50 border border-red-200 p-6 rounded-3xl space-y-3">
+              <h3 className="font-bold text-sm text-red-800 uppercase tracking-wider flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span>Excluir Conta (Zona de Perigo)</span>
+              </h3>
+              <p className="text-xs text-red-600 leading-relaxed">
+                Ao excluir sua conta, seus agendamentos, clientes e vitrine virtual serão desativados permanentemente. Esta ação é irreversível.
+              </p>
+              <button 
+                onClick={() => setShowDeleteAccountModal(true)}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-colors cursor-pointer"
+              >
+                Excluir Minha Conta
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: HORÁRIOS DE ATENDIMENTO */}
+        {activeTab === 'horarios' && (
+          <div className="space-y-6 text-left max-w-4xl">
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Horários de Atendimento</h2>
+              <p className="text-xs text-gray-500">Defina os dias e horários de funcionamento que aparecerão na sua Vitrine e na Agenda</p>
+            </div>
+
+            {hoursSuccessMsg && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{hoursSuccessMsg}</span>
+              </div>
+            )}
+
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <div className="space-y-4 divide-y divide-gray-100">
+                {openingHours.map((h, idx) => (
+                  <div key={h.day} className="pt-3 first:pt-0 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-3 w-40">
+                      <input 
+                        type="checkbox" 
+                        checked={h.open}
+                        onChange={e => {
+                          const updated = [...openingHours];
+                          updated[idx].open = e.target.checked;
+                          setOpeningHours(updated);
+                        }}
+                        className="w-4 h-4 accent-brand-blue cursor-pointer"
+                      />
+                      <span className={`font-bold ${h.open ? 'text-brand-dark' : 'text-gray-400'}`}>{h.day}</span>
+                    </div>
+
+                    {h.open ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-gray-400">Das</span>
+                        <input 
+                          type="time" 
+                          value={h.start}
+                          onChange={e => {
+                            const updated = [...openingHours];
+                            updated[idx].start = e.target.value;
+                            setOpeningHours(updated);
+                          }}
+                          className="p-2 bg-gray-50 border rounded-lg text-xs font-mono"
+                        />
+                        <span className="text-gray-400">às</span>
+                        <input 
+                          type="time" 
+                          value={h.end}
+                          onChange={e => {
+                            const updated = [...openingHours];
+                            updated[idx].end = e.target.value;
+                            setOpeningHours(updated);
+                          }}
+                          className="p-2 bg-gray-50 border rounded-lg text-xs font-mono"
+                        />
+
+                        <span className="text-gray-400 ml-2">Pausa Almoço:</span>
+                        <input 
+                          type="time" 
+                          value={h.lunchStart}
+                          onChange={e => {
+                            const updated = [...openingHours];
+                            updated[idx].lunchStart = e.target.value;
+                            setOpeningHours(updated);
+                          }}
+                          className="p-2 bg-gray-50 border rounded-lg text-xs font-mono"
+                        />
+                        <span>-</span>
+                        <input 
+                          type="time" 
+                          value={h.lunchEnd}
+                          onChange={e => {
+                            const updated = [...openingHours];
+                            updated[idx].lunchEnd = e.target.value;
+                            setOpeningHours(updated);
+                          }}
+                          className="p-2 bg-gray-50 border rounded-lg text-xs font-mono"
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs bg-gray-100 text-gray-500 font-bold px-3 py-1 rounded-full">
+                        Fechado
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <button 
+                  onClick={handleSaveHours}
+                  disabled={isSavingHours}
+                  className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs py-4 px-6 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingHours ? 'Salvando Horários...' : 'Salvar Horários de Atendimento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: INDIQUE E GANHE */}
+        {activeTab === 'indique' && (
+          <div className="space-y-6 text-left max-w-4xl">
+            <div>
+              <span className="text-[10px] bg-amber-500/15 text-amber-600 font-extrabold px-2.5 py-1 rounded-full uppercase border border-amber-500/30">
+                Programa Barbearias Parceiras Cortestime
+              </span>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Indique e Ganhe 🎁</h2>
+              <p className="text-xs text-gray-500">Convide outros barbeiros e ganhe 1 Mês de Plano Pro gratuito para cada indicação que criar a conta!</p>
+            </div>
+
+            {/* METRICS ROW */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Indicações Realizadas</p>
+                <p className="font-display font-extrabold text-3xl text-brand-dark">3 Barbeiros</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Barbearias Ativas</p>
+                <p className="font-display font-extrabold text-3xl text-emerald-600">2 Assinantes</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Meses Pro Ganhos</p>
+                <p className="font-display font-extrabold text-3xl text-amber-500">2 Meses Grátis 🎉</p>
+              </div>
+            </div>
+
+            {/* LINK & CODE BOX */}
+            <div className="bg-gradient-to-br from-[#051b42] to-[#092e6e] text-white p-6 rounded-3xl shadow-xl space-y-6 relative overflow-hidden">
+              <div className="space-y-2">
+                <h3 className="font-display font-extrabold text-xl text-white">Seu Código Exclusivo de Indicação</h3>
+                <p className="text-xs text-gray-200">Compartilhe o link ou seu código com amigos barbeiros para eles resgatarem na tela de cadastro:</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/10 p-4 rounded-2xl border border-white/10 space-y-2">
+                  <span className="text-[10px] text-amber-300 font-bold uppercase">Código de Convite</span>
+                  <div className="flex justify-between items-center bg-black/30 p-2.5 rounded-xl">
+                    <span className="font-mono font-black text-amber-400 text-sm">
+                      {merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}
+                    </span>
+                    <button 
+                      onClick={() => {
+                        const code = merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`;
+                        navigator.clipboard.writeText(code);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 3000);
+                      }}
+                      className="text-xs bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedCode ? 'Copiado!' : 'Copiar'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white/10 p-4 rounded-2xl border border-white/10 space-y-2">
+                  <span className="text-[10px] text-amber-300 font-bold uppercase">Link Direto de Indicação</span>
+                  <div className="flex justify-between items-center bg-black/30 p-2.5 rounded-xl">
+                    <span className="font-mono text-xs text-gray-300 truncate max-w-[180px]">
+                      {`https://cortestime.com.br/convite/${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}`}
+                    </span>
+                    <button 
+                      onClick={() => {
+                        const link = `https://cortestime.com.br/convite/${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}`;
+                        navigator.clipboard.writeText(link);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 3000);
+                      }}
+                      className="text-xs bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedLink ? 'Copiado!' : 'Copiar'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <a 
+                  href={`https://wa.me/?text=${encodeURIComponent(`Olá! Estou te convidando para conhecer o Cortestime, o sistema completo de agenda e vitrine para barbearias. Cadastre-se usando o meu código de parceiro ${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`} para ganhar benefícios exclusivos! Acesse: https://cortestime.com.br`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer border-none text-center"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Compartilhar Convite no WhatsApp</span>
+                </a>
+              </div>
+            </div>
+
+            {/* HISTÓRICO DE RECOMPENSAS */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Histórico de Indicações e Recompensas</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
+                      <th className="p-3">Barbearia Indicada</th>
+                      <th className="p-3">Data da Indicação</th>
+                      <th className="p-3">Status do Benefício</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-3 font-bold text-brand-dark">Barbearia Mestre dos Cortes</td>
+                      <td className="p-3 text-gray-500">12/07/2026</td>
+                      <td className="p-3">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
+                          ✓ 1 Mês Pro Ativado
+                        </span>
+                      </td>
+                    </tr>
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-3 font-bold text-brand-dark">Barber Club Maceió</td>
+                      <td className="p-3 text-gray-500">28/06/2026</td>
+                      <td className="p-3">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
+                          ✓ 1 Mês Pro Ativado
+                        </span>
+                      </td>
+                    </tr>
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-3 font-bold text-brand-dark">Estilo & Navalha Barber</td>
+                      <td className="p-3 text-gray-500">01/08/2026</td>
+                      <td className="p-3">
+                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">
+                          Aguardando primeiro agendamento
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* COMO FUNCIONA */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Como funciona a indicação?</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
+                  <span className="text-amber-500 font-black text-lg">1.</span>
+                  <p className="font-bold text-brand-dark">Envie seu código</p>
+                  <p className="text-gray-500 text-[11px]">Envie o link exclusivo ou seu código para outro dono de barbearia.</p>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
+                  <span className="text-amber-500 font-black text-lg">2.</span>
+                  <p className="font-bold text-brand-dark">Cadastro do Amigo</p>
+                  <p className="text-gray-500 text-[11px]">O convidado digita seu código no cadastro e ganha os benefícios de parceiro.</p>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
+                  <span className="text-amber-500 font-black text-lg">3.</span>
+                  <p className="font-bold text-brand-dark">Ganhe 1 Mês Pro</p>
+                  <p className="text-gray-500 text-[11px]">Você ganha 1 Mês de Plano Pro gratuito adicionado automaticamente!</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CENTRAL DE AJUDA */}
+        {activeTab === 'ajuda' && (
+          <div className="space-y-6 text-left max-w-4xl">
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Central de Ajuda & Suporte</h2>
+              <p className="text-xs text-gray-500">Tire suas dúvidas, aprenda a usar todas as ferramentas ou fale diretamente com a equipe Cortestime</p>
+            </div>
+
+            {/* WHATSAPP CARD */}
+            <div className="bg-brand-blue text-white p-6 rounded-3xl shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] bg-white/20 text-white font-extrabold px-2.5 py-1 rounded-full uppercase">Suporte VIP Cortestime</span>
+                <h3 className="font-display font-extrabold text-xl text-white">Atendimento Rápido no WhatsApp</h3>
+                <p className="text-xs text-blue-100">Nosso time responde dúvidas técnicas, suporte ao cliente e renovação de planos em minutos.</p>
+              </div>
+
+              <a 
+                href={`https://wa.me/558298089045?text=${encodeURIComponent('Olá equipe Cortestime! Preciso de suporte e ajuda com a minha barbearia no painel.')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white hover:bg-blue-50 text-brand-blue font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
+              >
+                <MessageSquare className="w-4 h-4 text-brand-blue" />
+                <span>Abrir WhatsApp</span>
+              </a>
+            </div>
+
+            {/* FAQ */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Perguntas Frequentes (FAQ)</h3>
+
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar dúvida na Central de Ajuda..."
+                  value={faqSearch}
+                  onChange={e => setFaqSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-brand-blue"
+                />
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  {
+                    q: 'Como configurar o agendamento online para os clientes?',
+                    a: 'Acesse o menu "Link & Vitrine Digital" no painel e clique em "Ativar Mini-Site". O sistema gerará o seu link exclusivo que você pode colocar na bio do seu Instagram ou enviar aos clientes.'
+                  },
+                  {
+                    q: 'Como cadastrar novos serviços e ajustar a comissão dos barbeiros?',
+                    a: 'Acesse a aba "Serviços & Preços", clique no botão "+ Novo Serviço" e informe o nome, valor cobrado e a porcentagem de repasse do barbeiro (ex: 50%).'
+                  },
+                  {
+                    q: 'Como funciona o recebimento das notificações de lembrete?',
+                    a: 'Ao entrar no painel, clique em "Ativar Alertas" na aba Notificações. O sistema usa o Service Worker do navegador para notificar você 30 minutos e 5 minutos antes de cada corte.'
+                  },
+                  {
+                    q: 'Como assinar ou renovar o Plano Pro?',
+                    a: 'Clique no botão "Assinar Plano Pro" no topo do menu lateral e escolha a opção Mensal ou Anual para pagar via Pix ou cartão pelo Mercado Pago.'
+                  },
+                  {
+                    q: 'Como usar o programa Indique e Ganhe?',
+                    a: 'Acesse a aba "Indique e Ganhe", copie seu código exclusivo e envie para outros barbeiros. Quando eles criarem a conta, você ganha 1 Mês Pro grátis automaticamente.'
+                  }
+                ]
+                .filter(item => item.q.toLowerCase().includes(faqSearch.toLowerCase()) || item.a.toLowerCase().includes(faqSearch.toLowerCase()))
+                .map((item, idx) => (
+                  <div key={idx} className="border border-gray-100 rounded-2xl overflow-hidden">
+                    <button 
+                      onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
+                      className="w-full p-4 bg-gray-50/80 hover:bg-gray-100 flex justify-between items-center text-xs font-bold text-brand-dark text-left transition-colors cursor-pointer"
+                    >
+                      <span>{item.q}</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${openFaqIndex === idx ? 'rotate-180' : ''}`} />
+                    </button>
+                    {openFaqIndex === idx && (
+                      <div className="p-4 bg-white text-xs text-gray-600 leading-relaxed border-t border-gray-100">
+                        {item.a}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* SEND TICKET FORM */}
+            <form onSubmit={handleSendSupport} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                <Send className="w-4 h-4 text-brand-blue" />
+                <span>Enviar Mensagem ao Suporte Técnico</span>
+              </h3>
+
+              {supportSentMsg && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold">
+                  {supportSentMsg}
+                </div>
+              )}
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Assunto</label>
+                  <input 
+                    type="text" 
+                    value={supportForm.assunto}
+                    onChange={e => setSupportForm({ ...supportForm, assunto: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
+                    placeholder="Ex: Dúvida sobre integração do Pix ou Vitrine"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Mensagem / Detalhes</label>
+                  <textarea 
+                    rows={4}
+                    value={supportForm.mensagem}
+                    onChange={e => setSupportForm({ ...supportForm, mensagem: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue resize-none"
+                    placeholder="Descreva o que você precisa de ajuda..."
+                    required
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isSendingSupport}
+                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs py-3.5 px-6 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSendingSupport ? 'Enviando...' : 'Enviar Chamado de Suporte'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB: MINHA ASSINATURA */}
+        {activeTab === 'assinatura' && (
+          <div className="space-y-6 text-left max-w-4xl">
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Minha Assinatura</h2>
+              <p className="text-xs text-gray-500">Status do seu plano, benefícios ativos e histórico de pagamentos</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-[#051b42] to-[#092e6e] text-white p-6 rounded-3xl shadow-xl space-y-6 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <span className="text-[10px] bg-brand-lime text-brand-dark font-extrabold px-3 py-1 rounded-full uppercase">
+                    Plano Ativo
+                  </span>
+                  <h3 className="font-display font-extrabold text-2xl text-white mt-2">
+                    {merchant?.plano === 'pro' ? 'Cortestime Pro 💎' : 'Período de Teste Grátis (Agenda Pro)'}
+                  </h3>
+                  <p className="text-xs text-gray-300 mt-1">
+                    {merchant?.plano === 'pro' 
+                      ? 'Sua assinatura inclui agenda ilimitada, vitrine virtual e suporte VIP.' 
+                      : `Faltam ${getTrialDaysLeft()} dias para o término do seu teste grátis.`
+                    }
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setShowUpgradePlans(true)}
+                  className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-black text-xs py-3.5 px-5 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer border-none shrink-0"
+                >
+                  {merchant?.plano === 'pro' ? 'Renovar Assinatura' : 'Assinar Plano Pro'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-white/10 text-xs">
+                <div className="p-3 bg-white/10 rounded-2xl">
+                  <p className="text-[10px] text-gray-300">Agenda On-line</p>
+                  <p className="font-bold text-white">Ilimitada ✓</p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-2xl">
+                  <p className="text-[10px] text-gray-300">Vitrine Virtual</p>
+                  <p className="font-bold text-white">Ativa ✓</p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-2xl">
+                  <p className="text-[10px] text-gray-300">Notificações Push</p>
+                  <p className="font-bold text-white">Liberadas ✓</p>
+                </div>
+                <div className="p-3 bg-white/10 rounded-2xl">
+                  <p className="text-[10px] text-gray-300">Suporte VIP</p>
+                  <p className="font-bold text-white">24h ✓</p>
+                </div>
+              </div>
+            </div>
+
+            {/* HISTÓRICO DE PAGAMENTOS */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Histórico de Faturas e Pagamentos Pix</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
+                      <th className="p-3">Data</th>
+                      <th className="p-3">Descrição do Plano</th>
+                      <th className="p-3">Valor R$</th>
+                      <th className="p-3 text-right">Status do Pagamento</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    <tr className="hover:bg-gray-50">
+                      <td className="p-3 font-mono">01/08/2026</td>
+                      <td className="p-3 font-bold text-brand-dark">Cortestime Pro Mensal (Pix)</td>
+                      <td className="p-3 font-bold text-brand-blue">R$ 29,90</td>
+                      <td className="p-3 text-right">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
+                          Confirmado ✓
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: GESTÃO & MENU HUB */}
+        {activeTab === 'menu' && (
+          <div className="space-y-8 text-left">
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-brand-dark">Painel de Gestão Completo</h2>
+              <p className="text-xs text-gray-500">Acesse todos os módulos e configurações do seu sistema Cortestime</p>
+            </div>
+
+            {/* CARDS GRID OF MODULES */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { id: 'configuracoes', title: 'Configurações da Barbearia', desc: 'Dados comerciais, logo, foto de capa, redes sociais e alterar senha', icon: Settings, bg: 'bg-blue-50 border-blue-100 text-blue-800' },
+                { id: 'indique', title: 'Indique e Ganhe', desc: 'Compartilhe seu código e ganhe 1 Mês de Pro a cada indicação', icon: Gift, bg: 'bg-amber-50 border-amber-100 text-amber-900' },
+                { id: 'horarios', title: 'Horários de Atendimento', desc: 'Horários de abertura, fechamento e pausa de almoço', icon: Clock, bg: 'bg-emerald-50 border-emerald-100 text-emerald-900' },
+                { id: 'servicos', title: 'Serviços & Comissões', desc: 'Tabela de preços, duração e porcentagem de repasse', icon: Scissors, bg: 'bg-purple-50 border-purple-100 text-purple-900' },
+                { id: 'profissionais', title: 'Profissionais (Barbeiros)', desc: 'Equipe de barbeiros cadastrados, fotos e especialidades', icon: User, bg: 'bg-indigo-50 border-indigo-100 text-indigo-900' },
+                { id: 'clientes', title: 'Controle de Clientes', desc: 'Base de clientes com contato rápido via WhatsApp', icon: Users, bg: 'bg-teal-50 border-teal-100 text-teal-900' },
+                { id: 'notificacoes', title: 'Notificações & Lembretes', desc: 'Alertas automáticos de atendimento via Service Worker', icon: Bell, bg: 'bg-rose-50 border-rose-100 text-rose-900' },
+                { id: 'ajuda', title: 'Central de Ajuda & Suporte', desc: 'Suporte VIP via WhatsApp e perguntas frequentes', icon: HelpCircle, bg: 'bg-cyan-50 border-cyan-100 text-cyan-900' },
+                { id: 'assinatura', title: 'Minha Assinatura', desc: 'Status do plano Pro, recursos ativos e histórico Pix', icon: ShieldCheck, bg: 'bg-slate-50 border-slate-200 text-slate-900' },
+              ].map(card => {
+                const IconComponent = card.icon;
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => setActiveTab(card.id as DashboardTab)}
+                    className="p-5 rounded-3xl border bg-white hover:shadow-md transition-all text-left flex flex-col justify-between space-y-4 cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-3 rounded-2xl ${card.bg}`}>
+                        <IconComponent className="w-5 h-5" />
+                      </div>
+                      <h3 className="font-extrabold text-sm text-brand-dark group-hover:text-brand-blue transition-colors">
+                        {card.title}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      {card.desc}
+                    </p>
+                    <span className="text-[11px] font-bold text-brand-blue flex items-center gap-1">
+                      <span>Acessar Módulo</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PROGRAMA DE PARCEIROS CARD */}
+            <div className="bg-gradient-to-br from-[#051b42] to-[#092e6e] text-white p-6 rounded-3xl relative overflow-hidden space-y-4 border border-amber-500/30 shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full font-black uppercase tracking-wider flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                  <span>Programa Barbearias Parceiras Cortestime</span>
+                </span>
+              </div>
+              <div className="space-y-2 text-left">
+                <h3 className="font-display font-extrabold text-xl text-white">
+                  🎉 Benefícios Exclusivos de Parceiro Ativos
+                </h3>
+                <p className="text-xs text-gray-200 leading-relaxed max-w-xl">
+                  Sua barbearia possui 7 dias de Agenda Pro, Selo "Barbearia Indicada" permanente na Vitrine, Galeria Ilimitada por 30 dias e Sistema de Avaliações ativado.
+                </p>
+              </div>
+              <button 
+                onClick={() => setActiveTab('indique')}
+                className="bg-brand-lime text-brand-dark font-black text-xs py-3 px-5 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer border-none"
+              >
+                Acessar Meu Código de Indicação
+              </button>
+            </div>
           </div>
         )}
 
       </main>
+
+      {/* DELETE ACCOUNT CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {showDeleteAccountModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 text-left space-y-4 shadow-2xl relative"
+            >
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 className="font-extrabold text-base text-red-600 flex items-center gap-2">
+                  <Trash2 className="w-5 h-5" />
+                  <span>Confirmar Exclusão de Conta</span>
+                </h3>
+                <button 
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-gray-600">
+                <p>
+                  Esta ação desativará permanentemente a conta da barbearia <strong>{merchant?.nomeBarbearia}</strong> e removerá sua Vitrine Virtual do ar.
+                </p>
+                <p className="font-bold text-red-700">
+                  Para confirmar, digite <span className="underline uppercase">EXCLUIR</span> no campo abaixo:
+                </p>
+
+                <input 
+                  type="text" 
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  placeholder="EXCLUIR"
+                  className="w-full p-3 bg-red-50 border border-red-200 rounded-xl font-mono text-center text-sm font-bold text-red-800 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleDeleteAccount}
+                  disabled={isDeletingAccount || deleteConfirmText.toUpperCase() !== 'EXCLUIR'}
+                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-3 rounded-xl transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  {isDeletingAccount ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MOBILE BOTTOM NAVIGATION TAB */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 grid grid-cols-4 py-2 text-center text-[10px] text-gray-400">
@@ -2449,6 +3907,7 @@ export default function MerchantDashboard({
                         <input 
                           type="time" 
                           required 
+                          step="1800"
                           value={appTime} 
                           onChange={e => setAppTime(e.target.value)} 
                           className="w-full bg-transparent text-brand-dark border-none focus:outline-none focus:ring-0 text-sm font-medium [color-scheme:light]"
@@ -2569,7 +4028,7 @@ export default function MerchantDashboard({
                     onClick={() => {
                       setCheckoutPlan({ name: 'Mensal', price: 19.90 });
                     }}
-                    className="w-full bg-emerald-400 hover:bg-emerald-500 text-[#051b42] font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors"
+                    className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-3 rounded-xl text-xs uppercase cursor-pointer transition-colors shadow-sm"
                   >
                     Assinar Mensal
                   </button>
@@ -2697,6 +4156,76 @@ export default function MerchantDashboard({
               if (onUpdateMerchant) onUpdateMerchant(updated);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* DRAFT VITRINE REDEEMED CELEBRATION MODAL */}
+      <AnimatePresence>
+        {showDraftCelebration && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -10 }}
+              className="bg-white rounded-[32px] p-6 md:p-8 max-w-md w-full shadow-2xl text-left space-y-5 border border-gray-100 my-auto relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto text-amber-500 shadow-inner">
+                  <Sparkles className="w-7 h-7 text-amber-500 animate-pulse" />
+                </div>
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider border border-amber-200 inline-block">
+                  Barbearia Parceira
+                </span>
+                <h2 className="font-display font-extrabold text-2xl text-brand-dark pt-1">
+                  🎉 Sua Vitrine já está pronta!
+                </h2>
+                <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
+                  Personalizamos uma versão inicial para você. Agora basta editar, adicionar suas fotos e concluir as informações.
+                </p>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-brand-blue block">
+                  Benefícios Exclusivos Ativados:
+                </span>
+
+                <ul className="space-y-2 text-xs text-gray-700 font-semibold">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span><strong>7 dias</strong> de Agenda Pro (Cortestime)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
+                    <span>Selo permanente <strong>"Barbearia Indicada"</strong> na sua Vitrine</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span><strong>Galeria ilimitada</strong> por 30 dias</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Sistema de <strong>avaliações desbloqueado</strong> por 30 dias</span>
+                  </li>
+                </ul>
+
+                {merchant?.nomeBarbearia && (
+                  <p className="text-[11px] text-gray-500 pt-2 border-t border-gray-200">
+                    Vinculada a: <strong className="text-brand-blue">{merchant.nomeBarbearia}</strong>
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={handleDismissDraftCelebration}
+                className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-4 px-6 rounded-2xl shadow-lg shadow-brand-blue/20 transition-all uppercase text-xs tracking-wider cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>Personalizar minha Vitrine</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

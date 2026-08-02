@@ -171,7 +171,7 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
 
                 <button 
                   onClick={() => onUpdatePlan('vitrine')}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-extrabold py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/20"
+                  className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-4 px-6 rounded-2xl shadow-xl shadow-blue-500/10 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer border border-blue-400/20"
                   id="btn-continue-free-vitrine"
                 >
                   <span>Continuar gratuitamente no Cortes Vitrine</span>
@@ -241,7 +241,7 @@ export default function TrialBlockedPage({ merchant, onLogout, onUpdatePlan, onB
 
                   <button
                     onClick={() => handleSelectPlan('Mensal', 19.90)}
-                    className="w-full bg-emerald-400 hover:bg-emerald-500 text-[#051b42] font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                    className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
                   >
                     Assinar Mensal
                   </button>

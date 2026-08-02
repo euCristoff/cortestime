@@ -64,7 +64,7 @@ export const notificationService = {
           badge: '/badge.png',
           tag,
           renotify: true
-        });
+        } as NotificationOptions);
       } else if (registration && registration.active) {
         registration.active.postMessage({
           type: 'SHOW_NOTIFICATION',
