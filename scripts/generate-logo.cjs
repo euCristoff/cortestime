@@ -2,46 +2,48 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-// Exact Brand Wing Logo SVG with perfect geometry, centering and padding
+// Precise vector paths matching the user's uploaded brand logo
 const logoSvgBase = (fillBg = null) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
   <defs>
     <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0b2545" />
-      <stop offset="35%" stop-color="#134074" />
-      <stop offset="70%" stop-color="#1d6a96" />
+      <stop offset="0%" stop-color="#081c3b" />
+      <stop offset="30%" stop-color="#113e73" />
+      <stop offset="65%" stop-color="#1d6e9d" />
       <stop offset="100%" stop-color="#3fa8d4" />
     </linearGradient>
     <linearGradient id="brandGradientLight" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#60c5ef" />
+      <stop offset="0%" stop-color="#081c3b" />
+      <stop offset="50%" stop-color="#1a6393" />
+      <stop offset="100%" stop-color="#4dbbe5" />
     </linearGradient>
   </defs>
 
-  ${fillBg ? `<rect width="1000" height="1000" fill="${fillBg}" rx="180"/>` : ''}
+  ${fillBg ? `<rect width="1000" height="1000" fill="${fillBg}" rx="160"/>` : ''}
 
-  <g transform="translate(500, 500) scale(0.72) translate(-602.5, -490)">
+  <g transform="translate(500, 500) scale(1.15) translate(-612.5, -485)">
     <!-- Main Upper Wing Swoosh -->
     <path d="M 315 730 
-             L 490 350 
-             C 525 275, 600 250, 700 250 
-             C 780 250, 850 260, 890 280 
-             C 900 285, 895 298, 880 300 
-             C 800 310, 720 330, 650 375 
-             C 580 420, 520 490, 480 580 
-             L 415 730 
+             L 480 360 
+             C 515 285, 580 250, 680 250 
+             C 770 250, 850 255, 895 272 
+             C 910 278, 910 295, 890 302 
+             C 810 320, 720 345, 640 390 
+             C 550 440, 490 530, 440 650 
+             L 405 730 
              Z" 
-          fill="${fillBg === '#051b42' ? 'url(#brandGradientLight)' : 'url(#brandGradient)'}" />
+          fill="url(#brandGradient)" />
 
     <!-- Lower Secondary Wing Swoosh -->
-    <path d="M 410 730 
-             L 485 580 
-             C 520 500, 580 450, 680 435 
-             C 750 425, 800 425, 840 435 
-             C 850 438, 848 452, 835 455 
-             C 760 470, 700 500, 640 550 
-             C 580 600, 530 660, 505 730 
+    <path d="M 425 730 
+             L 490 580 
+             C 525 500, 580 445, 670 430 
+             C 740 418, 800 420, 835 430 
+             C 848 434, 846 448, 830 454 
+             C 750 475, 670 515, 610 565 
+             C 560 605, 525 645, 515 675 
+             L 515 730 
              Z" 
-          fill="${fillBg === '#051b42' ? 'url(#brandGradientLight)' : 'url(#brandGradient)'}" />
+          fill="url(#brandGradient)" />
   </g>
 </svg>
 `;
@@ -57,23 +59,21 @@ async function generate() {
   });
 
   const whiteSvg = logoSvgBase('#ffffff');
-  const darkSvg = logoSvgBase('#ffffff'); // White background ensures clean squircle icon on Android notification & home screen
   const transparentSvg = logoSvgBase(null);
 
   // Write SVG files
   fs.writeFileSync(path.join(publicDir, 'logo.svg'), transparentSvg);
-  fs.writeFileSync(path.join(publicDir, 'icon-192x192.svg'), darkSvg);
-  fs.writeFileSync(path.join(publicDir, 'icon-512x512.svg'), darkSvg);
+  fs.writeFileSync(path.join(publicDir, 'icon-192x192.svg'), whiteSvg);
+  fs.writeFileSync(path.join(publicDir, 'icon-512x512.svg'), whiteSvg);
   fs.writeFileSync(path.join(publicDir, 'badge.svg'), transparentSvg);
 
   // Buffers
   const whiteBuffer = Buffer.from(whiteSvg);
-  const darkBuffer = Buffer.from(darkSvg);
   const transparentBuffer = Buffer.from(transparentSvg);
 
   const logoPng = await sharp(whiteBuffer).resize(512, 512).png().toBuffer();
-  const icon192Png = await sharp(darkBuffer).resize(192, 192).png().toBuffer();
-  const icon512Png = await sharp(darkBuffer).resize(512, 512).png().toBuffer();
+  const icon192Png = await sharp(whiteBuffer).resize(192, 192).png().toBuffer();
+  const icon512Png = await sharp(whiteBuffer).resize(512, 512).png().toBuffer();
   const badgePng = await sharp(transparentBuffer).resize(96, 96).png().toBuffer();
 
   const dirs = [publicDir, assetsDir, distDir, distAssetsDir];
