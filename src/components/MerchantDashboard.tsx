@@ -316,10 +316,7 @@ export default function MerchantDashboard({
   };
 
   // Interactive waitlist array (in-memory state)
-  const [waitlist, setWaitlist] = useState<{name: string, phone: string, service: string}[]>([
-    { name: 'Marcus Aurelio', phone: '(82) 99312-3321', service: 'Corte Social' },
-    { name: 'Felipe Melo', phone: '(82) 98842-1209', service: 'Cabelo + Barba' }
-  ]);
+  const [waitlist, setWaitlist] = useState<{name: string, phone: string, service: string}[]>([]);
   const [newWaitName, setNewWaitName] = useState('');
   const [newWaitPhone, setNewWaitPhone] = useState('');
   const [newWaitService, setNewWaitService] = useState('Corte Social');
@@ -2763,7 +2760,13 @@ export default function MerchantDashboard({
         )}
 
         {/* TAB: INDIQUE E GANHE */}
-        {activeTab === 'indique' && (
+        {activeTab === 'indique' && (() => {
+          const indicacoesList = merchant?.indicacoesHistorico || [];
+          const totalIndicacoes = indicacoesList.length;
+          const barbeariasAtivasCount = indicacoesList.filter(i => i.statusTipo === 'ativado').length;
+          const mesesGanhosCount = barbeariasAtivasCount;
+
+          return (
           <div className="space-y-6 text-left max-w-4xl">
             <div>
               <span className="text-[10px] bg-amber-500/15 text-amber-600 font-extrabold px-2.5 py-1 rounded-full uppercase border border-amber-500/30">
@@ -2777,17 +2780,17 @@ export default function MerchantDashboard({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Indicações Realizadas</p>
-                <p className="font-display font-extrabold text-3xl text-brand-dark">3 Barbeiros</p>
+                <p className="font-display font-extrabold text-3xl text-brand-dark">{totalIndicacoes} {totalIndicacoes === 1 ? 'Barbeiro' : 'Barbeiros'}</p>
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Barbearias Ativas</p>
-                <p className="font-display font-extrabold text-3xl text-emerald-600">2 Assinantes</p>
+                <p className="font-display font-extrabold text-3xl text-emerald-600">{barbeariasAtivasCount} {barbeariasAtivasCount === 1 ? 'Assinante' : 'Assinantes'}</p>
               </div>
 
               <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Meses Pro Ganhos</p>
-                <p className="font-display font-extrabold text-3xl text-amber-500">2 Meses Grátis 🎉</p>
+                <p className="font-display font-extrabold text-3xl text-amber-500">{mesesGanhosCount} {mesesGanhosCount === 1 ? 'Mês Grátis 🎉' : 'Meses Grátis 🎉'}</p>
               </div>
             </div>
 
@@ -2858,46 +2861,39 @@ export default function MerchantDashboard({
             {/* HISTÓRICO DE RECOMPENSAS */}
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
               <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Histórico de Indicações e Recompensas</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
-                      <th className="p-3">Barbearia Indicada</th>
-                      <th className="p-3">Data da Indicação</th>
-                      <th className="p-3">Status do Benefício</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-gray-700">
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-3 font-bold text-brand-dark">Barbearia Mestre dos Cortes</td>
-                      <td className="p-3 text-gray-500">12/07/2026</td>
-                      <td className="p-3">
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
-                          ✓ 1 Mês Pro Ativado
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-3 font-bold text-brand-dark">Barber Club Maceió</td>
-                      <td className="p-3 text-gray-500">28/06/2026</td>
-                      <td className="p-3">
-                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">
-                          ✓ 1 Mês Pro Ativado
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="p-3 font-bold text-brand-dark">Estilo & Navalha Barber</td>
-                      <td className="p-3 text-gray-500">01/08/2026</td>
-                      <td className="p-3">
-                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full">
-                          Aguardando primeiro agendamento
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              {indicacoesList.length === 0 ? (
+                <div className="text-center py-8 px-4 bg-gray-50 rounded-2xl border border-gray-100 text-gray-500 text-xs space-y-1">
+                  <p className="font-extrabold text-sm text-brand-dark">Você ainda não possui indicações</p>
+                  <p className="text-gray-400">Compartilhe seu código ou link exclusivo com outros barbeiros. A cada barbearia indicada que assinar o sistema, você ganha 1 Mês de Plano Pro grátis!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
+                        <th className="p-3">Barbearia Indicada</th>
+                        <th className="p-3">Data da Indicação</th>
+                        <th className="p-3">Status do Benefício</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-700">
+                      {indicacoesList.map((item, idx) => (
+                        <tr key={item.id || idx} className="hover:bg-gray-50">
+                          <td className="p-3 font-bold text-brand-dark">{item.barbeariaName}</td>
+                          <td className="p-3 text-gray-500">{item.data}</td>
+                          <td className="p-3">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                              item.statusTipo === 'ativado' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* COMO FUNCIONA */}
@@ -2924,7 +2920,8 @@ export default function MerchantDashboard({
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB: CENTRAL DE AJUDA */}
         {activeTab === 'ajuda' && (

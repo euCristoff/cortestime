@@ -47,10 +47,14 @@ export const notificationService = {
 
   // Trigger a direct push notification via the Service Worker
   async triggerNotification(title: string, body: string, tag: string = 'cortestime-alert') {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const iconUrl = `${origin}/logo.png`;
+    const badgeUrl = `${origin}/badge.png`;
+
     if (!this.isSupported() || Notification.permission !== 'granted') {
       // Fallback to standard web notification if SW not ready
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
+        new Notification(title, { body, icon: iconUrl, badge: badgeUrl, tag });
       }
       return;
     }
@@ -60,8 +64,8 @@ export const notificationService = {
       if (registration && 'showNotification' in registration) {
         await registration.showNotification(title, {
           body,
-          icon: '/icon-192x192.png',
-          badge: '/badge.png',
+          icon: iconUrl,
+          badge: badgeUrl,
           tag,
           renotify: true
         } as NotificationOptions);
@@ -71,18 +75,18 @@ export const notificationService = {
           payload: {
             title,
             body,
-            icon: '/icon-192x192.png',
-            badge: '/badge.png',
+            icon: iconUrl,
+            badge: badgeUrl,
             tag
           }
         });
       } else {
         // Fallback
-        new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
+        new Notification(title, { body, icon: iconUrl, badge: badgeUrl, tag });
       }
     } catch (e) {
       console.error('Error sending notification via Service Worker:', e);
-      new Notification(title, { body, icon: '/icon-192x192.png', badge: '/badge.png', tag });
+      new Notification(title, { body, icon: iconUrl, badge: badgeUrl, tag });
     }
   },
 

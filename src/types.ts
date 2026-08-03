@@ -94,6 +94,7 @@ export interface MerchantUser {
   codigoConviteResgatado?: string;
   vitrineDraftResgatada?: boolean;
   draftJustClaimed?: boolean;
+  indicacoesHistorico?: { id?: string; barbeariaName: string; data: string; status: string; statusTipo: 'ativado' | 'pendente' }[];
 
   // Partner Campaign fields
   isPartner?: boolean;

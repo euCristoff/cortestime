@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Notificação Cortestime',
     body: 'Você tem uma nova atualização na sua barbearia.',
-    icon: '/icon-192x192.png',
+    icon: '/logo.png',
     badge: '/badge.png'
   };
 
