@@ -17,7 +17,7 @@ export default function LogoIcon({ className = "w-7 h-7" }: { className?: string
         </linearGradient>
       </defs>
       
-      <g transform="translate(500, 500) scale(1.15) translate(-612.5, -485)">
+      <g transform="translate(500, 500) scale(0.82) translate(-612.5, -485)">
         {/* Main Upper Wing Swoosh */}
         <path 
           d="M 315 730 L 480 360 C 515 285, 580 250, 680 250 C 770 250, 850 255, 895 272 C 910 278, 910 295, 890 302 C 810 320, 720 345, 640 390 C 550 440, 490 530, 440 650 L 405 730 Z" 

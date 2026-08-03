@@ -11,16 +11,12 @@ const logoSvgBase = (fillBg = null) => `<svg xmlns="http://www.w3.org/2000/svg" 
       <stop offset="65%" stop-color="#1d6e9d" />
       <stop offset="100%" stop-color="#3fa8d4" />
     </linearGradient>
-    <linearGradient id="brandGradientLight" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#081c3b" />
-      <stop offset="50%" stop-color="#1a6393" />
-      <stop offset="100%" stop-color="#4dbbe5" />
-    </linearGradient>
   </defs>
 
-  ${fillBg ? `<rect width="1000" height="1000" fill="${fillBg}" rx="160"/>` : ''}
+  ${fillBg ? `<rect width="1000" height="1000" fill="${fillBg}" rx="180"/>` : ''}
 
-  <g transform="translate(500, 500) scale(1.15) translate(-612.5, -485)">
+  <!-- Scaled down to 0.82 for clean, comfortable margins -->
+  <g transform="translate(500, 500) scale(0.82) translate(-612.5, -485)">
     <!-- Main Upper Wing Swoosh -->
     <path d="M 315 730 
              L 480 360 
@@ -86,7 +82,7 @@ async function generate() {
     }
   }
 
-  console.log('Centered & proportioned brand logos generated successfully!');
+  console.log('Scaled down brand logos generated successfully!');
 }
 
 generate().catch(console.error);
