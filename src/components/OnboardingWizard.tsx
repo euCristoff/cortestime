@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import LogoIcon from './LogoIcon';
+import InstallCortestimeStep from './InstallCortestimeStep';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -31,7 +32,7 @@ interface OnboardingWizardProps {
 }
 
 export default function OnboardingWizard({ initialData, onComplete, onBackToLanding }: OnboardingWizardProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(() => {
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(() => {
     if (initialData?.fullName && initialData?.cellphone && initialData?.email && initialData?.businessName) {
       return 2;
     }
@@ -164,7 +165,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
   const handleConfirmVerification = () => {
     const enteredCode = smsDigits.join('');
     if (enteredCode === smsCode) {
-      onComplete(formData);
+      setStep(5);
     } else {
       setSmsError('Código inválido. Digite o código de 6 dígitos recebido por SMS.');
     }
@@ -244,7 +245,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
         </div>
 
         <div className="text-xs font-bold text-gray-400">
-          Passo {step} de 4
+          Passo {step} de 5
         </div>
       </header>
 
@@ -550,6 +551,18 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
               <div className="text-xs text-gray-500 pt-2">
                 Para reconfigurar o código ou retransmitir, espere <span className="font-bold text-brand-blue font-mono">00:{countdown < 10 ? `0${countdown}` : countdown}</span>
               </div>
+            </motion.div>
+          )}
+
+          {/* STEP 5: INSTALL CORTESTIME */}
+          {step === 5 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <InstallCortestimeStep 
+                onComplete={() => onComplete(formData)} 
+              />
             </motion.div>
           )}
 

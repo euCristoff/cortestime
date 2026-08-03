@@ -102,6 +102,10 @@ export interface MerchantUser {
   partnerBenefitsExpiry?: string; // Expiration date for 30-day gallery and reviews
   partnerStoryConfirmed?: boolean;
   partnerWelcomeShown?: boolean;
+
+  // PWA / App Installation tracking
+  appInstalled?: boolean;
+  installRemindersDismissed?: boolean;
 }
 
 export interface DraftVitrine {

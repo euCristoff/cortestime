@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import LogoIcon from './LogoIcon';
+import InstallCortestimeStep from './InstallCortestimeStep';
 import { 
   Home, 
   Calendar as CalendarIcon, 
@@ -100,6 +101,10 @@ export default function MerchantDashboard({
   
   const [showVitrinePage, setShowVitrinePage] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+
+  // App Install / PWA prompt states
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [installReminderDismissed, setInstallReminderDismissed] = useState(false);
 
   // Configurações Form state
   const addrObj = typeof merchant?.vitrineEndereco === 'object' && merchant?.vitrineEndereco ? merchant.vitrineEndereco : null;
@@ -1162,6 +1167,45 @@ export default function MerchantDashboard({
               </div>
             </div>
 
+            {/* DISCRETE PWA INSTALL REMINDER BANNER */}
+            {!merchant?.appInstalled && !installReminderDismissed && (
+              <div className="bg-gradient-to-r from-slate-900 via-[#081c3b] to-slate-900 text-white p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-left relative overflow-hidden my-4">
+                <div className="flex items-center gap-3.5 z-10">
+                  <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 shadow-inner">
+                    <Smartphone className="w-5 h-5 text-[#d4ff5e]" />
+                  </div>
+                  <div>
+                    <h4 className="font-sans font-extrabold text-xs sm:text-sm text-white flex items-center gap-2">
+                      <span>Instale o Cortestime na tela inicial</span>
+                      <span className="px-2 py-0.5 bg-[#d4ff5e]/20 text-[#d4ff5e] text-[10px] font-extrabold rounded-md">Atalho</span>
+                    </h4>
+                    <p className="text-[11px] sm:text-xs text-gray-300 font-medium mt-0.5">
+                      Receba lembretes de clientes e tenha acesso mais rápido ao painel.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 z-10 w-full sm:w-auto justify-end">
+                  <button
+                    onClick={() => setShowInstallModal(true)}
+                    className="bg-[#d4ff5e] hover:bg-[#c3f542] text-[#051b42] font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm w-full sm:w-auto"
+                  >
+                    <Smartphone className="w-4 h-4 stroke-[2.5]" />
+                    <span>Instalar agora</span>
+                  </button>
+                  <button
+                    onClick={() => setInstallReminderDismissed(true)}
+                    className="p-2 text-gray-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Lembrar depois"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="absolute -right-8 -bottom-8 w-28 h-28 bg-[#d4ff5e]/10 rounded-full blur-2xl pointer-events-none" />
+              </div>
+            )}
+
             {/* QUICK STEPS CHECKLIST */}
             <div className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 space-y-4 text-left">
               <div>
@@ -1238,7 +1282,7 @@ export default function MerchantDashboard({
               </div>
             </div>
 
-            {/* RESUMO DO DIA (MATCHING SCREENSHOT) */}
+            {/* RESUMO DO DIA */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm text-left">
               <div className="mb-6">
                 <h3 className="font-sans font-extrabold text-xl sm:text-2xl text-brand-dark">Resumo do Dia</h3>
@@ -1253,48 +1297,72 @@ export default function MerchantDashboard({
                   <div>
                     <p className="text-xs font-bold text-gray-500">Agendamentos</p>
                     <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {appointments.length > 0 ? appointments.length : 24}
+                      {appointments.length}
                     </p>
                   </div>
-                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                    +16%
-                  </span>
+                  {appointments.length > 0 ? (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                      +16%
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
+                      0%
+                    </span>
+                  )}
                 </div>
 
                 <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
                   <div>
                     <p className="text-xs font-bold text-gray-500">Faturamento</p>
                     <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      R$ {totalFaturamento > 0 ? totalFaturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '1.980,00'}
+                      R$ {totalFaturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
-                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                    +22%
-                  </span>
+                  {totalFaturamento > 0 ? (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                      +22%
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
+                      0%
+                    </span>
+                  )}
                 </div>
 
                 <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
                   <div>
                     <p className="text-xs font-bold text-gray-500">Novos Clientes</p>
                     <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {clients.length > 0 ? clients.length : 8}
+                      {clients.length}
                     </p>
                   </div>
-                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                    +14%
-                  </span>
+                  {clients.length > 0 ? (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                      +14%
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
+                      0%
+                    </span>
+                  )}
                 </div>
 
                 <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
                   <div>
                     <p className="text-xs font-bold text-gray-500">Taxa de Comparecimento</p>
                     <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {appointments.length > 0 ? Math.min(100, Math.max(10, Math.round((completedAppointments.length / appointments.length) * 100))) : 92}%
+                      {appointments.length > 0 ? Math.min(100, Math.max(0, Math.round((completedAppointments.length / appointments.length) * 100))) : 0}%
                     </p>
                   </div>
-                  <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                    +7%
-                  </span>
+                  {completedAppointments.length > 0 ? (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
+                      +7%
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
+                      0%
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1323,28 +1391,9 @@ export default function MerchantDashboard({
                       );
                     })
                   ) : (
-                    <>
-                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
-                        <span className="font-bold text-gray-700 w-16">09:00</span>
-                        <span className="font-semibold text-gray-800 flex-1">João Silva</span>
-                        <span className="text-gray-500 text-right">Carlos Penna</span>
-                      </div>
-                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
-                        <span className="font-bold text-gray-700 w-16">09:30</span>
-                        <span className="font-semibold text-gray-800 flex-1">Pedro Santos</span>
-                        <span className="text-gray-500 text-right">Henrique Souza</span>
-                      </div>
-                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
-                        <span className="font-bold text-gray-700 w-16">10:00</span>
-                        <span className="font-semibold text-gray-800 flex-1">Lucas Martins</span>
-                        <span className="text-gray-500 text-right">Gustavo Alencar</span>
-                      </div>
-                      <div className="py-3 flex items-center justify-between text-xs sm:text-sm">
-                        <span className="font-bold text-gray-700 w-16">10:30</span>
-                        <span className="font-semibold text-gray-800 flex-1">Rafael Costa</span>
-                        <span className="text-gray-500 text-right">Carlos Penna</span>
-                      </div>
-                    </>
+                    <div className="py-6 text-center text-gray-400 text-xs sm:text-sm font-medium">
+                      Nenhum agendamento para hoje
+                    </div>
                   )}
                 </div>
               </div>
@@ -4221,6 +4270,37 @@ export default function MerchantDashboard({
                 <span>Personalizar minha Vitrine</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODAL INSTALL PWA */}
+        {showInstallModal && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-[32px] p-6 sm:p-8 max-w-md w-full shadow-2xl relative border border-gray-100 my-auto"
+            >
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors z-20 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <InstallCortestimeStep
+                merchantUid={merchant?.uid}
+                isDashboardModal
+                onComplete={(installed) => {
+                  setShowInstallModal(false);
+                  if (installed && merchant && onUpdateMerchant) {
+                    onUpdateMerchant({ ...merchant, appInstalled: true });
+                  }
+                }}
+              />
             </motion.div>
           </div>
         )}

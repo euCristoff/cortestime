@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import LogoIcon from './LogoIcon';
+import InstallCortestimeStep from './InstallCortestimeStep';
 import { Mail, Lock, Building2, User, Phone, Eye, EyeOff, Sparkles, ArrowLeft, BadgeAlert, Ticket, CheckCircle2, Gift, Star, Award, Check } from 'lucide-react';
 import { MerchantUser } from '../types';
 
@@ -17,6 +18,10 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
+
+  // New step for PWA Install after registration
+  const [showInstallStep, setShowInstallStep] = useState<boolean>(false);
+  const [createdMerchant, setCreatedMerchant] = useState<MerchantUser | null>(null);
 
   // Google Auth specific state
   const [isCompletingGoogleSignUp, setIsCompletingGoogleSignUp] = useState<boolean>(false);
@@ -295,7 +300,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         nomeProprietario,
         whatsapp
       );
-      onAuthSuccess(merchant);
+      setCreatedMerchant(merchant);
+      setShowInstallStep(true);
     } catch (err: any) {
       console.error("Google save profile error:", err);
       setError(err.message || "Ocorreu um erro ao salvar seu perfil.");
@@ -309,7 +315,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     setError(null);
     try {
       const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp, codigoConvite);
-      onAuthSuccess(merchant);
+      setCreatedMerchant(merchant);
+      setShowInstallStep(true);
     } catch (err: any) {
       console.error("SignUp error:", err);
       let friendlyMessage = err.message || "Ocorreu um erro ao realizar o cadastro.";
@@ -403,7 +410,14 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       <main className="flex-1 flex items-center justify-center py-8">
         <div className="w-full max-w-md bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm">
           
-          {isCompletingGoogleSignUp ? (
+          {showInstallStep && createdMerchant ? (
+            <InstallCortestimeStep 
+              merchantUid={createdMerchant.uid} 
+              onComplete={(installed) => {
+                onAuthSuccess({ ...createdMerchant, appInstalled: installed });
+              }} 
+            />
+          ) : isCompletingGoogleSignUp ? (
             <>
               <div className="text-center mb-6">
                 <h2 className="font-display font-bold text-2xl text-brand-dark">
@@ -574,10 +588,10 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                       </div>
                     </div>
 
-                    {/* Código de Convite (Resgatar Vitrine) */}
+                    {/* Código Promocional (Opcional) / Convite */}
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <label className="text-xs font-bold text-gray-600">Código de convite (opcional)</label>
+                        <label className="text-xs font-bold text-gray-600">Código Promocional (Opcional)</label>
                         <span className="text-[10px] text-brand-blue font-bold flex items-center gap-1">
                           <Ticket className="w-3 h-3" /> Resgate de Vitrine
                         </span>
