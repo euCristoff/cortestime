@@ -1,18 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
   <defs>
-    <!-- Brand Blue Gradient -->
     <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0a1d37" />
-      <stop offset="35%" stop-color="#0f3460" />
-      <stop offset="70%" stop-color="#196898" />
+      <stop offset="0%" stop-color="#0b2545" />
+      <stop offset="35%" stop-color="#134074" />
+      <stop offset="70%" stop-color="#1d6a96" />
       <stop offset="100%" stop-color="#3fa8d4" />
+    </linearGradient>
+    <linearGradient id="brandGradientLight" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#60c5ef" />
     </linearGradient>
   </defs>
 
-  <!-- Clean Background -->
-  <rect width="1000" height="1000" fill="#ffffff" rx="200"/>
+  
 
-  <g transform="translate(40, 20)">
+  <g transform="translate(500, 500) scale(0.72) translate(-602.5, -490)">
     <!-- Main Upper Wing Swoosh -->
     <path d="M 315 730 
              L 490 350 

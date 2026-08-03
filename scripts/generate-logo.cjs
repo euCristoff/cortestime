@@ -2,22 +2,24 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-// Create the brand SVG matching the uploaded logo image perfectly
-const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+// Exact Brand Wing Logo SVG with perfect geometry, centering and padding
+const logoSvgBase = (fillBg = null) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
   <defs>
-    <!-- Brand Blue Gradient -->
     <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0a1d37" />
-      <stop offset="35%" stop-color="#0f3460" />
-      <stop offset="70%" stop-color="#196898" />
+      <stop offset="0%" stop-color="#0b2545" />
+      <stop offset="35%" stop-color="#134074" />
+      <stop offset="70%" stop-color="#1d6a96" />
       <stop offset="100%" stop-color="#3fa8d4" />
+    </linearGradient>
+    <linearGradient id="brandGradientLight" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#60c5ef" />
     </linearGradient>
   </defs>
 
-  <!-- Clean Background -->
-  <rect width="1000" height="1000" fill="#ffffff" rx="200"/>
+  ${fillBg ? `<rect width="1000" height="1000" fill="${fillBg}" rx="180"/>` : ''}
 
-  <g transform="translate(40, 20)">
+  <g transform="translate(500, 500) scale(0.72) translate(-602.5, -490)">
     <!-- Main Upper Wing Swoosh -->
     <path d="M 315 730 
              L 490 350 
@@ -28,7 +30,7 @@ const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 10
              C 580 420, 520 490, 480 580 
              L 415 730 
              Z" 
-          fill="url(#brandGradient)" />
+          fill="${fillBg === '#051b42' ? 'url(#brandGradientLight)' : 'url(#brandGradient)'}" />
 
     <!-- Lower Secondary Wing Swoosh -->
     <path d="M 410 730 
@@ -39,7 +41,7 @@ const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 10
              C 760 470, 700 500, 640 550 
              C 580 600, 530 660, 505 730 
              Z" 
-          fill="url(#brandGradient)" />
+          fill="${fillBg === '#051b42' ? 'url(#brandGradientLight)' : 'url(#brandGradient)'}" />
   </g>
 </svg>
 `;
@@ -54,47 +56,37 @@ async function generate() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   });
 
+  const whiteSvg = logoSvgBase('#ffffff');
+  const darkSvg = logoSvgBase('#ffffff'); // White background ensures clean squircle icon on Android notification & home screen
+  const transparentSvg = logoSvgBase(null);
+
   // Write SVG files
-  fs.writeFileSync(path.join(publicDir, 'logo.svg'), svgContent);
-  fs.writeFileSync(path.join(publicDir, 'icon-192x192.svg'), svgContent);
-  fs.writeFileSync(path.join(publicDir, 'icon-512x512.svg'), svgContent);
-  fs.writeFileSync(path.join(publicDir, 'badge.svg'), svgContent);
+  fs.writeFileSync(path.join(publicDir, 'logo.svg'), transparentSvg);
+  fs.writeFileSync(path.join(publicDir, 'icon-192x192.svg'), darkSvg);
+  fs.writeFileSync(path.join(publicDir, 'icon-512x512.svg'), darkSvg);
+  fs.writeFileSync(path.join(publicDir, 'badge.svg'), transparentSvg);
 
-  // Render PNGs at target sizes
-  const svgBuffer = Buffer.from(svgContent);
+  // Buffers
+  const whiteBuffer = Buffer.from(whiteSvg);
+  const darkBuffer = Buffer.from(darkSvg);
+  const transparentBuffer = Buffer.from(transparentSvg);
 
-  const png192 = await sharp(svgBuffer).resize(192, 192).png().toBuffer();
-  const png512 = await sharp(svgBuffer).resize(512, 512).png().toBuffer();
+  const logoPng = await sharp(whiteBuffer).resize(512, 512).png().toBuffer();
+  const icon192Png = await sharp(darkBuffer).resize(192, 192).png().toBuffer();
+  const icon512Png = await sharp(darkBuffer).resize(512, 512).png().toBuffer();
+  const badgePng = await sharp(transparentBuffer).resize(96, 96).png().toBuffer();
 
-  const badgeBuffer = await sharp(svgBuffer).resize(96, 96).png().toBuffer();
-
-  // Save to public
-  fs.writeFileSync(path.join(publicDir, 'logo.png'), png512);
-  fs.writeFileSync(path.join(publicDir, 'icon-192x192.png'), png192);
-  fs.writeFileSync(path.join(publicDir, 'icon-512x512.png'), png512);
-  fs.writeFileSync(path.join(publicDir, 'badge.png'), badgeBuffer);
-
-  // Save to public/assets
-  fs.writeFileSync(path.join(assetsDir, 'logo.png'), png512);
-  fs.writeFileSync(path.join(assetsDir, 'icon-192x192.png'), png192);
-  fs.writeFileSync(path.join(assetsDir, 'icon-512x512.png'), png512);
-  fs.writeFileSync(path.join(assetsDir, 'badge.png'), badgeBuffer);
-
-  // Save to dist if exists
-  if (fs.existsSync(distDir)) {
-    fs.writeFileSync(path.join(distDir, 'logo.png'), png512);
-    fs.writeFileSync(path.join(distDir, 'icon-192x192.png'), png192);
-    fs.writeFileSync(path.join(distDir, 'icon-512x512.png'), png512);
-    fs.writeFileSync(path.join(distDir, 'badge.png'), badgeBuffer);
-  }
-  if (fs.existsSync(distAssetsDir)) {
-    fs.writeFileSync(path.join(distAssetsDir, 'logo.png'), png512);
-    fs.writeFileSync(path.join(distAssetsDir, 'icon-192x192.png'), png192);
-    fs.writeFileSync(path.join(distAssetsDir, 'icon-512x512.png'), png512);
-    fs.writeFileSync(path.join(distAssetsDir, 'badge.png'), badgeBuffer);
+  const dirs = [publicDir, assetsDir, distDir, distAssetsDir];
+  for (const d of dirs) {
+    if (fs.existsSync(d)) {
+      fs.writeFileSync(path.join(d, 'logo.png'), logoPng);
+      fs.writeFileSync(path.join(d, 'icon-192x192.png'), icon192Png);
+      fs.writeFileSync(path.join(d, 'icon-512x512.png'), icon512Png);
+      fs.writeFileSync(path.join(d, 'badge.png'), badgePng);
+    }
   }
 
-  console.log('Logo generated successfully!');
+  console.log('Centered & proportioned brand logos generated successfully!');
 }
 
 generate().catch(console.error);

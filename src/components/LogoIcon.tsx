@@ -3,31 +3,35 @@ import React from 'react';
 export default function LogoIcon({ className = "w-7 h-7" }: { className?: string }) {
   return (
     <svg 
-      viewBox="55 20 150 95" 
+      viewBox="0 0 1000 1000" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg" 
       className={className}
     >
       <defs>
         <linearGradient id="logo-gradient-spec" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#051b42" />
-          <stop offset="50%" stopColor="#1d518d" />
-          <stop offset="100%" stopColor="#4f9bc2" />
+          <stop offset="0%" stopColor="#0b2545" />
+          <stop offset="35%" stopColor="#134074" />
+          <stop offset="70%" stopColor="#1d6a96" />
+          <stop offset="100%" stopColor="#3fa8d4" />
         </linearGradient>
       </defs>
       
-      {/* Back Wing (Upper) */}
-      <path 
-        d="M 62,110 C 75,90 90,70 105,52 C 118,36 138,28 162,28 C 182,28 198,28 198,28 C 198,28 203,28 200,36 C 195,44 180,50 155,50 C 138,50 128,58 120,68 C 112,78 102,92 90,110 Z" 
-        fill="url(#logo-gradient-spec)"
-      />
-      
-      {/* Front Wing (Lower) */}
-      <path 
-        d="M 94,110 C 104,94 114,80 124,68 C 132,58 142,54 159,54 C 169,54 178,54 178,54 C 178,54 182,54 180,61 C 176,67 162,72 146,72 C 132,72 124,88 120,110 Z" 
-        fill="url(#logo-gradient-spec)"
-      />
+      <g transform="translate(500, 500) scale(0.85) translate(-602.5, -490)">
+        {/* Main Upper Wing Swoosh */}
+        <path 
+          d="M 315 730 L 490 350 C 525 275, 600 250, 700 250 C 780 250, 850 260, 890 280 C 900 285, 895 298, 880 300 C 800 310, 720 330, 650 375 C 580 420, 520 490, 480 580 L 415 730 Z" 
+          fill="url(#logo-gradient-spec)"
+        />
+        
+        {/* Lower Secondary Wing Swoosh */}
+        <path 
+          d="M 410 730 L 485 580 C 520 500, 580 450, 680 435 C 750 425, 800 425, 840 435 C 850 438, 848 452, 835 455 C 760 470, 700 500, 640 550 C 580 600, 530 660, 505 730 Z" 
+          fill="url(#logo-gradient-spec)"
+        />
+      </g>
     </svg>
   );
 }
+
 
