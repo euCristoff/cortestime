@@ -1,27 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#082354"/>
-      <stop offset="100%" stop-color="#03112c"/>
-    </linearGradient>
-    <linearGradient id="lime" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d4ff5e"/>
-      <stop offset="100%" stop-color="#a4e810"/>
+    <!-- Brand Blue Gradient -->
+    <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0a1d37" />
+      <stop offset="35%" stop-color="#0f3460" />
+      <stop offset="70%" stop-color="#196898" />
+      <stop offset="100%" stop-color="#3fa8d4" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="180" fill="none" stroke="#bffd32" stroke-width="6" stroke-opacity="0.2"/>
-  <g>
-    <!-- Left Handle -->
-    <circle cx="184" cy="340" r="38" stroke="url(#lime)" stroke-width="24" fill="none"/>
-    <!-- Right Handle -->
-    <circle cx="328" cy="340" r="38" stroke="url(#lime)" stroke-width="24" fill="none"/>
-    <!-- Left Blade to Right Tip -->
-    <path d="M200 306 L320 144" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
-    <!-- Right Blade to Left Tip -->
-    <path d="M312 306 L192 144" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
-    <!-- Center Pivot Screw -->
-    <circle cx="256" cy="230" r="16" fill="url(#lime)"/>
-    <circle cx="256" cy="230" r="6" fill="#051b42"/>
+
+  <!-- Clean Background -->
+  <rect width="1000" height="1000" fill="#ffffff" rx="200"/>
+
+  <g transform="translate(40, 20)">
+    <!-- Main Upper Wing Swoosh -->
+    <path d="M 315 730 
+             L 490 350 
+             C 525 275, 600 250, 700 250 
+             C 780 250, 850 260, 890 280 
+             C 900 285, 895 298, 880 300 
+             C 800 310, 720 330, 650 375 
+             C 580 420, 520 490, 480 580 
+             L 415 730 
+             Z" 
+          fill="url(#brandGradient)" />
+
+    <!-- Lower Secondary Wing Swoosh -->
+    <path d="M 410 730 
+             L 485 580 
+             C 520 500, 580 450, 680 435 
+             C 750 425, 800 425, 840 435 
+             C 850 438, 848 452, 835 455 
+             C 760 470, 700 500, 640 550 
+             C 580 600, 530 660, 505 730 
+             Z" 
+          fill="url(#brandGradient)" />
   </g>
 </svg>
