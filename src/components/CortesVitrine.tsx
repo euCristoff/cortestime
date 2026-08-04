@@ -146,8 +146,11 @@ export default function CortesVitrine({
   const [horarios, setHorarios] = useState(merchant.vitrineHorarios || 'Segunda a Sábado: 09:00 às 19:00');
   const [localizacao, setLocalizacao] = useState(merchant.vitrineLocalizacao || 'Av. Principal, 123 - Centro');
   const [whatsapp, setWhatsapp] = useState(merchant.vitrineWhatsApp || merchant.whatsapp || '');
-  const [permitirWhatsApp, setPermitirWhatsApp] = useState<boolean>(merchant.vitrinePermitirAgendamentoWhatsApp ?? false);
+  const [permitirWhatsApp, setPermitirWhatsApp] = useState<boolean>(merchant.vitrinePermitirAgendamentoWhatsApp ?? true);
   const [showSiteBookingModal, setShowSiteBookingModal] = useState<boolean>(false);
+  const [showClientAreaModal, setShowClientAreaModal] = useState<boolean>(false);
+  const [clientPhone, setClientPhone] = useState<string>('');
+  const [clientPass, setClientPass] = useState<string>('');
   const [instagram, setInstagram] = useState(merchant.vitrineInstagram || '@cortestime_barber');
   const [linkBio, setLinkBio] = useState(merchant.vitrineLinkBio || 'instagram.com/cortestime_barber');
   const [logoText, setLogoText] = useState(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
@@ -368,12 +371,15 @@ export default function CortesVitrine({
 
         <div className="w-full max-w-md bg-white sm:rounded-[40px] sm:shadow-2xl sm:border border-gray-100 flex flex-col min-h-screen sm:min-h-0 overflow-hidden relative">
           
-          {/* Top banner */}
-          <div className="h-32 w-full bg-[#2563eb] relative overflow-hidden shrink-0 flex items-center justify-center">
+          {/* Cover banner */}
+          <div className="h-44 w-full relative overflow-hidden shrink-0">
+            <img src={capa} alt="Capa" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+            
             {onBack && (
               <button 
                 onClick={onBack}
-                className="absolute top-4 left-4 bg-white/20 backdrop-blur-md hover:bg-white/30 text-xs font-black text-white py-2 px-3.5 rounded-full transition-all flex items-center gap-1 cursor-pointer border border-white/20"
+                className="absolute top-4 left-4 bg-black/40 backdrop-blur-md hover:bg-black/60 text-xs font-black text-white py-2 px-3.5 rounded-full transition-all flex items-center gap-1 cursor-pointer border border-white/10"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Voltar</span>
@@ -382,61 +388,28 @@ export default function CortesVitrine({
           </div>
 
           {/* Inner container */}
-          <div className="p-6 pt-0 flex-1 flex flex-col text-left">
+          <div className="p-6 pt-4 flex-1 flex flex-col text-left">
             
-            {/* Profile Info / Hero Header */}
-            <div className="text-center pb-6 border-b border-gray-100 relative z-10">
-              <div className="w-24 h-24 rounded-full bg-white text-[#2563eb] border-4 border-white flex items-center justify-center font-black text-2xl mx-auto shadow-md -mt-12 mb-4 overflow-hidden relative">
+            {/* Profile Info */}
+            <div className="text-center pb-6 border-b border-gray-100 -mt-14 relative z-10">
+              <div className="w-20 h-20 rounded-full bg-[#051b42] text-[#bffd32] border-4 border-white flex items-center justify-center font-sans font-black text-2xl mx-auto shadow-md mb-3 overflow-hidden">
                 {logoImage ? (
                   <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[#2563eb] font-extrabold">{logoText.charAt(0).toUpperCase()}</span>
+                  logoText.charAt(0).toUpperCase()
                 )}
               </div>
-
-              <h1 className="text-2xl sm:text-3xl font-black text-[#0f172a] tracking-tight">
-                Agende seu
-              </h1>
-              <div className="text-2xl sm:text-3xl font-black text-[#0f172a] tracking-tight flex items-center justify-center gap-2 mt-0.5">
-                <span>horário</span>
-                <span className="inline-flex items-center gap-1.5 bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] text-sm sm:text-base font-extrabold px-3 py-0.5 rounded-2xl shadow-2xs">
-                  <span>online</span>
-                  <span className="w-2 h-2 rounded-full bg-[#2563eb]"></span>
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 font-medium mt-2 max-w-[260px] mx-auto leading-relaxed">
-                Escolha o serviço, dia e horário que deseja ser atendido
-              </p>
-
-              <div className="mt-5 space-y-2.5 max-w-xs mx-auto">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    if (onBookOnline) {
-                      onBookOnline();
-                    } else {
-                      setShowSiteBookingModal(true);
-                    }
-                  }}
-                  className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-[0.99] text-white font-extrabold py-3.5 px-6 rounded-full text-base tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
-                >
-                  <span>Agendar</span>
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => {
-                    if (onBookOnline) {
-                      onBookOnline();
-                    } else {
-                      setShowSiteBookingModal(true);
-                    }
-                  }}
-                  className="text-xs font-bold text-[#0f172a] hover:text-[#2563eb] transition-colors py-1 cursor-pointer block mx-auto"
-                >
-                  Área do Cliente
-                </button>
-              </div>
+              <h2 className="font-sans font-extrabold text-xl tracking-tight text-[#051b42]">
+                {logoText}
+              </h2>
+              {slogan && (
+                <p className="text-xs text-gray-500 italic mt-1 font-medium max-w-[280px] mx-auto leading-relaxed">
+                  "{slogan}"
+                </p>
+              )}
+              <span className="text-[10px] text-brand-blue font-bold uppercase tracking-widest mt-3.5 bg-brand-blue/5 inline-block px-3 py-1 rounded-full">
+                Vitrine Digital Oficial ✂️
+              </span>
             </div>
 
             {/* Operational details */}
@@ -651,32 +624,66 @@ export default function CortesVitrine({
               )}
             </div>
 
-            {/* Contact shortcuts */}
-            <div className="py-6 space-y-3">
-              <button 
-                type="button"
-                onClick={() => {
-                  if (onBookOnline) {
-                    onBookOnline();
-                  } else {
-                    setShowSiteBookingModal(true);
-                  }
-                }}
-                className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-4 rounded-full text-base tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
-              >
-                <span>Agendar</span>
-              </button>
+            {/* Hero Booking Card (Design matching Image 1) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100 text-center space-y-5 my-6">
+              <div className="space-y-1">
+                <h3 className="text-3xl sm:text-4xl font-light tracking-tight text-gray-900 leading-tight">
+                  Agende seu
+                </h3>
+                <div className="flex items-center justify-center gap-2.5 flex-nowrap">
+                  <span className="text-3xl sm:text-4xl font-light tracking-tight text-gray-900">
+                    horário
+                  </span>
+                  <div className="relative inline-flex items-center bg-[#edf3ff] border border-blue-100/80 text-black font-extrabold text-xl sm:text-2xl px-4 py-1 rounded-2xl shadow-2xs transform -rotate-1 shrink-0">
+                    online
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#2563eb] rounded-full ring-2 ring-white" />
+                  </div>
+                </div>
+              </div>
 
-              {permitirWhatsApp && whatsapp && (
-                <a 
-                  href={formattedWhatsAppUrl} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="w-full bg-[#10b981] text-white font-extrabold py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#0d9f6e] transition-colors"
+              <p className="text-xs sm:text-sm text-gray-400 font-normal max-w-xs mx-auto leading-relaxed">
+                Escolha o serviço, dia e horário que deseja ser atendido
+              </p>
+
+              <div className="pt-2 space-y-3">
+                {/* Main AGENDAR button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onBookOnline) {
+                      onBookOnline();
+                    } else {
+                      setShowSiteBookingModal(true);
+                    }
+                  }}
+                  className="w-full max-w-xs mx-auto bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 text-white font-medium text-base py-3.5 px-8 rounded-full transition-all shadow-md shadow-blue-500/20 cursor-pointer block"
                 >
-                  <MessageSquare className="w-4 h-4 fill-current" />
-                  <span>Agendar via WhatsApp</span>
-                </a>
+                  Agendar
+                </button>
+
+                {/* Area do Cliente link */}
+                <button
+                  type="button"
+                  onClick={() => setShowClientAreaModal(true)}
+                  className="text-sm font-semibold text-gray-800 hover:text-blue-600 transition-colors py-1 cursor-pointer block mx-auto"
+                >
+                  Área do Cliente
+                </button>
+              </div>
+
+              {/* Bottom WhatsApp icon */}
+              {permitirWhatsApp && whatsapp && (
+                <div className="pt-2 flex justify-center">
+                  <a
+                    href={formattedWhatsAppUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-emerald-600 transition-colors"
+                    title="Agendar via WhatsApp"
+                  >
+                    <MessageSquare className="w-5 h-5 fill-current" />
+                  </a>
+                </div>
               )}
             </div>
 
@@ -1344,48 +1351,37 @@ export default function CortesVitrine({
                 <div className="flex-1 bg-[#faf9f6] rounded-[30px] overflow-y-auto text-brand-dark flex flex-col p-4 pt-4 relative scrollbar-none">
                   
                   {/* Cover banner */}
-                  <div className="h-20 w-full bg-[#2563eb] rounded-t-[20px] -mt-4 -mx-4 shrink-0 relative" />
+                  <div className="h-24 w-full relative rounded-t-[20px] -mt-4 -mx-4 overflow-hidden shrink-0">
+                    <img src={capa} alt="Capa" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  </div>
 
-                  {/* Profile Info / Hero Header */}
-                  <div className="text-center pb-5 border-b border-gray-200 relative z-10">
-                    <div className="w-16 h-16 rounded-full bg-white text-[#2563eb] border-2 border-white flex items-center justify-center font-sans font-black text-lg mx-auto shadow-md -mt-8 mb-2.5 overflow-hidden relative">
+                  {/* Profile Info */}
+                  <div className="text-center pb-6 border-b border-gray-200 -mt-8 relative z-10">
+                    <div className="w-16 h-16 rounded-full bg-[#051b42] text-[#bffd32] border-2 border-[#faf9f6] flex items-center justify-center font-sans font-black text-xl mx-auto shadow-md mb-2 overflow-hidden">
                       {logoImage ? (
                         <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
                       ) : (
-                        <span className="text-[#2563eb] font-extrabold">{logoText.charAt(0).toUpperCase()}</span>
+                        logoText.charAt(0).toUpperCase()
                       )}
                     </div>
-                    <h2 className="font-sans font-extrabold text-lg tracking-tight text-[#0f172a]">
-                      Agende seu
+                    <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42] flex items-center justify-center gap-1.5 flex-wrap">
+                      <span>{logoText}</span>
+                      {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
+                        <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                          <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+                          <span>Barbearia Indicada</span>
+                        </span>
+                      )}
                     </h2>
-                    <div className="font-sans font-extrabold text-lg tracking-tight text-[#0f172a] flex items-center justify-center gap-1.5 mt-0.5">
-                      <span>horário</span>
-                      <span className="inline-flex items-center gap-1 bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] text-xs font-bold px-2 py-0.5 rounded-full">
-                        <span>online</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#2563eb]"></span>
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 font-medium mt-1.5 max-w-[200px] mx-auto leading-tight">
-                      Escolha o serviço, dia e horário que deseja ser atendido
+                    {slogan && (
+                      <p className="text-[11px] text-gray-500 italic mt-1 font-medium max-w-[220px] mx-auto leading-tight">
+                        "{slogan}"
+                      </p>
+                    )}
+                    <p className="text-[9px] text-brand-blue font-bold uppercase tracking-widest mt-2 bg-brand-blue/5 inline-block px-2.5 py-0.5 rounded-full">
+                      Vitrine Digital ✂️
                     </p>
-
-                    <div className="mt-3.5 space-y-1.5 max-w-[200px] mx-auto">
-                      <button 
-                        type="button"
-                        onClick={() => setShowSiteBookingModal(true)}
-                        className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-2.5 px-4 rounded-full text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-                      >
-                        <span>Agendar</span>
-                      </button>
-
-                      <button 
-                        type="button"
-                        onClick={() => setShowSiteBookingModal(true)}
-                        className="text-[10px] font-bold text-[#0f172a] hover:text-[#2563eb] transition-colors py-0.5 cursor-pointer block mx-auto"
-                      >
-                        Área do Cliente
-                      </button>
-                    </div>
                   </div>
 
                   {/* Operational details */}
@@ -1476,32 +1472,66 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
-                  {/* Contact shortcuts */}
-                  <div className="py-4 space-y-2">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        if (onBookOnline) {
-                          onBookOnline();
-                        } else {
-                          setShowSiteBookingModal(true);
-                        }
-                      }}
-                      className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-3.5 rounded-full text-xs tracking-wide flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-                    >
-                      <span>Agendar</span>
-                    </button>
+                  {/* Hero Booking Card (Design matching Image 1) */}
+                  <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 text-center space-y-3.5 my-4">
+                    <div className="space-y-0.5">
+                      <h3 className="text-2xl font-light tracking-tight text-gray-900 leading-tight">
+                        Agende seu
+                      </h3>
+                      <div className="flex items-center justify-center gap-2 flex-nowrap">
+                        <span className="text-2xl font-light tracking-tight text-gray-900">
+                          horário
+                        </span>
+                        <div className="relative inline-flex items-center bg-[#edf3ff] border border-blue-100/80 text-black font-extrabold text-base px-3 py-0.5 rounded-xl shadow-2xs transform -rotate-1 shrink-0">
+                          online
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#2563eb] rounded-full ring-2 ring-white" />
+                        </div>
+                      </div>
+                    </div>
 
-                    {permitirWhatsApp && whatsapp && (
-                      <a 
-                        href={formattedWhatsAppUrl} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="w-full bg-[#10b981] text-white font-extrabold py-2.5 rounded-full text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-[#0d9f6e] transition-colors"
+                    <p className="text-[11px] text-gray-400 font-normal max-w-[210px] mx-auto leading-relaxed">
+                      Escolha o serviço, dia e horário que deseja ser atendido
+                    </p>
+
+                    <div className="pt-1 space-y-2">
+                      {/* Main AGENDAR button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onBookOnline) {
+                            onBookOnline();
+                          } else {
+                            setShowSiteBookingModal(true);
+                          }
+                        }}
+                        className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 text-white font-medium text-sm py-3 px-6 rounded-full transition-all shadow-md shadow-blue-500/20 cursor-pointer block"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 fill-current" />
-                        <span>Agendar via WhatsApp</span>
-                      </a>
+                        Agendar
+                      </button>
+
+                      {/* Area do Cliente link */}
+                      <button
+                        type="button"
+                        onClick={() => setShowClientAreaModal(true)}
+                        className="text-xs font-semibold text-gray-800 hover:text-blue-600 transition-colors py-0.5 cursor-pointer block mx-auto"
+                      >
+                        Área do Cliente
+                      </button>
+                    </div>
+
+                    {/* WhatsApp icon */}
+                    {permitirWhatsApp && whatsapp && (
+                      <div className="pt-0.5 flex justify-center">
+                        <a
+                          href={formattedWhatsAppUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-400 hover:text-emerald-600 transition-colors"
+                          title="Agendar via WhatsApp"
+                        >
+                          <MessageSquare className="w-4 h-4 fill-current" />
+                        </a>
+                      </div>
                     )}
                   </div>
 
@@ -1921,6 +1951,105 @@ export default function CortesVitrine({
                 }}
                 onClose={() => setShowSiteBookingModal(false)}
               />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CLIENT AREA LOGIN MODAL (Design matching Image 2) */}
+      <AnimatePresence>
+        {showClientAreaModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl relative"
+            >
+              {/* Top Blue Header Banner matching Image 2 */}
+              <div className="h-28 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 relative flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowClientAreaModal(false)}
+                  className="absolute top-3 right-3 text-white/80 hover:text-white bg-black/20 hover:bg-black/40 p-1.5 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                
+                {/* Circle Logo Container matching Image 2 */}
+                <div className="absolute -bottom-8 w-20 h-20 rounded-full bg-white border-4 border-white shadow-md flex items-center justify-center text-blue-600 font-extrabold text-xs text-center p-1 overflow-hidden">
+                  {logoImage ? (
+                    <img src={logoImage} alt={logoText} className="w-full h-full object-cover rounded-full" />
+                  ) : (
+                    <span className="line-clamp-2 leading-tight">{logoText}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="pt-12 pb-8 px-6 text-center space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">
+                  Faça o login
+                </h3>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!clientPhone.trim()) {
+                      alert('Por favor, informe o telefone cadastrado.');
+                      return;
+                    }
+                    alert(`Entrando na Área do Cliente para o telefone ${clientPhone}...`);
+                    setShowClientAreaModal(false);
+                    // Open booking or client appointment list
+                    if (onBookOnline) {
+                      onBookOnline();
+                    } else {
+                      setShowSiteBookingModal(true);
+                    }
+                  }}
+                  className="space-y-3 text-left"
+                >
+                  <div>
+                    <input
+                      type="tel"
+                      value={clientPhone}
+                      onChange={(e) => setClientPhone(e.target.value)}
+                      placeholder="Telefone cadastrado (com DDD)"
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="password"
+                      value={clientPass}
+                      onChange={(e) => setClientPass(e.target.value)}
+                      placeholder="Senha"
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                    />
+                  </div>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => alert('Para redefinir sua senha, entre em contato diretamente com a barbearia via WhatsApp.')}
+                      className="text-xs text-gray-500 hover:text-blue-600 font-medium cursor-pointer"
+                    >
+                      Esqueceu a senha?
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm py-3.5 rounded-full transition-colors shadow-md shadow-blue-500/20 cursor-pointer mt-2"
+                  >
+                    Logar
+                  </button>
+                </form>
+              </div>
             </motion.div>
           </div>
         )}
