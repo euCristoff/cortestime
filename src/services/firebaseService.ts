@@ -480,6 +480,15 @@ export const firebaseService = {
     );
   },
 
+  async deleteBarber(barberId: string): Promise<void> {
+    const docRef = doc(db, COLL_BARBERS, barberId);
+    await withTimeout(
+      deleteDoc(docRef),
+      25000,
+      "Tempo esgotado ao excluir profissional."
+    );
+  },
+
   async getBarbers(ownerId: string): Promise<Barber[]> {
     try {
       const q = query(collection(db, COLL_BARBERS), where("ownerId", "==", ownerId));

@@ -70,6 +70,8 @@ interface MerchantDashboardProps {
   appointments: Appointment[];
   onAddService: (service: Omit<Service, 'id'>) => void;
   onAddBarber: (barber: Omit<Barber, 'id' | 'rating'>) => void;
+  onUpdateBarber?: (barber: Barber) => void;
+  onDeleteBarber?: (barberId: string) => void;
   onAddClient: (client: Omit<Client, 'id'>) => void;
   onAddAppointment: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
   onUpdateAppointmentStatus: (id: string, status: Appointment['status']) => void;
@@ -89,6 +91,8 @@ export default function MerchantDashboard({
   appointments,
   onAddService,
   onAddBarber,
+  onUpdateBarber,
+  onDeleteBarber,
   onAddClient,
   onAddAppointment,
   onUpdateAppointmentStatus,
@@ -224,9 +228,54 @@ export default function MerchantDashboard({
   const [newServiceDuration, setNewServiceDuration] = useState('30');
   const [newServiceCommission, setNewServiceCommission] = useState('50');
 
-  // Barber form
+  // Barber form & Edit Barber state
   const [newBarberName, setNewBarberName] = useState('');
   const [newBarberSpecialty, setNewBarberSpecialty] = useState('');
+  const [newBarberAvatar, setNewBarberAvatar] = useState('');
+
+  const [editingBarber, setEditingBarber] = useState<Barber | null>(null);
+  const [editBarberName, setEditBarberName] = useState('');
+  const [editBarberSpecialty, setEditBarberSpecialty] = useState('');
+  const [editBarberAvatar, setEditBarberAvatar] = useState('');
+  const [isEditBarberModalOpen, setIsEditBarberModalOpen] = useState(false);
+
+  // Helper for compressing barber photo
+  const compressBarberPhoto = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onerror = () => resolve('');
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => resolve((e.target?.result as string) || '');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 400;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          } else {
+            resolve((e.target?.result as string) || '');
+          }
+        };
+        img.src = (e.target?.result as string) || '';
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   // Client form
   const [newClientName, setNewClientName] = useState('');
@@ -506,12 +555,47 @@ export default function MerchantDashboard({
     if (!newBarberName) return;
     onAddBarber({
       name: newBarberName,
-      avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 500000)}?w=100&auto=format&fit=crop&q=60`,
+      avatar: newBarberAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60',
       specialty: newBarberSpecialty || 'Barbeiro Geral'
     });
     setNewBarberName('');
     setNewBarberSpecialty('');
+    setNewBarberAvatar('');
     setIsBarberModalOpen(false);
+  };
+
+  const handleOpenEditBarber = (b: Barber) => {
+    setEditingBarber(b);
+    setEditBarberName(b.name);
+    setEditBarberSpecialty(b.specialty || '');
+    setEditBarberAvatar(b.avatar || '');
+    setIsEditBarberModalOpen(true);
+  };
+
+  const handleSaveEditBarber = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBarber || !editBarberName) return;
+    const updatedBarber: Barber = {
+      ...editingBarber,
+      name: editBarberName,
+      specialty: editBarberSpecialty || 'Barbeiro Geral',
+      avatar: editBarberAvatar || editingBarber.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60'
+    };
+    if (onUpdateBarber) {
+      onUpdateBarber(updatedBarber);
+    }
+    setIsEditBarberModalOpen(false);
+    setEditingBarber(null);
+  };
+
+  const handleDeleteBarberClick = (barberId: string) => {
+    if (confirm('Tem certeza que deseja excluir este profissional?')) {
+      if (onDeleteBarber) {
+        onDeleteBarber(barberId);
+      }
+      setIsEditBarberModalOpen(false);
+      setEditingBarber(null);
+    }
   };
 
   const handleCreateClient = (e: React.FormEvent) => {
@@ -2316,15 +2400,23 @@ export default function MerchantDashboard({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {barbers.map((b) => (
-                <div key={b.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3 flex flex-col justify-between">
+                <div key={b.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3 flex flex-col justify-between relative group">
                   <div className="flex items-center gap-3">
-                    <img 
-                      src={b.avatar} 
-                      alt={b.name} 
-                      referrerPolicy="no-referrer" 
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-brand-blue/20 shadow-sm"
-                    />
-                    <div className="min-w-0 text-left">
+                    <div className="w-14 h-14 rounded-2xl bg-gray-100 border-2 border-brand-blue/20 shadow-sm overflow-hidden shrink-0 relative flex items-center justify-center">
+                      {b.avatar ? (
+                        <img 
+                          src={b.avatar} 
+                          alt={b.name} 
+                          referrerPolicy="no-referrer" 
+                          className="w-full h-full object-cover relative z-10"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : null}
+                      <User className="w-6 h-6 text-gray-400 absolute" />
+                    </div>
+                    <div className="min-w-0 text-left flex-1">
                       <h4 className="font-extrabold text-sm text-brand-dark truncate">{b.name}</h4>
                       <p className="text-xs text-gray-400 mt-0.5 truncate">{b.specialty}</p>
                       <span className="inline-flex items-center gap-1 text-[11px] text-amber-500 font-bold mt-1">
@@ -2333,8 +2425,15 @@ export default function MerchantDashboard({
                     </div>
                   </div>
                   <div className="pt-3 border-t border-gray-100 flex justify-between items-center text-xs">
-                    <span className="text-gray-400">Comissão Padrão</span>
-                    <span className="font-extrabold text-brand-blue">100% Repasse</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditBarber(b)}
+                      className="text-xs text-brand-blue hover:text-brand-blue-light font-extrabold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Editar Foto / Dados</span>
+                    </button>
+                    <span className="font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px]">Ativo</span>
                   </div>
                 </div>
               ))}
@@ -3471,6 +3570,48 @@ export default function MerchantDashboard({
               <button onClick={() => setIsBarberModalOpen(false)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
               <h3 className="font-display font-bold text-lg text-brand-dark">Cadastrar Novo Profissional</h3>
               <form onSubmit={handleCreateBarber} className="space-y-4 text-xs">
+                
+                {/* Photo Upload Section */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-gray-600 block">Foto do Barbeiro / Profissional</label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 border-2 border-brand-blue/20 overflow-hidden flex items-center justify-center shrink-0 relative shadow-sm">
+                      {newBarberAvatar ? (
+                        <img src={newBarberAvatar} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <label className="cursor-pointer bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue font-extrabold px-3 py-2 rounded-xl inline-flex items-center gap-1.5 text-xs transition-colors">
+                        <Camera className="w-4 h-4" />
+                        <span>{newBarberAvatar ? 'Alterar Foto' : 'Carregar Foto'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const compressed = await compressBarberPhoto(file);
+                              if (compressed) setNewBarberAvatar(compressed);
+                            }
+                          }} 
+                        />
+                      </label>
+                      {newBarberAvatar && (
+                        <button
+                          type="button"
+                          onClick={() => setNewBarberAvatar('')}
+                          className="text-red-500 hover:text-red-700 text-[11px] block font-medium cursor-pointer"
+                        >
+                          Remover foto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <label className="font-bold text-gray-600">Nome do Barbeiro</label>
                   <input type="text" required placeholder="Ex: Felipe Silva" value={newBarberName} onChange={e => setNewBarberName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
@@ -3479,7 +3620,88 @@ export default function MerchantDashboard({
                   <label className="font-bold text-gray-600">Especialidade</label>
                   <input type="text" required placeholder="Ex: Especialista em Degradê" value={newBarberSpecialty} onChange={e => setNewBarberSpecialty(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
                 </div>
-                <button type="submit" className="w-full bg-brand-blue text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs">Salvar Profissional</button>
+                <button type="submit" className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs transition-colors cursor-pointer">Salvar Profissional</button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: EDIT BARBER */}
+      <AnimatePresence>
+        {isEditBarberModalOpen && editingBarber && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 text-left space-y-4 shadow-2xl relative"
+            >
+              <button onClick={() => { setIsEditBarberModalOpen(false); setEditingBarber(null); }} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
+              <h3 className="font-display font-bold text-lg text-brand-dark">Editar Profissional</h3>
+              <form onSubmit={handleSaveEditBarber} className="space-y-4 text-xs">
+                
+                {/* Photo Upload Section */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-gray-600 block">Foto do Barbeiro / Profissional</label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 border-2 border-brand-blue/20 overflow-hidden flex items-center justify-center shrink-0 relative shadow-sm">
+                      {editBarberAvatar ? (
+                        <img src={editBarberAvatar} alt="Foto barbeiro" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <label className="cursor-pointer bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue font-extrabold px-3 py-2 rounded-xl inline-flex items-center gap-1.5 text-xs transition-colors">
+                        <Camera className="w-4 h-4" />
+                        <span>{editBarberAvatar ? 'Alterar Foto' : 'Carregar Foto'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const compressed = await compressBarberPhoto(file);
+                              if (compressed) setEditBarberAvatar(compressed);
+                            }
+                          }} 
+                        />
+                      </label>
+                      {editBarberAvatar && (
+                        <button
+                          type="button"
+                          onClick={() => setEditBarberAvatar('')}
+                          className="text-red-500 hover:text-red-700 text-[11px] block font-medium cursor-pointer"
+                        >
+                          Remover foto
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-600">Nome do Barbeiro</label>
+                  <input type="text" required placeholder="Ex: Felipe Silva" value={editBarberName} onChange={e => setEditBarberName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-600">Especialidade</label>
+                  <input type="text" required placeholder="Ex: Especialista em Degradê" value={editBarberSpecialty} onChange={e => setEditBarberSpecialty(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button type="submit" className="flex-1 bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs transition-colors cursor-pointer">Salvar Alterações</button>
+                  <button 
+                    type="button" 
+                    onClick={() => handleDeleteBarberClick(editingBarber.id)} 
+                    className="p-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+                    title="Excluir Barbeiro"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </form>
             </motion.div>
           </div>

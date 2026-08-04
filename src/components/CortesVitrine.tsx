@@ -1440,6 +1440,39 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
+                  {/* Team / Barbers listing */}
+                  {barbers && barbers.length > 0 && (
+                    <div className="py-5 border-b border-gray-100 text-left">
+                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3.5 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-brand-blue" />
+                        <span>Nossa Equipe de Profissionais</span>
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {barbers.map((b) => (
+                          <div key={b.id} className="bg-gray-50/70 p-2.5 rounded-2xl border border-gray-100/80 flex items-center gap-2.5">
+                            <div className="w-10 h-10 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-white shadow-xs relative">
+                              {b.avatar ? (
+                                <img 
+                                  src={b.avatar} 
+                                  alt={b.name} 
+                                  className="w-full h-full object-cover relative z-10" 
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              ) : null}
+                              <User className="w-5 h-5 text-gray-400 absolute inset-0 m-auto" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-brand-dark truncate">{b.name}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{b.specialty}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Products Showcase */}
                   <div className="py-5 border-b border-gray-100 text-left">
                     <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3.5">

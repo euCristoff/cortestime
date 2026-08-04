@@ -543,6 +543,20 @@ export default function App() {
     }
   };
 
+  const handleUpdateBarber = async (updatedBarber: Barber) => {
+    setBarbers(prev => prev.map(b => b.id === updatedBarber.id ? updatedBarber : b));
+    if (firebaseConnected && currentMerchant) {
+      await firebaseService.saveBarber(updatedBarber, currentMerchant.uid);
+    }
+  };
+
+  const handleDeleteBarber = async (barberId: string) => {
+    setBarbers(prev => prev.filter(b => b.id !== barberId));
+    if (firebaseConnected && currentMerchant) {
+      await firebaseService.deleteBarber(barberId);
+    }
+  };
+
   const handleAddClient = async (newClient: Omit<Client, 'id'>) => {
     const id = `cli-${Date.now()}`;
     const item: Client = { id, ...newClient };
@@ -803,6 +817,7 @@ export default function App() {
           <CortesVitrine 
             merchant={publicVitrineMerchant}
             services={publicVitrineServices}
+            barbers={barbers}
             isOnlyView={true}
             isPublicAccess={true}
             onBack={() => {
@@ -833,6 +848,7 @@ export default function App() {
               <CortesVitrine 
                 merchant={currentMerchant}
                 services={services}
+                barbers={barbers}
                 isOnlyView={true}
                 onLogout={handleLogout}
                 onUpdateMerchant={(updated) => {
@@ -850,6 +866,8 @@ export default function App() {
                 appointments={appointments}
                 onAddService={handleAddService}
                 onAddBarber={handleAddBarber}
+                onUpdateBarber={handleUpdateBarber}
+                onDeleteBarber={handleDeleteBarber}
                 onAddClient={handleAddClient}
                 onAddAppointment={handleAddAppointment}
                 onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
