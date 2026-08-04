@@ -84,6 +84,7 @@ export interface MerchantUser {
   vitrineLocalizacao?: string;
   vitrineEndereco?: string | { cep?: string; rua?: string; numero?: string; bairro?: string; cidade?: string; estado?: string };
   vitrineWhatsApp?: string;
+  vitrinePermitirAgendamentoWhatsApp?: boolean;
   vitrineInstagram?: string;
   vitrineFacebook?: string;
   vitrineLinkBio?: string;

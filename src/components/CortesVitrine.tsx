@@ -28,15 +28,18 @@ import {
   RotateCcw,
   Lock,
   ShieldCheck,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
-import { MerchantUser, Service } from '../types';
+import { MerchantUser, Service, Barber } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
+import ClientBooking from './ClientBooking';
 
 interface CortesVitrineProps {
   merchant: MerchantUser;
   services: Service[];
+  barbers?: Barber[];
   onBack?: () => void;
   onUpdateMerchant?: (updated: MerchantUser) => void;
   isOnlyView?: boolean; // if true, they are a 'vitrine' user and this is their main dashboard
@@ -128,7 +131,8 @@ function compressDataUrl(dataUrl: string, maxWidth = 800, maxHeight = 800, quali
 
 export default function CortesVitrine({ 
   merchant, 
-  services, 
+  services,
+  barbers = [], 
   onBack, 
   onUpdateMerchant,
   isOnlyView = false,
@@ -142,6 +146,8 @@ export default function CortesVitrine({
   const [horarios, setHorarios] = useState(merchant.vitrineHorarios || 'Segunda a Sábado: 09:00 às 19:00');
   const [localizacao, setLocalizacao] = useState(merchant.vitrineLocalizacao || 'Av. Principal, 123 - Centro');
   const [whatsapp, setWhatsapp] = useState(merchant.vitrineWhatsApp || merchant.whatsapp || '');
+  const [permitirWhatsApp, setPermitirWhatsApp] = useState<boolean>(merchant.vitrinePermitirAgendamentoWhatsApp ?? false);
+  const [showSiteBookingModal, setShowSiteBookingModal] = useState<boolean>(false);
   const [instagram, setInstagram] = useState(merchant.vitrineInstagram || '@cortestime_barber');
   const [linkBio, setLinkBio] = useState(merchant.vitrineLinkBio || 'instagram.com/cortestime_barber');
   const [logoText, setLogoText] = useState(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
@@ -259,6 +265,7 @@ export default function CortesVitrine({
         vitrineHorarios: horarios || '',
         vitrineLocalizacao: localizacao || '',
         vitrineWhatsApp: whatsapp || '',
+        vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
         vitrineInstagram: instagram || '',
         vitrineLinkBio: linkBio || '',
         vitrineLogo: logoText || '',
@@ -361,15 +368,12 @@ export default function CortesVitrine({
 
         <div className="w-full max-w-md bg-white sm:rounded-[40px] sm:shadow-2xl sm:border border-gray-100 flex flex-col min-h-screen sm:min-h-0 overflow-hidden relative">
           
-          {/* Cover banner */}
-          <div className="h-44 w-full relative overflow-hidden shrink-0">
-            <img src={capa} alt="Capa" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-            
+          {/* Top banner */}
+          <div className="h-32 w-full bg-[#2563eb] relative overflow-hidden shrink-0 flex items-center justify-center">
             {onBack && (
               <button 
                 onClick={onBack}
-                className="absolute top-4 left-4 bg-black/40 backdrop-blur-md hover:bg-black/60 text-xs font-black text-white py-2 px-3.5 rounded-full transition-all flex items-center gap-1 cursor-pointer border border-white/10"
+                className="absolute top-4 left-4 bg-white/20 backdrop-blur-md hover:bg-white/30 text-xs font-black text-white py-2 px-3.5 rounded-full transition-all flex items-center gap-1 cursor-pointer border border-white/20"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Voltar</span>
@@ -378,28 +382,61 @@ export default function CortesVitrine({
           </div>
 
           {/* Inner container */}
-          <div className="p-6 pt-4 flex-1 flex flex-col text-left">
+          <div className="p-6 pt-0 flex-1 flex flex-col text-left">
             
-            {/* Profile Info */}
-            <div className="text-center pb-6 border-b border-gray-100 -mt-14 relative z-10">
-              <div className="w-20 h-20 rounded-full bg-[#051b42] text-[#bffd32] border-4 border-white flex items-center justify-center font-sans font-black text-2xl mx-auto shadow-md mb-3 overflow-hidden">
+            {/* Profile Info / Hero Header */}
+            <div className="text-center pb-6 border-b border-gray-100 relative z-10">
+              <div className="w-24 h-24 rounded-full bg-white text-[#2563eb] border-4 border-white flex items-center justify-center font-black text-2xl mx-auto shadow-md -mt-12 mb-4 overflow-hidden relative">
                 {logoImage ? (
                   <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
                 ) : (
-                  logoText.charAt(0).toUpperCase()
+                  <span className="text-[#2563eb] font-extrabold">{logoText.charAt(0).toUpperCase()}</span>
                 )}
               </div>
-              <h2 className="font-sans font-extrabold text-xl tracking-tight text-[#051b42]">
-                {logoText}
-              </h2>
-              {slogan && (
-                <p className="text-xs text-gray-500 italic mt-1 font-medium max-w-[280px] mx-auto leading-relaxed">
-                  "{slogan}"
-                </p>
-              )}
-              <span className="text-[10px] text-brand-blue font-bold uppercase tracking-widest mt-3.5 bg-brand-blue/5 inline-block px-3 py-1 rounded-full">
-                Vitrine Digital Oficial ✂️
-              </span>
+
+              <h1 className="text-2xl sm:text-3xl font-black text-[#0f172a] tracking-tight">
+                Agende seu
+              </h1>
+              <div className="text-2xl sm:text-3xl font-black text-[#0f172a] tracking-tight flex items-center justify-center gap-2 mt-0.5">
+                <span>horário</span>
+                <span className="inline-flex items-center gap-1.5 bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] text-sm sm:text-base font-extrabold px-3 py-0.5 rounded-2xl shadow-2xs">
+                  <span>online</span>
+                  <span className="w-2 h-2 rounded-full bg-[#2563eb]"></span>
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 font-medium mt-2 max-w-[260px] mx-auto leading-relaxed">
+                Escolha o serviço, dia e horário que deseja ser atendido
+              </p>
+
+              <div className="mt-5 space-y-2.5 max-w-xs mx-auto">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (onBookOnline) {
+                      onBookOnline();
+                    } else {
+                      setShowSiteBookingModal(true);
+                    }
+                  }}
+                  className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-[0.99] text-white font-extrabold py-3.5 px-6 rounded-full text-base tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
+                >
+                  <span>Agendar</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (onBookOnline) {
+                      onBookOnline();
+                    } else {
+                      setShowSiteBookingModal(true);
+                    }
+                  }}
+                  className="text-xs font-bold text-[#0f172a] hover:text-[#2563eb] transition-colors py-1 cursor-pointer block mx-auto"
+                >
+                  Área do Cliente
+                </button>
+              </div>
             </div>
 
             {/* Operational details */}
@@ -431,11 +468,26 @@ export default function CortesVitrine({
                   <p className="text-xs text-gray-400">Nenhum serviço cadastrado.</p>
                 ) : (
                   services.map(s => (
-                    <div key={s.id} className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-brand-dark truncate pr-2">{s.name}</span>
+                    <div key={s.id} className="flex justify-between items-center text-xs p-2.5 rounded-2xl bg-gray-50/60 hover:bg-gray-100/60 transition-colors">
+                      <div className="min-w-0 pr-2">
+                        <span className="font-bold text-brand-dark block truncate">{s.name}</span>
+                        <span className="text-[10px] text-gray-400 font-medium">{s.durationMin} min</span>
+                      </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] text-gray-400">{s.durationMin}min</span>
-                        <span className="font-mono font-bold text-brand-blue bg-brand-blue/5 px-2.5 py-1 rounded-lg">R$ {s.price.toFixed(0)}</span>
+                        <span className="font-mono font-bold text-brand-blue bg-white px-2.5 py-1 rounded-xl border border-gray-100 shadow-2xs">R$ {s.price.toFixed(0)}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onBookOnline) {
+                              onBookOnline();
+                            } else {
+                              setShowSiteBookingModal(true);
+                            }
+                          }}
+                          className="bg-[#051b42] hover:bg-brand-blue text-white text-[10px] font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                        >
+                          Agendar
+                        </button>
                       </div>
                     </div>
                   ))
@@ -601,46 +653,31 @@ export default function CortesVitrine({
 
             {/* Contact shortcuts */}
             <div className="py-6 space-y-3">
-              {onBookOnline && (
-                <button 
-                  onClick={onBookOnline}
-                  className="w-full bg-[#051b42] text-white font-black py-4 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#072456] transition-colors cursor-pointer shadow-lg shadow-[#051b42]/10"
-                >
-                  <Sparkles className="w-4 h-4 text-brand-lime animate-pulse" />
-                  <span>Agendar Online (Cortestime)</span>
-                </button>
-              )}
-
-              <a 
-                href={formattedWhatsAppUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                className="w-full bg-[#10b981] text-white font-extrabold py-4 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#0d9f6e] transition-colors"
+              <button 
+                type="button"
+                onClick={() => {
+                  if (onBookOnline) {
+                    onBookOnline();
+                  } else {
+                    setShowSiteBookingModal(true);
+                  }
+                }}
+                className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-4 rounded-full text-base tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
               >
-                <MessageSquare className="w-4 h-4 fill-current" />
-                <span>Agendar via WhatsApp</span>
-              </a>
+                <span>Agendar</span>
+              </button>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              {permitirWhatsApp && whatsapp && (
                 <a 
-                  href={formattedInstagramUrl} 
+                  href={formattedWhatsAppUrl} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="bg-white text-brand-dark border border-gray-200 font-extrabold py-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
+                  className="w-full bg-[#10b981] text-white font-extrabold py-3.5 rounded-full text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#0d9f6e] transition-colors"
                 >
-                  <Instagram className="w-4 h-4" />
-                  <span>Instagram</span>
+                  <MessageSquare className="w-4 h-4 fill-current" />
+                  <span>Agendar via WhatsApp</span>
                 </a>
-                <a 
-                  href={bioLinkDisplay} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="bg-white text-brand-dark border border-gray-200 font-extrabold py-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Link da Bio</span>
-                </a>
-              </div>
+              )}
             </div>
 
             {/* Branding badge */}
@@ -1002,6 +1039,43 @@ export default function CortesVitrine({
                 </div>
               </div>
 
+              {/* OPÇÃO DE AGENDAMENTO WHATSAPP */}
+              <div className="bg-[#051b42] p-5 rounded-3xl border border-white/10 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-[#d4ff5e]" />
+                      <span>Modo de Agendamento da Vitrine</span>
+                    </h4>
+                    <p className="text-[11px] text-gray-300 mt-1">
+                      O <strong>agendamento no site é o padrão</strong> para o cliente preencher nome, telefone, serviço, barbeiro e horário diretamente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-white">Opção adicional: Permitir Agendamento no WhatsApp</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Se ativado, exibirá também o botão para o cliente agendar direto no seu WhatsApp.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPermitirWhatsApp(!permitirWhatsApp)}
+                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                      permitirWhatsApp ? 'bg-[#d4ff5e]' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        permitirWhatsApp ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Slogan da Barbearia</label>
@@ -1270,37 +1344,48 @@ export default function CortesVitrine({
                 <div className="flex-1 bg-[#faf9f6] rounded-[30px] overflow-y-auto text-brand-dark flex flex-col p-4 pt-4 relative scrollbar-none">
                   
                   {/* Cover banner */}
-                  <div className="h-24 w-full relative rounded-t-[20px] -mt-4 -mx-4 overflow-hidden shrink-0">
-                    <img src={capa} alt="Capa" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  </div>
+                  <div className="h-20 w-full bg-[#2563eb] rounded-t-[20px] -mt-4 -mx-4 shrink-0 relative" />
 
-                  {/* Profile Info */}
-                  <div className="text-center pb-6 border-b border-gray-200 -mt-8 relative z-10">
-                    <div className="w-16 h-16 rounded-full bg-[#051b42] text-[#bffd32] border-2 border-[#faf9f6] flex items-center justify-center font-sans font-black text-xl mx-auto shadow-md mb-2 overflow-hidden">
+                  {/* Profile Info / Hero Header */}
+                  <div className="text-center pb-5 border-b border-gray-200 relative z-10">
+                    <div className="w-16 h-16 rounded-full bg-white text-[#2563eb] border-2 border-white flex items-center justify-center font-sans font-black text-lg mx-auto shadow-md -mt-8 mb-2.5 overflow-hidden relative">
                       {logoImage ? (
                         <img src={logoImage} alt={logoText} className="w-full h-full object-cover" />
                       ) : (
-                        logoText.charAt(0).toUpperCase()
+                        <span className="text-[#2563eb] font-extrabold">{logoText.charAt(0).toUpperCase()}</span>
                       )}
                     </div>
-                    <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42] flex items-center justify-center gap-1.5 flex-wrap">
-                      <span>{logoText}</span>
-                      {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
-                        <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs">
-                          <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
-                          <span>Barbearia Indicada</span>
-                        </span>
-                      )}
+                    <h2 className="font-sans font-extrabold text-lg tracking-tight text-[#0f172a]">
+                      Agende seu
                     </h2>
-                    {slogan && (
-                      <p className="text-[11px] text-gray-500 italic mt-1 font-medium max-w-[220px] mx-auto leading-tight">
-                        "{slogan}"
-                      </p>
-                    )}
-                    <p className="text-[9px] text-brand-blue font-bold uppercase tracking-widest mt-2 bg-brand-blue/5 inline-block px-2.5 py-0.5 rounded-full">
-                      Vitrine Digital ✂️
+                    <div className="font-sans font-extrabold text-lg tracking-tight text-[#0f172a] flex items-center justify-center gap-1.5 mt-0.5">
+                      <span>horário</span>
+                      <span className="inline-flex items-center gap-1 bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] text-xs font-bold px-2 py-0.5 rounded-full">
+                        <span>online</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#2563eb]"></span>
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 font-medium mt-1.5 max-w-[200px] mx-auto leading-tight">
+                      Escolha o serviço, dia e horário que deseja ser atendido
                     </p>
+
+                    <div className="mt-3.5 space-y-1.5 max-w-[200px] mx-auto">
+                      <button 
+                        type="button"
+                        onClick={() => setShowSiteBookingModal(true)}
+                        className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-2.5 px-4 rounded-full text-xs tracking-wide flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                      >
+                        <span>Agendar</span>
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => setShowSiteBookingModal(true)}
+                        className="text-[10px] font-bold text-[#0f172a] hover:text-[#2563eb] transition-colors py-0.5 cursor-pointer block mx-auto"
+                      >
+                        Área do Cliente
+                      </button>
+                    </div>
                   </div>
 
                   {/* Operational details */}
@@ -1327,16 +1412,31 @@ export default function CortesVitrine({
                     <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-3.5">
                       Tabela de Serviços & Preços
                     </h4>
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {services.length === 0 ? (
                         <p className="text-xs text-gray-400">Nenhum serviço cadastrado.</p>
                       ) : (
                         services.map(s => (
-                          <div key={s.id} className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-brand-dark truncate pr-2">{s.name}</span>
+                          <div key={s.id} className="flex justify-between items-center text-xs p-2 rounded-xl bg-gray-50/70">
+                            <div className="min-w-0 pr-2">
+                              <span className="font-bold text-brand-dark block truncate">{s.name}</span>
+                              <span className="text-[10px] text-gray-400 font-medium">{s.durationMin} min</span>
+                            </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[10px] text-gray-400">{s.durationMin}min</span>
-                              <span className="font-mono font-bold text-brand-blue bg-brand-blue/5 px-2 py-0.5 rounded-lg">R$ {s.price.toFixed(0)}</span>
+                              <span className="font-mono font-bold text-brand-blue bg-white px-2 py-0.5 rounded-lg border border-gray-100">R$ {s.price.toFixed(0)}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onBookOnline) {
+                                    onBookOnline();
+                                  } else {
+                                    setShowSiteBookingModal(true);
+                                  }
+                                }}
+                                className="bg-[#051b42] hover:bg-brand-blue text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Agendar
+                              </button>
                             </div>
                           </div>
                         ))
@@ -1377,37 +1477,32 @@ export default function CortesVitrine({
                   </div>
 
                   {/* Contact shortcuts */}
-                  <div className="py-5 space-y-2.5">
-                    <a 
-                      href={formattedWhatsAppUrl} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="w-full bg-[#10b981] text-white font-extrabold py-3.5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                  <div className="py-4 space-y-2">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        if (onBookOnline) {
+                          onBookOnline();
+                        } else {
+                          setShowSiteBookingModal(true);
+                        }
+                      }}
+                      className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-extrabold py-3.5 rounded-full text-xs tracking-wide flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
                     >
-                      <MessageSquare className="w-4 h-4 fill-current" />
-                      <span>Agendar via WhatsApp</span>
-                    </a>
+                      <span>Agendar</span>
+                    </button>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    {permitirWhatsApp && whatsapp && (
                       <a 
-                        href={formattedInstagramUrl} 
+                        href={formattedWhatsAppUrl} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="bg-white text-brand-dark border border-gray-200 font-extrabold py-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
+                        className="w-full bg-[#10b981] text-white font-extrabold py-2.5 rounded-full text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-[#0d9f6e] transition-colors"
                       >
-                        <Instagram className="w-4 h-4" />
-                        <span>Instagram</span>
+                        <MessageSquare className="w-3.5 h-3.5 fill-current" />
+                        <span>Agendar via WhatsApp</span>
                       </a>
-                      <a 
-                        href={bioLinkDisplay} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="bg-white text-brand-dark border border-gray-200 font-extrabold py-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Link da Bio</span>
-                      </a>
-                    </div>
+                    )}
                   </div>
 
                 </div>
@@ -1785,6 +1880,49 @@ export default function CortesVitrine({
             }}
             onClose={() => setCheckoutPlan(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* CLIENT BOOKING MODAL FOR SITE BOOKING */}
+      <AnimatePresence>
+        {showSiteBookingModal && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg my-auto relative"
+            >
+              <ClientBooking
+                businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
+                services={services}
+                barbers={
+                  barbers && barbers.length > 0
+                    ? barbers
+                    : [
+                        {
+                          id: 'b-default',
+                          name: merchant.nomeProprietario || 'Barbeiro Principal',
+                          avatar: logoImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                          rating: 5.0,
+                          specialty: 'Cortes & Barba'
+                        }
+                      ]
+                }
+                onBookAppointment={async (appointmentData) => {
+                  try {
+                    await firebaseService.addAppointment(merchant.uid, appointmentData);
+                    alert('Agendamento realizado com sucesso! Em breve entraremos em contato para confirmar.');
+                    setShowSiteBookingModal(false);
+                  } catch (err) {
+                    console.error('Error adding appointment:', err);
+                    alert('Erro ao realizar agendamento. Tente novamente.');
+                  }
+                }}
+                onClose={() => setShowSiteBookingModal(false)}
+              />
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
