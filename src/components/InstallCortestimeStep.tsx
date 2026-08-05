@@ -171,7 +171,7 @@ export default function InstallCortestimeStep({ merchantUid, onComplete, isDashb
       <div className="space-y-3 pt-2">
         <button
           type="button"
-          onClick={handleInstallInstallClick ? handleInstallClick : handleInstallClick}
+          onClick={handleInstallClick}
           disabled={isInstalling}
           className="w-full bg-[#d4ff5e] hover:bg-[#c3f542] active:scale-[0.99] text-[#051b42] font-black py-4 px-6 rounded-2xl shadow-lg shadow-[#d4ff5e]/25 transition-all text-sm tracking-wide uppercase flex items-center justify-center gap-2.5 cursor-pointer border border-[#c3f542]"
         >
