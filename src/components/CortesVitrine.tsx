@@ -29,9 +29,10 @@ import {
   Lock,
   ShieldCheck,
   X,
-  Calendar
+  Calendar,
+  User
 } from 'lucide-react';
-import { MerchantUser, Service, Barber } from '../types';
+import { MerchantUser, Service, Barber, Appointment } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import ClientBooking from './ClientBooking';
@@ -189,8 +190,11 @@ export default function CortesVitrine({
     }
   };
 
-  const [capa, setCapa] = useState(merchant.vitrineCapa || DEFAULT_COVER_URL);
-  const [linkPersonalizado, setLinkPersonalizado] = useState(merchant.vitrineLinkPersonalizado || merchant.nomeBarbearia.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase());
+  const [capa, setCapa] = useState(merchant?.vitrineCapa || DEFAULT_COVER_URL);
+  const [linkPersonalizado, setLinkPersonalizado] = useState(
+    merchant?.vitrineLinkPersonalizado || 
+    (merchant?.nomeBarbearia || 'barbearia').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
+  );
   
   // Local state for products
   const [products, setProducts] = useState<{ id: string; name: string; price: number }[]>(
@@ -328,7 +332,7 @@ export default function CortesVitrine({
   const bioLinkDisplay = linkBio.startsWith('http') ? linkBio : `https://${linkBio}`;
 
   // Custom QR Code link - Points to actual window.location.origin to be fully functional
-  const cleanSlug = (linkPersonalizado || merchant.nomeBarbearia || 'barbearia')
+  const cleanSlug = (linkPersonalizado || merchant?.nomeBarbearia || 'barbearia')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -1974,7 +1978,12 @@ export default function CortesVitrine({
                 }
                 onBookAppointment={async (appointmentData) => {
                   try {
-                    await firebaseService.addAppointment(merchant.uid, appointmentData);
+                    const fullApp: Appointment = {
+                      id: `app-${Date.now()}`,
+                      status: 'pending',
+                      ...appointmentData
+                    };
+                    await firebaseService.saveAppointment(fullApp, merchant.uid);
                     alert('Agendamento realizado com sucesso! Em breve entraremos em contato para confirmar.');
                     setShowSiteBookingModal(false);
                   } catch (err) {

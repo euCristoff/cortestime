@@ -50,7 +50,8 @@ import {
   Globe,
   Phone,
   Upload,
-  FileText
+  FileText,
+  Camera
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -2486,9 +2487,9 @@ export default function MerchantDashboard({
                   <tbody className="divide-y divide-gray-100 text-gray-700">
                     {clients
                       .filter(c => 
-                        c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || 
-                        c.phone.includes(clientSearchTerm) || 
-                        (c.email && c.email.toLowerCase().includes(clientSearchTerm.toLowerCase()))
+                        (c.name || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()) || 
+                        (c.phone || '').includes(clientSearchTerm || '') || 
+                        (c.email && (c.email || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()))
                       )
                       .map((c) => (
                         <tr key={c.id} className="hover:bg-gray-50 transition-colors">

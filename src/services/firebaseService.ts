@@ -391,7 +391,7 @@ export const firebaseService = {
   },
 
   async getMerchantByEmail(email: string): Promise<MerchantUser | null> {
-    if (!email) return null;
+    if (!email || typeof email !== 'string') return null;
     try {
       const q = query(collection(db, "users"), where("email", "==", email.toLowerCase().trim()));
       const snap = await withTimeout(getDocs(q), 15000);
@@ -914,7 +914,8 @@ export const firebaseService = {
       const raw = localStorage.getItem("cortestime_draft_vitrines");
       if (raw) {
         let list: DraftVitrine[] = JSON.parse(raw);
-        list = list.filter(item => item.id !== draftId && item.codigo.trim().toUpperCase() !== codigo.trim().toUpperCase());
+        const targetCode = (codigo || '').trim().toUpperCase();
+        list = list.filter(item => item.id !== draftId && (item.codigo || '').trim().toUpperCase() !== targetCode);
         localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
       }
     } catch (e) {
