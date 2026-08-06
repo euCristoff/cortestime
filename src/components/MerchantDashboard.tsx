@@ -218,6 +218,8 @@ export default function MerchantDashboard({
   };
 
   const isSuperAdmin = Boolean(
+    merchant?.email?.toLowerCase() === 'cristoffcaua123456@gmail.com' ||
+    merchant?.email?.toLowerCase() === 'cristoffcauaff123456@gmail.com' ||
     merchant?.email?.toLowerCase() === 'suportecortestime@gmail.com' ||
     merchant?.email?.toLowerCase() === 'cristoffcauaff9@gmail.com' ||
     merchant?.isAdmin === true

@@ -515,11 +515,6 @@ export default function CortesVitrine({
                   <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                   <span>4,9 de 5 (127 avaliações)</span>
                 </div>
-                {merchant.plano === 'vitrine' && (
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-blue bg-brand-blue/10 px-2 py-0.5 rounded-md">
-                    Recurso Pro
-                  </span>
-                )}
               </div>
 
               <div>
@@ -527,105 +522,49 @@ export default function CortesVitrine({
                   <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                   <span>Avaliações dos Clientes</span>
                 </h4>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  Mostre avaliações reais dos seus clientes para gerar mais confiança e aumentar os agendamentos.
-                </p>
               </div>
 
-              {merchant.plano === 'vitrine' ? (
-                /* Locked / Blurred layout for Free Vitrine Plan */
-                <div className="relative rounded-2xl overflow-hidden border border-gray-200/80 bg-gray-50/70 p-4 space-y-3">
-                  {/* Blurred mock reviews */}
-                  <div className="filter blur-[2px] opacity-60 space-y-2.5 select-none pointer-events-none">
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <p className="text-xs font-medium text-gray-700">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
-                      <span className="text-[10px] text-gray-400 font-bold block">— Lucas Silva</span>
+              {/* Clean Customer Reviews */}
+              <div className="space-y-2.5">
+                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      ))}
                     </div>
-
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <p className="text-xs font-medium text-gray-700">"Melhor corte da cidade! Pontualidade nota 10."</p>
-                      <span className="text-[10px] text-gray-400 font-bold block">— Mateus Oliveira</span>
-                    </div>
-
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-2xs space-y-1">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <p className="text-xs font-medium text-gray-700">"Voltarei com certeza. Atendimento top de linha!"</p>
-                      <span className="text-[10px] text-gray-400 font-bold block">— Gabriel Costa</span>
-                    </div>
+                    <span className="text-[10px] text-gray-400 font-medium">Há 2 dias</span>
                   </div>
-
-                  {/* Lock overlay banner */}
-                  <div className="absolute inset-0 z-10 bg-black/45 backdrop-blur-[1.5px] flex flex-col items-center justify-center p-4 text-center space-y-3">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-black/80 border border-white/10 px-3.5 py-1.5 rounded-full shadow-lg">
-                      <Lock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Recurso exclusivo do Cortestime Pro</span>
-                    </span>
-                    <button
-                      onClick={() => setShowReviewsProModal(true)}
-                      className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-black text-xs px-5 py-2.5 rounded-xl uppercase tracking-wider shadow-xl transition-all transform hover:scale-105 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-4 h-4 fill-current" />
-                      <span>Desbloquear com o Pro</span>
-                    </button>
-                  </div>
+                  <p className="text-xs font-medium text-gray-800">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
+                  <span className="text-[10px] text-gray-500 font-extrabold block">— Lucas Silva</span>
                 </div>
-              ) : (
-                /* Unlocked reviews view for Pro Plan */
-                <div className="space-y-2.5">
-                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-gray-400 font-medium">Há 2 dias</span>
-                    </div>
-                    <p className="text-xs font-medium text-gray-800">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
-                    <span className="text-[10px] text-gray-500 font-extrabold block">— Lucas Silva</span>
-                  </div>
 
-                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-gray-400 font-medium">Há 5 dias</span>
+                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      ))}
                     </div>
-                    <p className="text-xs font-medium text-gray-800">"Melhor corte da cidade! Pontualidade nota 10."</p>
-                    <span className="text-[10px] text-gray-500 font-extrabold block">— Mateus Oliveira</span>
+                    <span className="text-[10px] text-gray-400 font-medium">Há 5 dias</span>
                   </div>
-
-                  <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-gray-400 font-medium">Há 1 semana</span>
-                    </div>
-                    <p className="text-xs font-medium text-gray-800">"Voltarei com certeza. Atendimento top de linha!"</p>
-                    <span className="text-[10px] text-gray-500 font-extrabold block">— Gabriel Costa</span>
-                  </div>
+                  <p className="text-xs font-medium text-gray-800">"Melhor corte da cidade! Pontualidade nota 10."</p>
+                  <span className="text-[10px] text-gray-500 font-extrabold block">— Mateus Oliveira</span>
                 </div>
-              )}
+
+                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-medium">Há 1 semana</span>
+                  </div>
+                  <p className="text-xs font-medium text-gray-800">"Voltarei com certeza. Atendimento top de linha!"</p>
+                  <span className="text-[10px] text-gray-500 font-extrabold block">— Gabriel Costa</span>
+                </div>
+              </div>
             </div>
 
             {/* Hero Booking Card (Design matching Image 1) */}

@@ -40,15 +40,15 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {currentMerchant ? (
             <button 
               onClick={onLogin}
-              className="bg-[#051b42] hover:bg-brand-blue text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              className="bg-[#051b42] hover:bg-brand-blue text-white font-bold text-xs md:text-sm px-4 py-2.5 rounded-full transition-all flex items-center gap-2 shadow-sm cursor-pointer whitespace-nowrap shrink-0"
               id="btn-landing-minha-conta"
             >
-              <User className="w-4 h-4 text-brand-lime" />
-              <span>Acessar Meu Painel ({currentMerchant.nomeBarbearia || 'Barbearia'})</span>
+              <User className="w-4 h-4 text-brand-lime shrink-0" />
+              <span>Acessar Painel</span>
             </button>
           ) : (
             <>
@@ -110,7 +110,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
               {currentMerchant ? (
                 <>
                   <User className="w-5 h-5 text-brand-blue" />
-                  <span>Acessar Painel da {currentMerchant.nomeBarbearia || 'Barbearia'}</span>
+                  <span>Acessar Meu Painel</span>
                 </>
               ) : (
                 'Teste Grátis por 7 dias'

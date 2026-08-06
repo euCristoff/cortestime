@@ -844,43 +844,29 @@ export default function App() {
           )}
 
           {viewMode === 'dashboard' && (
-            currentMerchant?.plano === 'vitrine' ? (
-              <CortesVitrine 
-                merchant={currentMerchant}
-                services={services}
-                barbers={barbers}
-                isOnlyView={true}
-                onLogout={handleLogout}
-                onUpdateMerchant={(updated) => {
-                  setCurrentMerchant(updated);
-                  localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
-                }}
-              />
-            ) : (
-              <MerchantDashboard 
-                onboardingData={onboardingData}
-                merchant={currentMerchant}
-                services={services}
-                barbers={barbers}
-                clients={clients}
-                appointments={appointments}
-                onAddService={handleAddService}
-                onAddBarber={handleAddBarber}
-                onUpdateBarber={handleUpdateBarber}
-                onDeleteBarber={handleDeleteBarber}
-                onAddClient={handleAddClient}
-                onAddAppointment={handleAddAppointment}
-                onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-                onLogout={handleLogout}
-                firebaseConnected={firebaseConnected}
-                onOpenClientBooking={() => setViewMode('clientBooking')}
-                onUpdateMerchant={(updated) => {
-                  setCurrentMerchant(updated);
-                  localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
-                }}
-                initialTab={dashboardTab}
-              />
-            )
+            <MerchantDashboard 
+              onboardingData={onboardingData}
+              merchant={currentMerchant}
+              services={services}
+              barbers={barbers}
+              clients={clients}
+              appointments={appointments}
+              onAddService={handleAddService}
+              onAddBarber={handleAddBarber}
+              onUpdateBarber={handleUpdateBarber}
+              onDeleteBarber={handleDeleteBarber}
+              onAddClient={handleAddClient}
+              onAddAppointment={handleAddAppointment}
+              onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+              onLogout={handleLogout}
+              firebaseConnected={firebaseConnected}
+              onOpenClientBooking={() => setViewMode('clientBooking')}
+              onUpdateMerchant={(updated) => {
+                setCurrentMerchant(updated);
+                localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
+              }}
+              initialTab={dashboardTab}
+            />
           )}
         </>
       )}

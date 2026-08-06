@@ -25,10 +25,12 @@ import {
   Trash2,
   Store,
   ExternalLink,
-  Tag
+  Tag,
+  Eye
 } from 'lucide-react';
 import { MerchantUser, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
+import CortesVitrine from './CortesVitrine';
 
 interface AdminSubscriptionManagerProps {
   currentAdmin: MerchantUser;
@@ -49,6 +51,7 @@ export default function AdminSubscriptionManager({
   const [filter, setFilter] = useState<'todos' | 'pendentes' | 'pro' | 'trial' | 'vitrine'>('todos');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [previewDraft, setPreviewDraft] = useState<DraftVitrine | null>(null);
 
   // Draft Creation Modal state
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
@@ -776,6 +779,16 @@ export default function AdminSubscriptionManager({
 
                         {/* ACTIONS */}
                         <div className="flex items-center gap-2 shrink-0 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
+                          {/* PREVIEW VITRINE BUTTON */}
+                          <button
+                            onClick={() => setPreviewDraft(draft)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all border border-gray-200 cursor-pointer"
+                            title="Visualizar a Vitrine do Rascunho"
+                          >
+                            <Eye className="w-4 h-4 text-brand-blue" />
+                            <span>Ver Vitrine</span>
+                          </button>
+
                           {/* COPY CODE BUTTON */}
                           <button
                             onClick={() => handleCopyCode(draft.codigo)}
@@ -1011,6 +1024,73 @@ export default function AdminSubscriptionManager({
                 </button>
               </form>
             </motion.div>
+          </div>
+        )}
+
+        {/* MODAL TO PREVIEW DRAFT VITRINE */}
+        {previewDraft && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-2 md:p-6">
+            <div className="bg-brand-dark rounded-3xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col border border-white/10 shadow-2xl">
+              <div className="p-4 bg-brand-dark/95 border-b border-white/10 flex justify-between items-center text-white shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-brand-lime/10 rounded-xl text-brand-lime">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white">Visualização de Vitrine Rascunho: {previewDraft.nomeBarbearia}</h3>
+                    <p className="text-[11px] text-gray-400">Código de Convite: <span className="font-mono text-brand-lime font-bold">{previewDraft.codigo}</span></p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPreviewDraft(null)}
+                  className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Fechar pré-visualização"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto bg-gray-900 p-2 md:p-4">
+                <CortesVitrine
+                  merchant={{
+                    uid: previewDraft.id || 'draft-preview',
+                    email: previewDraft.resgatadoPorEmail || 'rascunho@cortestime.com',
+                    nomeBarbearia: previewDraft.nomeBarbearia,
+                    nomeProprietario: previewDraft.nomeProprietario || 'Proprietário',
+                    whatsapp: previewDraft.whatsapp || '',
+                    vitrineWhatsApp: previewDraft.whatsapp,
+                    vitrineInstagram: previewDraft.instagram,
+                    vitrineEndereco: previewDraft.endereco,
+                    vitrineSlogan: previewDraft.slogan || 'Sua Barbearia de Confiança',
+                    vitrineHorarios: previewDraft.horarios || 'Seg - Sáb: 08:00 às 20:00',
+                    vitrineLogoImage: previewDraft.logoUrl,
+                    vitrineCapa: previewDraft.capaUrl,
+                    plano: 'pro',
+                    trialInicio: '01/01/2026',
+                    trialFim: '01/01/2030',
+                    status: 'ativo',
+                    criadoEm: '01/01/2026'
+                  }}
+                  services={(previewDraft.servicos || []).map((s, idx) => ({
+                    id: `s-${idx}`,
+                    name: s.name,
+                    price: s.price,
+                    durationMin: s.durationMin || 30,
+                    commissionPercent: 0
+                  }))}
+                  barbers={[
+                    {
+                      id: 'b-1',
+                      name: previewDraft.nomeProprietario || 'Barbeiro Principal',
+                      avatar: previewDraft.logoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+                      rating: 5,
+                      specialty: 'Barbeiro Master'
+                    }
+                  ]}
+                  isOnlyView={true}
+                />
+              </div>
+            </div>
           </div>
         )}
 
