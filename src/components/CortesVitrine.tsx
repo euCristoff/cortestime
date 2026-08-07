@@ -1923,11 +1923,8 @@ export default function CortesVitrine({
                       ...appointmentData
                     };
                     await firebaseService.saveAppointment(fullApp, merchant.uid);
-                    alert('Agendamento realizado com sucesso! Em breve entraremos em contato para confirmar.');
-                    setShowSiteBookingModal(false);
                   } catch (err) {
                     console.error('Error adding appointment:', err);
-                    alert('Erro ao realizar agendamento. Tente novamente.');
                   }
                 }}
                 onClose={() => setShowSiteBookingModal(false)}
@@ -1998,7 +1995,7 @@ export default function CortesVitrine({
                       onChange={(e) => setClientPhone(e.target.value)}
                       placeholder="Telefone cadastrado (com DDD)"
                       required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                     />
                   </div>
 
@@ -2009,7 +2006,7 @@ export default function CortesVitrine({
                       onChange={(e) => setClientPass(e.target.value)}
                       placeholder="Senha"
                       required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                     />
                   </div>
 

@@ -804,11 +804,8 @@ export default function App() {
                 const id = `app-${Date.now()}`;
                 const item: Appointment = { id, status: 'pending', ...app };
                 await firebaseService.saveAppointment(item, publicVitrineMerchant.uid);
-                alert("Agendamento solicitado com sucesso!");
-                setViewMode('landing');
               } catch (e) {
                 console.error("Error booking public app:", e);
-                alert("Erro ao realizar agendamento. Tente novamente.");
               }
             }}
             onClose={() => setViewMode('landing')}

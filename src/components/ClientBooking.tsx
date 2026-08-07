@@ -51,6 +51,8 @@ export default function ClientBooking({
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [addedToCalendar, setAddedToCalendar] = useState(false);
 
   // Confirmation state
   const [bookingId] = useState(() => `#${Math.floor(Math.random() * 900 + 100)}`);
@@ -226,12 +228,13 @@ export default function ClientBooking({
   };
 
   const handleFinishBooking = () => {
+    setBookingError(null);
     if (!firstName.trim()) {
-      alert('Por favor, informe seu nome.');
+      setBookingError('Por favor, informe seu nome.');
       return;
     }
     if (!phone.trim()) {
-      alert('Por favor, informe seu telefone.');
+      setBookingError('Por favor, informe seu telefone.');
       return;
     }
 
@@ -422,20 +425,15 @@ export default function ClientBooking({
             <button
               type="button"
               onClick={() => {
-                if (!selectedDate) {
-                  alert('Por favor, selecione uma data no calendário.');
-                  return;
-                }
-                if (!selectedTime) {
-                  alert('Por favor, escolha um horário disponível.');
-                  return;
-                }
+                if (!selectedDate || !selectedTime) return;
+                setBookingError(null);
                 setStep(4);
               }}
+              disabled={!selectedDate || !selectedTime}
               className={`px-6 py-2.5 rounded-full text-sm font-medium shadow-md transition-all flex items-center gap-1 cursor-pointer ${
                 selectedDate && selectedTime
                   ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-blue-500/20'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-60'
               }`}
             >
               <span>Próximo passo</span>
@@ -483,7 +481,7 @@ export default function ClientBooking({
                   placeholder="Seu nome"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                 />
               </div>
 
@@ -493,7 +491,7 @@ export default function ClientBooking({
                   placeholder="Seu sobrenome"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                 />
               </div>
 
@@ -503,9 +501,15 @@ export default function ClientBooking({
                   placeholder="Número de telefone"
                   value={phone}
                   onChange={handlePhoneChange}
-                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
                 />
               </div>
+
+              {bookingError && (
+                <p className="text-xs text-red-500 text-center font-medium bg-red-50 p-2.5 rounded-xl border border-red-100">
+                  {bookingError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -513,7 +517,10 @@ export default function ClientBooking({
           <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
             <button
               type="button"
-              onClick={() => setStep(3)}
+              onClick={() => {
+                setBookingError(null);
+                setStep(3);
+              }}
               className="px-6 py-2.5 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
             >
               ← Voltar
@@ -548,11 +555,24 @@ export default function ClientBooking({
             {/* Calendar pill button */}
             <button
               type="button"
-              onClick={() => alert('Agendamento adicionado ao seu calendário!')}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-700 transition-colors cursor-pointer"
+              onClick={() => setAddedToCalendar(true)}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                addedToCalendar 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
             >
-              <CalendarIcon className="w-3.5 h-3.5" />
-              <span>Adicionar à agenda</span>
+              {addedToCalendar ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Adicionado à sua agenda!</span>
+                </>
+              ) : (
+                <>
+                  <CalendarIcon className="w-3.5 h-3.5" />
+                  <span>Adicionar à agenda</span>
+                </>
+              )}
             </button>
 
             {/* Details Table */}
