@@ -1391,27 +1391,39 @@ export default function CortesVitrine({
                         <span>Nossa Equipe de Profissionais</span>
                       </h4>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                        {barbers.map((b) => (
-                          <div key={b.id} className="bg-gray-50/70 p-2.5 rounded-2xl border border-gray-100/80 flex items-center gap-2.5">
-                            <div className="w-10 h-10 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-white shadow-xs relative">
-                              {b.avatar ? (
-                                <img 
-                                  src={b.avatar} 
-                                  alt={b.name} 
-                                  className="w-full h-full object-cover relative z-10" 
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              ) : null}
-                              <User className="w-5 h-5 text-gray-400 absolute inset-0 m-auto" />
+                        {barbers.map((b) => {
+                          const shopLogo = merchant.vitrineLogoImage || logoImage;
+                          const displayAvatar = (b.avatar && b.avatar.trim() !== '' && !b.avatar.includes('unsplash.com'))
+                            ? b.avatar
+                            : (shopLogo || b.avatar);
+
+                          return (
+                            <div key={b.id} className="bg-gray-50/70 p-2.5 rounded-2xl border border-gray-100/80 flex items-center gap-2.5">
+                              <div className="w-10 h-10 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-white shadow-xs relative flex items-center justify-center">
+                                {displayAvatar ? (
+                                  <img 
+                                    src={displayAvatar} 
+                                    alt={b.name} 
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover relative z-10" 
+                                    onError={(e) => {
+                                      if (shopLogo && e.currentTarget.src !== shopLogo) {
+                                        e.currentTarget.src = shopLogo;
+                                      } else {
+                                        e.currentTarget.style.display = 'none';
+                                      }
+                                    }}
+                                  />
+                                ) : null}
+                                <User className="w-5 h-5 text-gray-400 absolute inset-0 m-auto" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-brand-dark truncate">{b.name}</p>
+                                <p className="text-[10px] text-gray-400 truncate">{b.specialty}</p>
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-brand-dark truncate">{b.name}</p>
-                              <p className="text-[10px] text-gray-400 truncate">{b.specialty}</p>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1901,15 +1913,21 @@ export default function CortesVitrine({
             >
               <ClientBooking
                 businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
+                businessLogo={merchant.vitrineLogoImage || logoImage}
                 services={services}
                 barbers={
                   barbers && barbers.length > 0
-                    ? barbers
+                    ? barbers.map(b => ({
+                        ...b,
+                        avatar: (b.avatar && b.avatar.trim() !== '' && !b.avatar.includes('unsplash.com'))
+                          ? b.avatar
+                          : (merchant.vitrineLogoImage || logoImage || b.avatar)
+                      }))
                     : [
                         {
                           id: 'b-default',
                           name: merchant.nomeProprietario || 'Barbeiro Principal',
-                          avatar: logoImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                          avatar: merchant.vitrineLogoImage || logoImage || '',
                           rating: 5.0,
                           specialty: 'Cortes & Barba'
                         }

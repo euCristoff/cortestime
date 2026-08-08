@@ -796,6 +796,7 @@ export default function App() {
         viewMode === 'clientBooking' ? (
           <ClientBooking 
             businessName={publicVitrineMerchant.nomeBarbearia}
+            businessLogo={publicVitrineMerchant.vitrineLogoImage}
             services={publicVitrineServices}
             barbers={barbers}
             onBookAppointment={async (app) => {
@@ -833,6 +834,7 @@ export default function App() {
           {viewMode === 'clientBooking' && (
             <ClientBooking 
               businessName={currentMerchant?.nomeBarbearia || onboardingData.businessName}
+              businessLogo={currentMerchant?.vitrineLogoImage}
               services={services}
               barbers={barbers}
               onBookAppointment={handleAddAppointment}

@@ -556,9 +556,10 @@ export default function MerchantDashboard({
   const handleCreateBarber = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBarberName) return;
+    const shopLogo = merchant?.vitrineLogoImage || '';
     onAddBarber({
       name: newBarberName,
-      avatar: newBarberAvatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60',
+      avatar: newBarberAvatar || shopLogo,
       specialty: newBarberSpecialty || 'Barbeiro Geral'
     });
     setNewBarberName('');
@@ -578,11 +579,12 @@ export default function MerchantDashboard({
   const handleSaveEditBarber = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBarber || !editBarberName) return;
+    const shopLogo = merchant?.vitrineLogoImage || '';
     const updatedBarber: Barber = {
       ...editingBarber,
       name: editBarberName,
       specialty: editBarberSpecialty || 'Barbeiro Geral',
-      avatar: editBarberAvatar || editingBarber.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60'
+      avatar: editBarberAvatar || (editingBarber.avatar && !editingBarber.avatar.includes('unsplash.com') ? editingBarber.avatar : shopLogo)
     };
     if (onUpdateBarber) {
       onUpdateBarber(updatedBarber);
@@ -2402,23 +2404,33 @@ export default function MerchantDashboard({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {barbers.map((b) => (
-                <div key={b.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3 flex flex-col justify-between relative group">
-                  <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl bg-gray-100 border-2 border-brand-blue/20 shadow-sm overflow-hidden shrink-0 relative flex items-center justify-center">
-                      {b.avatar ? (
-                        <img 
-                          src={b.avatar} 
-                          alt={b.name} 
-                          referrerPolicy="no-referrer" 
-                          className="w-full h-full object-cover relative z-10"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : null}
-                      <User className="w-6 h-6 text-gray-400 absolute" />
-                    </div>
+              {barbers.map((b) => {
+                const shopLogo = merchant?.vitrineLogoImage || '';
+                const displayAvatar = (b.avatar && b.avatar.trim() !== '' && !b.avatar.includes('unsplash.com'))
+                  ? b.avatar
+                  : (shopLogo || b.avatar);
+
+                return (
+                  <div key={b.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-3 flex flex-col justify-between relative group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-gray-100 border-2 border-brand-blue/20 shadow-sm overflow-hidden shrink-0 relative flex items-center justify-center">
+                        {displayAvatar ? (
+                          <img 
+                            src={displayAvatar} 
+                            alt={b.name} 
+                            referrerPolicy="no-referrer" 
+                            className="w-full h-full object-cover relative z-10"
+                            onError={(e) => {
+                              if (shopLogo && e.currentTarget.src !== shopLogo) {
+                                e.currentTarget.src = shopLogo;
+                              } else {
+                                e.currentTarget.style.display = 'none';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <User className="w-6 h-6 text-gray-400 absolute" />
+                      </div>
                     <div className="min-w-0 text-left flex-1">
                       <h4 className="font-extrabold text-sm text-brand-dark truncate">{b.name}</h4>
                       <p className="text-xs text-gray-400 mt-0.5 truncate">{b.specialty}</p>
@@ -2439,7 +2451,8 @@ export default function MerchantDashboard({
                     <span className="font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px]">Ativo</span>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         )}

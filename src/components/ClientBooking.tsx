@@ -11,6 +11,7 @@ import { Service, Barber, Appointment } from '../types';
 
 interface ClientBookingProps {
   businessName: string;
+  businessLogo?: string;
   services: Service[];
   barbers: Barber[];
   onBookAppointment: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
@@ -19,6 +20,7 @@ interface ClientBookingProps {
 
 export default function ClientBooking({ 
   businessName, 
+  businessLogo,
   services, 
   barbers, 
   onBookAppointment, 
@@ -313,6 +315,10 @@ export default function ClientBooking({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {availableBarbers.map((b) => {
               const isSelected = selectedBarber?.id === b.id;
+              const displayAvatar = (b.avatar && b.avatar.trim() !== '' && !b.avatar.includes('unsplash.com'))
+                ? b.avatar
+                : (businessLogo || b.avatar);
+
               return (
                 <button
                   key={b.id}
@@ -328,13 +334,18 @@ export default function ClientBooking({
                   }`}
                 >
                   <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center overflow-hidden mb-2 text-gray-400 border border-gray-100 relative shadow-xs">
-                    {b.avatar ? (
+                    {displayAvatar ? (
                       <img 
-                        src={b.avatar} 
+                        src={displayAvatar} 
                         alt={b.name} 
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover relative z-10" 
                         onError={(e) => {
-                          e.currentTarget.style.display = 'none';
+                          if (businessLogo && e.currentTarget.src !== businessLogo) {
+                            e.currentTarget.src = businessLogo;
+                          } else {
+                            e.currentTarget.style.display = 'none';
+                          }
                         }}
                       />
                     ) : null}
