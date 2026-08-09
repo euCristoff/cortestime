@@ -59,21 +59,14 @@ export default function ClientBooking({
   // Confirmation state
   const [bookingId] = useState(() => `#${Math.floor(Math.random() * 900 + 100)}`);
 
-  // Ensure there are barbers available to pick from
+  // Ensure there are barbers available to pick from (default 1 professional with the business name)
   const availableBarbers = barbers && barbers.length > 0 ? barbers : [
     {
       id: 'b-default-1',
-      name: 'Henrique Souza',
-      avatar: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&auto=format&fit=crop&q=60',
+      name: businessName || 'Barbearia',
+      avatar: businessLogo || '',
       rating: 5.0,
-      specialty: 'Cortes & Degradê'
-    },
-    {
-      id: 'b-default-2',
-      name: businessName || 'Crhfi',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60',
-      rating: 4.9,
-      specialty: 'Cortes & Barba'
+      specialty: 'Atendimento & Cortes'
     }
   ];
 

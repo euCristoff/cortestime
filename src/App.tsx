@@ -90,11 +90,15 @@ export default function App() {
     { id: 'serv-4', name: 'Pezinho & Sobrancelha', price: 25.00, durationMin: 15, commissionPercent: 60 },
   ];
 
-  // Default barbers (professionals)
+  // Default barbers (1 professional by default with barbershop name)
   const defaultBarbers: Barber[] = [
-    { id: 'barb-1', name: 'Henrique Souza', avatar: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&auto=format&fit=crop&q=60', rating: 4.9, specialty: 'Cortes & Degradê' },
-    { id: 'barb-2', name: 'Gustavo Alencar', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=60', rating: 4.8, specialty: 'Barba Terapia' },
-    { id: 'barb-3', name: 'Carlos Penna', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=60', rating: 5.0, specialty: 'Cortes Clássicos' },
+    { 
+      id: 'barb-1', 
+      name: currentMerchant?.nomeBarbearia || currentMerchant?.nomeProprietario || 'Barbearia', 
+      avatar: currentMerchant?.vitrineLogoImage || '', 
+      rating: 5.0, 
+      specialty: 'Atendimento & Cortes' 
+    },
   ];
 
   // Default Clients
@@ -107,10 +111,10 @@ export default function App() {
   // Default appointments
   const defaultAppointments: Appointment[] = [
     { id: 'app-1', clientName: 'Roberto Silva', clientPhone: '(82) 99120-1049', serviceId: 'serv-1', barberId: 'barb-1', date: new Date().toISOString().split('T')[0], time: '09:00', status: 'pending' },
-    { id: 'app-2', clientName: 'André Albuquerque', clientPhone: '(82) 98844-0392', serviceId: 'serv-2', barberId: 'barb-2', date: new Date().toISOString().split('T')[0], time: '10:00', status: 'pending' },
-    { id: 'app-3', clientName: 'Carlos Penna', clientPhone: '(82) 98724-1111', serviceId: 'serv-3', barberId: 'barb-3', date: new Date().toISOString().split('T')[0], time: '11:00', status: 'pending' },
+    { id: 'app-2', clientName: 'André Albuquerque', clientPhone: '(82) 98844-0392', serviceId: 'serv-2', barberId: 'barb-1', date: new Date().toISOString().split('T')[0], time: '10:00', status: 'pending' },
+    { id: 'app-3', clientName: 'Carlos Penna', clientPhone: '(82) 98724-1111', serviceId: 'serv-3', barberId: 'barb-1', date: new Date().toISOString().split('T')[0], time: '11:00', status: 'pending' },
     { id: 'app-completed-1', clientName: 'Douglas Costa', clientPhone: '(82) 99341-2290', serviceId: 'serv-1', barberId: 'barb-1', date: new Date().toISOString().split('T')[0], time: '08:00', status: 'completed' },
-    { id: 'app-completed-2', clientName: 'Renato Gaúcho', clientPhone: '(82) 99611-0012', serviceId: 'serv-2', barberId: 'barb-2', date: new Date().toISOString().split('T')[0], time: '08:30', status: 'completed' },
+    { id: 'app-completed-2', clientName: 'Renato Gaúcho', clientPhone: '(82) 99611-0012', serviceId: 'serv-2', barberId: 'barb-1', date: new Date().toISOString().split('T')[0], time: '08:30', status: 'completed' },
   ];
 
   const [services, setServices] = useState<Service[]>(defaultServices);
@@ -431,10 +435,23 @@ export default function App() {
   // Load cached lists from localStorage instantly to bypass Firestore network lag
   useEffect(() => {
     if (!currentMerchant) {
-      setServices(defaultServices);
-      setBarbers(defaultBarbers);
-      setClients(defaultClients);
-      setAppointments(defaultAppointments);
+      const cachedGuestBarbers = localStorage.getItem('cortestime_guest_barbers');
+      const cachedGuestServices = localStorage.getItem('cortestime_guest_services');
+      const cachedGuestClients = localStorage.getItem('cortestime_guest_clients');
+      const cachedGuestAppointments = localStorage.getItem('cortestime_guest_appointments');
+
+      if (cachedGuestServices) setServices(JSON.parse(cachedGuestServices));
+      else setServices(defaultServices);
+
+      if (cachedGuestBarbers) setBarbers(JSON.parse(cachedGuestBarbers));
+      else setBarbers(defaultBarbers);
+
+      if (cachedGuestClients) setClients(JSON.parse(cachedGuestClients));
+      else setClients(defaultClients);
+
+      if (cachedGuestAppointments) setAppointments(JSON.parse(cachedGuestAppointments));
+      else setAppointments(defaultAppointments);
+
       return;
     }
 
@@ -472,13 +489,40 @@ export default function App() {
           if (isMounted) {
             const uid = currentMerchant.uid;
             
+            // Sync Services
             if (fbServices.length > 0) {
               setServices(fbServices);
               localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(fbServices));
+            } else if (!localStorage.getItem(`cortestime_services_${uid}`)) {
+              setServices(defaultServices);
+              localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(defaultServices));
             }
+
+            // Sync Barbers
+            const cachedBarbersStr = localStorage.getItem(`cortestime_barbers_${uid}`);
             if (fbBarbers.length > 0) {
               setBarbers(fbBarbers);
               localStorage.setItem(`cortestime_barbers_${uid}`, JSON.stringify(fbBarbers));
+            } else if (cachedBarbersStr !== null) {
+              // User has explicit barbers saved in localStorage (including empty array [])
+              const parsedBarbers = JSON.parse(cachedBarbersStr);
+              setBarbers(parsedBarbers);
+            } else {
+              // No barbers in Firestore AND no cache in localStorage -> create default 1 barber with shop name
+              const shopName = currentMerchant.nomeBarbearia || currentMerchant.nomeProprietario || 'Barbearia';
+              const shopLogo = currentMerchant.vitrineLogoImage || '';
+              const initialBarbers: Barber[] = [{
+                id: 'barb-1',
+                name: shopName,
+                avatar: shopLogo,
+                rating: 5.0,
+                specialty: 'Atendimento & Cortes'
+              }];
+              setBarbers(initialBarbers);
+              localStorage.setItem(`cortestime_barbers_${uid}`, JSON.stringify(initialBarbers));
+              for (const b of initialBarbers) {
+                await firebaseService.saveBarber(b, uid);
+              }
             }
             
             setClients(fbClients);
@@ -528,7 +572,12 @@ export default function App() {
   const handleAddService = async (newService: Omit<Service, 'id'>) => {
     const id = `serv-${Date.now()}`;
     const item: Service = { id, ...newService };
-    setServices(prev => [...prev, item]);
+    setServices(prev => {
+      const updated = [...prev, item];
+      const key = currentMerchant ? `cortestime_services_${currentMerchant.uid}` : 'cortestime_guest_services';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveService(item, currentMerchant.uid);
     }
@@ -537,21 +586,36 @@ export default function App() {
   const handleAddBarber = async (newBarber: Omit<Barber, 'id' | 'rating'>) => {
     const id = `barb-${Date.now()}`;
     const item: Barber = { id, rating: 4.9, ...newBarber };
-    setBarbers(prev => [...prev, item]);
+    setBarbers(prev => {
+      const updated = [...prev, item];
+      const key = currentMerchant ? `cortestime_barbers_${currentMerchant.uid}` : 'cortestime_guest_barbers';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveBarber(item, currentMerchant.uid);
     }
   };
 
   const handleUpdateBarber = async (updatedBarber: Barber) => {
-    setBarbers(prev => prev.map(b => b.id === updatedBarber.id ? updatedBarber : b));
+    setBarbers(prev => {
+      const updated = prev.map(b => b.id === updatedBarber.id ? updatedBarber : b);
+      const key = currentMerchant ? `cortestime_barbers_${currentMerchant.uid}` : 'cortestime_guest_barbers';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveBarber(updatedBarber, currentMerchant.uid);
     }
   };
 
   const handleDeleteBarber = async (barberId: string) => {
-    setBarbers(prev => prev.filter(b => b.id !== barberId));
+    setBarbers(prev => {
+      const updated = prev.filter(b => b.id !== barberId);
+      const key = currentMerchant ? `cortestime_barbers_${currentMerchant.uid}` : 'cortestime_guest_barbers';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.deleteBarber(barberId);
     }
@@ -560,7 +624,12 @@ export default function App() {
   const handleAddClient = async (newClient: Omit<Client, 'id'>) => {
     const id = `cli-${Date.now()}`;
     const item: Client = { id, ...newClient };
-    setClients(prev => [...prev, item]);
+    setClients(prev => {
+      const updated = [...prev, item];
+      const key = currentMerchant ? `cortestime_clients_${currentMerchant.uid}` : 'cortestime_guest_clients';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveClient(item, currentMerchant.uid);
     }
@@ -569,16 +638,24 @@ export default function App() {
   const handleAddAppointment = async (newApp: Omit<Appointment, 'id' | 'status'>) => {
     const id = `app-${Date.now()}`;
     const item: Appointment = { id, status: 'pending', ...newApp };
-    setAppointments(prev => [item, ...prev]);
+    setAppointments(prev => {
+      const updated = [item, ...prev];
+      const key = currentMerchant ? `cortestime_appointments_${currentMerchant.uid}` : 'cortestime_guest_appointments';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveAppointment(item, currentMerchant.uid);
     }
   };
 
   const handleUpdateAppointmentStatus = async (id: string, status: Appointment['status']) => {
-    setAppointments(prev => prev.map(app => 
-      app.id === id ? { ...app, status } : app
-    ));
+    setAppointments(prev => {
+      const updated = prev.map(app => app.id === id ? { ...app, status } : app);
+      const key = currentMerchant ? `cortestime_appointments_${currentMerchant.uid}` : 'cortestime_guest_appointments';
+      localStorage.setItem(key, JSON.stringify(updated));
+      return updated;
+    });
     if (firebaseConnected) {
       await firebaseService.updateAppointmentStatus(id, status);
     }
@@ -760,10 +837,19 @@ export default function App() {
                   
                   const existingBarbers = await firebaseService.getBarbers(currentMerchant.uid);
                   if (existingBarbers.length === 0) {
-                    for (const b of defaultBarbers) {
+                    const shopName = currentMerchant.nomeBarbearia || data.businessName || currentMerchant.nomeProprietario || 'Barbearia';
+                    const shopLogo = currentMerchant.vitrineLogoImage || '';
+                    const initialBarbers: Barber[] = [{
+                      id: 'barb-1',
+                      name: shopName,
+                      avatar: shopLogo,
+                      rating: 5.0,
+                      specialty: 'Atendimento & Cortes'
+                    }];
+                    for (const b of initialBarbers) {
                       await firebaseService.saveBarber(b, currentMerchant.uid);
                     }
-                    setBarbers(defaultBarbers);
+                    setBarbers(initialBarbers);
                   } else {
                     setBarbers(existingBarbers);
                   }
