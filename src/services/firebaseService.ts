@@ -414,11 +414,55 @@ export const firebaseService = {
   },
 
   async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {
-    const q = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", slug));
-    const snap = await withTimeout(getDocs(q), 15000);
-    if (!snap.empty) {
-      return snap.docs[0].data() as MerchantUser;
+    const cleanSlug = (slug || '').toLowerCase().trim();
+    if (!cleanSlug) return null;
+
+    try {
+      // 1. Check by exact vitrineLinkPersonalizado field
+      const q = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", cleanSlug));
+      const snap = await withTimeout(getDocs(q), 10000);
+      if (!snap.empty) {
+        return snap.docs[0].data() as MerchantUser;
+      }
+
+      // 2. Fallback: Search all users in Firestore matching normalized nomeBarbearia or uid
+      const qAll = query(collection(db, "users"));
+      const snapAll = await withTimeout(getDocs(qAll), 10000);
+      if (!snapAll.empty) {
+        for (const docSnap of snapAll.docs) {
+          const data = docSnap.data() as MerchantUser;
+          const normName = (data.nomeBarbearia || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]/g, '-');
+          if (normName === cleanSlug || data.uid === cleanSlug) {
+            return data;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error looking up merchant by slug in Firestore:", err);
     }
+
+    // 3. Fallback: Check local storage for merchant profile/session
+    try {
+      const cached = localStorage.getItem("cortestime_merchant_session") || localStorage.getItem("cortestime_merchant_profile");
+      if (cached) {
+        const parsed = JSON.parse(cached) as MerchantUser;
+        const normName = (parsed.nomeBarbearia || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9]/g, '-');
+        if (parsed.vitrineLinkPersonalizado === cleanSlug || normName === cleanSlug || parsed.uid === cleanSlug || cleanSlug === 'sua-barbearia' || cleanSlug === 'barbearia') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error("Error reading cached merchant for slug lookup:", e);
+    }
+
     return null;
   },
 

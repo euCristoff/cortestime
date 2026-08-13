@@ -51,7 +51,12 @@ import {
   Phone,
   Upload,
   FileText,
-  Camera
+  Camera,
+  Eye,
+  Crown,
+  ArrowUpDown,
+  BarChart3,
+  History
 } from 'lucide-react';
 import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -169,6 +174,8 @@ export default function MerchantDashboard({
 
   // Filter clients/services search
   const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [clientSortBy, setClientSortBy] = useState<'spent' | 'appointments' | 'recent' | 'name'>('spent');
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
   const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo'>('sistema');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem('read-system-milestones');
@@ -1226,34 +1233,45 @@ export default function MerchantDashboard({
                 </div>
               </div>
 
-              {/* Mock Link Box */}
-              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                <div className="font-mono text-xs text-gray-600 truncate flex-1 flex items-center gap-1.5 px-1 py-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                  <span>cortestime.com/vitrine/{merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}</span>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => {
-                      setShowVitrinePage(true);
-                    }}
-                    className="flex-1 sm:flex-initial text-xs font-bold text-brand-blue hover:bg-brand-blue/5 border border-brand-blue/20 bg-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <Smartphone className="w-4 h-4" />
-                    <span>Ver Minha Vitrine</span>
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const link = `https://cortestime.com/vitrine/${merchant?.nomeBarbearia ? merchant.nomeBarbearia.toLowerCase().replace(/\s+/g, '-') : 'sua-barbearia'}`;
-                      navigator.clipboard.writeText(link);
-                      alert("Link da sua Vitrine copiado com sucesso! Compartilhe com seus clientes no Instagram e WhatsApp.");
-                    }}
-                    className="flex-1 sm:flex-initial text-xs font-extrabold text-brand-dark bg-brand-lime hover:bg-brand-lime-dark px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <span>Copiar Link</span>
-                  </button>
-                </div>
-              </div>
+              {/* Real Link Box */}
+              {(() => {
+                const cleanSlug = (merchant?.vitrineLinkPersonalizado || merchant?.nomeBarbearia || 'sua-barbearia')
+                  .toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/[^a-zA-Z0-9]/g, '-');
+                const realLink = `${window.location.origin}?v=${cleanSlug}`;
+                const displayUrl = `${window.location.host}?v=${cleanSlug}`;
+
+                return (
+                  <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                    <div className="font-mono text-xs text-gray-600 truncate flex-1 flex items-center gap-1.5 px-1 py-1" title={realLink}>
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></span>
+                      <span className="truncate">{displayUrl}</span>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button 
+                        onClick={() => {
+                          setShowVitrinePage(true);
+                        }}
+                        className="flex-1 sm:flex-initial text-xs font-bold text-brand-blue hover:bg-brand-blue/5 border border-brand-blue/20 bg-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Smartphone className="w-4 h-4" />
+                        <span>Ver Minha Vitrine</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(realLink);
+                          alert(`Link da sua Vitrine copiado com sucesso!\n\nLink: ${realLink}\n\nCole este link no seu Instagram ou WhatsApp para seus clientes agendarem direto!`);
+                        }}
+                        className="flex-1 sm:flex-initial text-xs font-extrabold text-brand-dark bg-brand-lime hover:bg-brand-lime-dark px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <span>Copiar Link</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* DISCRETE PWA INSTALL REMINDER BANNER */}
@@ -2458,78 +2476,262 @@ export default function MerchantDashboard({
         )}
 
         {/* TAB: CLIENTES */}
-        {activeTab === 'clientes' && (
-          <div className="space-y-6 text-left">
-            <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div>
-                <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
-                  Base de Clientes
-                </span>
-                <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Controle de Clientes</h2>
-                <p className="text-xs text-gray-500">Histórico de contatos, WhatsApp para disparo de promoções e lembretes</p>
-              </div>
-              <button 
-                onClick={() => setIsClientModalOpen(true)}
-                className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Novo Cliente</span>
-              </button>
-            </div>
+        {activeTab === 'clientes' && (() => {
+          // Pre-calculate metrics per client
+          const clientsWithMetrics = clients.map(client => {
+            const normPhone = (client.phone || '').replace(/\D/g, '');
+            const normName = (client.name || '').trim().toLowerCase();
 
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
-              <div className="relative">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar cliente por nome, e-mail ou telefone..." 
-                  value={clientSearchTerm}
-                  onChange={(e) => setClientSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-brand-blue"
-                />
+            const clientAppointments = appointments.filter(a => {
+              const appPhone = (a.clientPhone || '').replace(/\D/g, '');
+              const appName = (a.clientName || '').trim().toLowerCase();
+              if (normPhone && appPhone && normPhone === appPhone) return true;
+              if (normName && appName && normName === appName) return true;
+              return false;
+            });
+
+            const completedApps = clientAppointments.filter(a => a.status === 'completed');
+
+            const totalSpent = completedApps.reduce((acc, app) => {
+              const srv = services.find(s => s.id === app.serviceId);
+              return acc + (srv ? srv.price : 0);
+            }, 0);
+
+            const dates = clientAppointments
+              .map(a => a.date)
+              .filter(Boolean)
+              .sort((a, b) => b.localeCompare(a));
+
+            const lastVisitFormatted = dates[0]
+              ? new Date(dates[0] + 'T00:00:00').toLocaleDateString('pt-BR')
+              : 'Sem registros';
+
+            return {
+              ...client,
+              clientAppointments,
+              completedCount: completedApps.length,
+              totalCount: clientAppointments.length,
+              totalSpent,
+              lastVisitDate: dates[0] || '',
+              lastVisitFormatted
+            };
+          });
+
+          // Overall summary KPIs
+          const totalAllSpent = clientsWithMetrics.reduce((acc, c) => acc + c.totalSpent, 0);
+          const totalCompletedCount = clientsWithMetrics.reduce((acc, c) => acc + c.completedCount, 0);
+          const avgSpent = clientsWithMetrics.length > 0 ? (totalAllSpent / clientsWithMetrics.length) : 0;
+          const topVip = [...clientsWithMetrics].sort((a, b) => b.totalSpent - a.totalSpent)[0];
+
+          // Filter and Sort
+          const filteredAndSorted = clientsWithMetrics
+            .filter(c => 
+              (c.name || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()) || 
+              (c.phone || '').includes(clientSearchTerm || '') || 
+              (c.email && (c.email || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()))
+            )
+            .sort((a, b) => {
+              if (clientSortBy === 'spent') return b.totalSpent - a.totalSpent;
+              if (clientSortBy === 'appointments') return b.completedCount - a.completedCount;
+              if (clientSortBy === 'recent') return (b.lastVisitDate || '').localeCompare(a.lastVisitDate || '');
+              if (clientSortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+              return 0;
+            });
+
+          return (
+            <div className="space-y-6 text-left">
+              {/* HEADER & NEW CLIENT BUTTON */}
+              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <div>
+                  <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
+                    Base de Clientes & CRM
+                  </span>
+                  <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Controle de Clientes & Gastos</h2>
+                  <p className="text-xs text-gray-500">Acompanhe o quanto cada cliente gastou, histórico de cortes e contatos via WhatsApp</p>
+                </div>
+                <button 
+                  onClick={() => setIsClientModalOpen(true)}
+                  className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Cliente</span>
+                </button>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
-                      <th className="p-3">Nome</th>
-                      <th className="p-3">Telefone</th>
-                      <th className="p-3">E-mail</th>
-                      <th className="p-3 text-right">Ação WhatsApp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-gray-700">
-                    {clients
-                      .filter(c => 
-                        (c.name || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()) || 
-                        (c.phone || '').includes(clientSearchTerm || '') || 
-                        (c.email && (c.email || '').toLowerCase().includes((clientSearchTerm || '').toLowerCase()))
-                      )
-                      .map((c) => (
-                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-3 font-bold text-brand-dark">{c.name}</td>
-                          <td className="p-3 font-mono">{c.phone}</td>
-                          <td className="p-3 text-gray-400">{c.email || 'Não informado'}</td>
-                          <td className="p-3 text-right">
-                            <a 
-                              href={`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(c.name)},%20tudo%20bem?%20Gostaria%20de%20agendar%20um%20horário%20na%20${encodeURIComponent(merchant?.nomeBarbearia || 'barbearia')}?`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              <span>Enviar Mensagem</span>
-                            </a>
+              {/* KPI STATS CARDS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-3xl border border-emerald-100/80 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full">Faturamento de Clientes</span>
+                    <DollarSign className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div className="text-2xl font-black text-emerald-900 font-mono">
+                    R$ {totalAllSpent.toFixed(2).replace('.', ',')}
+                  </div>
+                  <p className="text-[11px] text-emerald-700/80 mt-1">
+                    {totalCompletedCount} agendamentos concluídos
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-white p-5 rounded-3xl border border-blue-100/80 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100/80 px-2.5 py-0.5 rounded-full">Ticket Médio por Cliente</span>
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-black text-blue-900 font-mono">
+                    R$ {avgSpent.toFixed(2).replace('.', ',')}
+                  </div>
+                  <p className="text-[11px] text-blue-700/80 mt-1">
+                    Média calculada em {clients.length} clientes
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-amber-50 to-white p-5 rounded-3xl border border-amber-100/80 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100/80 px-2.5 py-0.5 rounded-full">Cliente Top / VIP</span>
+                    <Crown className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div className="text-lg font-extrabold text-amber-950 truncate">
+                    {topVip && topVip.totalSpent > 0 ? topVip.name : 'Nenhum ainda'}
+                  </div>
+                  <p className="text-[11px] text-amber-800 font-medium mt-1">
+                    {topVip && topVip.totalSpent > 0 ? `Gastou R$ ${topVip.totalSpent.toFixed(2).replace('.', ',')} na barbearia` : 'Realize atendimentos para ranquear'}
+                  </p>
+                </div>
+              </div>
+
+              {/* CONTROLS & TABLE */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar cliente por nome, e-mail ou telefone..." 
+                      value={clientSearchTerm}
+                      onChange={(e) => setClientSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-bold text-gray-500 flex items-center gap-1">
+                      <ArrowUpDown className="w-3.5 h-3.5" /> Ordenar:
+                    </span>
+                    <select
+                      value={clientSortBy}
+                      onChange={(e: any) => setClientSortBy(e.target.value)}
+                      className="bg-gray-50 border border-gray-200 text-xs font-bold text-brand-dark py-2 px-3 rounded-xl focus:outline-none focus:border-brand-blue cursor-pointer"
+                    >
+                      <option value="spent">Maior Valor Gasto (VIPs)</option>
+                      <option value="appointments">Mais Atendimentos</option>
+                      <option value="recent">Mais Recentes</option>
+                      <option value="name">Nome (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
+                        <th className="p-3">Cliente</th>
+                        <th className="p-3">Contato</th>
+                        <th className="p-3 text-center">Atendimentos</th>
+                        <th className="p-3 text-right">Total Gasto (R$)</th>
+                        <th className="p-3 text-center">Última Visita</th>
+                        <th className="p-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-700">
+                      {filteredAndSorted.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-gray-400">
+                            Nenhum cliente encontrado.
                           </td>
                         </tr>
-                      ))}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredAndSorted.map((c) => {
+                          const isVip = c.totalSpent >= 100 || c.completedCount >= 5;
+                          const isFrequent = !isVip && c.completedCount >= 2;
+
+                          return (
+                            <tr key={c.id} className="hover:bg-gray-50/80 transition-colors">
+                              <td className="p-3 font-bold text-brand-dark">
+                                <div className="flex items-center gap-2">
+                                  <span>{c.name}</span>
+                                  {isVip && (
+                                    <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                      <Crown className="w-3 h-3 text-amber-600" /> VIP
+                                    </span>
+                                  )}
+                                  {isFrequent && (
+                                    <span className="text-[9px] font-black uppercase bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                                      Frequente
+                                    </span>
+                                  )}
+                                  {c.completedCount === 0 && (
+                                    <span className="text-[9px] font-bold uppercase bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                                      Novo
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <div className="font-mono text-gray-700">{c.phone}</div>
+                                {c.email && <div className="text-[10px] text-gray-400 truncate max-w-[160px]">{c.email}</div>}
+                              </td>
+
+                              <td className="p-3 text-center">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-gray-100 text-gray-700">
+                                  {c.completedCount} {c.completedCount === 1 ? 'corte' : 'cortes'}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-right">
+                                <span className="font-mono font-black text-sm text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 inline-block">
+                                  R$ {c.totalSpent.toFixed(2).replace('.', ',')}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-center text-gray-500 font-medium text-[11px]">
+                                {c.lastVisitFormatted}
+                              </td>
+
+                              <td className="p-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => setSelectedClientForHistory(c)}
+                                    className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg transition-colors cursor-pointer text-[11px] flex items-center gap-1"
+                                    title="Ver Histórico de Agendamentos e Gastos"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-brand-blue" />
+                                    <span className="hidden sm:inline">Histórico</span>
+                                  </button>
+                                  <a 
+                                    href={`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(c.name)},%20tudo%20bem?%20Gostaria%20de%20agendar%20um%20horário%20na%20${encodeURIComponent(merchant?.nomeBarbearia || 'barbearia')}?`}
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                    title="Enviar mensagem WhatsApp"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">WhatsApp</span>
+                                  </a>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* TAB: CONFIGURAÇÕES */}
         {activeTab === 'configuracoes' && (
@@ -3754,6 +3956,146 @@ export default function MerchantDashboard({
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* MODAL: CLIENT HISTORY & SPENDING BREAKDOWN */}
+      <AnimatePresence>
+        {selectedClientForHistory && (() => {
+          const client = selectedClientForHistory;
+          const normPhone = (client.phone || '').replace(/\D/g, '');
+          const normName = (client.name || '').trim().toLowerCase();
+
+          const clientApps = appointments.filter(a => {
+            const appPhone = (a.clientPhone || '').replace(/\D/g, '');
+            const appName = (a.clientName || '').trim().toLowerCase();
+            if (normPhone && appPhone && normPhone === appPhone) return true;
+            if (normName && appName && normName === appName) return true;
+            return false;
+          }).sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || '')));
+
+          const completedApps = clientApps.filter(a => a.status === 'completed');
+          const totalSpent = completedApps.reduce((acc, app) => {
+            const srv = services.find(s => s.id === app.serviceId);
+            return acc + (srv ? srv.price : 0);
+          }, 0);
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-3xl max-w-lg w-full p-6 text-left space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+              >
+                <button 
+                  onClick={() => setSelectedClientForHistory(null)} 
+                  className="absolute top-4 right-4 p-1.5 hover:bg-gray-100 rounded-full text-gray-400 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div>
+                  <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-bold px-2.5 py-1 rounded-full uppercase">
+                    Histórico & Consumo do Cliente
+                  </span>
+                  <h3 className="font-display font-black text-xl text-brand-dark mt-1">
+                    {client.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 font-mono mt-0.5">
+                    {client.phone} {client.email ? `• ${client.email}` : ''}
+                  </p>
+                </div>
+
+                {/* SUMMARY STATS FOR THIS CLIENT */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="bg-emerald-50 border border-emerald-100 p-3.5 rounded-2xl">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase">Total Gasto</span>
+                    <div className="text-lg font-black font-mono text-emerald-800 mt-0.5">
+                      R$ {totalSpent.toFixed(2).replace('.', ',')}
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-2xl">
+                    <span className="text-[10px] font-bold text-blue-700 uppercase">Atendimentos</span>
+                    <div className="text-lg font-black font-mono text-blue-800 mt-0.5">
+                      {completedApps.length} concluídos
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-100 p-3.5 rounded-2xl col-span-2 sm:col-span-1">
+                    <span className="text-[10px] font-bold text-purple-700 uppercase">Média / Visita</span>
+                    <div className="text-lg font-black font-mono text-purple-800 mt-0.5">
+                      R$ {completedApps.length > 0 ? (totalSpent / completedApps.length).toFixed(2).replace('.', ',') : '0,00'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* APPOINTMENT LIST HISTORY */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-xs text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-brand-blue" />
+                    Histórico de Agendamentos ({clientApps.length})
+                  </h4>
+
+                  {clientApps.length === 0 ? (
+                    <div className="p-6 bg-gray-50 rounded-2xl text-center text-xs text-gray-400">
+                      Nenhum agendamento registrado para este cliente ainda.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {clientApps.map(app => {
+                        const srv = services.find(s => s.id === app.serviceId);
+                        const barb = barbers.find(b => b.id === app.barberId);
+
+                        return (
+                          <div key={app.id} className="p-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs flex items-center justify-between gap-2">
+                            <div>
+                              <div className="font-bold text-brand-dark">
+                                {srv ? srv.name : 'Serviço'}
+                              </div>
+                              <div className="text-[11px] text-gray-500 font-medium">
+                                📅 {app.date ? new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR') : ''} às {app.time}
+                                {barb ? ` • ${barb.name}` : ''}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-mono font-bold text-emerald-600">
+                                R$ {srv ? srv.price.toFixed(2).replace('.', ',') : '0,00'}
+                              </div>
+                              <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full inline-block mt-0.5 ${
+                                app.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                                app.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                                app.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {app.status === 'completed' ? 'Concluído' : app.status === 'confirmed' ? 'Confirmado' : app.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <a 
+                    href={`https://wa.me/55${client.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(client.name)},%20tudo%20bem?`}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-1.5 uppercase transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Enviar WhatsApp</span>
+                  </a>
+                  <button 
+                    onClick={() => setSelectedClientForHistory(null)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs px-5 py-3 rounded-xl uppercase transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* MODAL: NEW APPOINTMENT */}

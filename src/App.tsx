@@ -135,7 +135,15 @@ export default function App() {
   // Check for public vitrine slug on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const slug = params.get('v') || params.get('vitrine');
+    let slug = params.get('v') || params.get('vitrine');
+
+    if (!slug) {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      if (pathParts.length >= 2 && (pathParts[0] === 'vitrine' || pathParts[0] === 'v')) {
+        slug = decodeURIComponent(pathParts[1]);
+      }
+    }
+
     if (slug) {
       setIsPublicVitrineLoading(true);
       firebaseService.getMerchantBySlug(slug).then(async (m) => {
@@ -169,7 +177,7 @@ export default function App() {
         } else {
           alert('Barbearia / Vitrine não encontrada.');
           // Clear query parameters
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, '/');
         }
       }).catch((err) => {
         console.error("Error fetching merchant by slug:", err);
