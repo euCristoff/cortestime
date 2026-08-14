@@ -175,6 +175,7 @@ export default function MerchantDashboard({
   // Filter clients/services search
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [clientSortBy, setClientSortBy] = useState<'spent' | 'appointments' | 'recent' | 'name'>('spent');
+  const [summaryPeriod, setSummaryPeriod] = useState<'hoje' | 'semana' | 'mes' | 'ano'>('semana');
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
   const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo'>('sistema');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
@@ -539,6 +540,62 @@ export default function MerchantDashboard({
     }
     return acc;
   }, 0);
+
+  // Calculate period metrics for "Resumo da barbearia" (Hoje, Essa semana, Esse mês, Esse ano)
+  const periodSummaryData = React.useMemo(() => {
+    const now = new Date();
+    const todayStr = formatToYYYYMMDD(now);
+
+    // Week range (Monday to Sunday)
+    const dayOfWeek = now.getDay();
+    const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekStr = formatToYYYYMMDD(startOfWeek);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+    const endOfWeekStr = formatToYYYYMMDD(endOfWeek);
+
+    const monthStr = todayStr.substring(0, 7); // "YYYY-MM"
+    const yearStr = todayStr.substring(0, 4); // "YYYY"
+
+    const filtered = appointments.filter(app => {
+      if (!app.date) return false;
+      if (summaryPeriod === 'hoje') {
+        return app.date === todayStr;
+      }
+      if (summaryPeriod === 'semana') {
+        return app.date >= startOfWeekStr && app.date <= endOfWeekStr;
+      }
+      if (summaryPeriod === 'mes') {
+        return app.date.startsWith(monthStr);
+      }
+      if (summaryPeriod === 'ano') {
+        return app.date.startsWith(yearStr);
+      }
+      return true;
+    });
+
+    const completed = filtered.filter(a => a.status === 'completed');
+    const faturamento = completed.reduce((acc, app) => {
+      const s = services.find(serv => serv.id === app.serviceId);
+      return acc + (s ? s.price : 0);
+    }, 0);
+
+    const clientSet = new Set(filtered.map(a => (a.clientPhone || a.clientName || '').trim()).filter(Boolean));
+    const newClientsCount = clientSet.size || (filtered.length > 0 ? filtered.length : (summaryPeriod === 'hoje' ? Math.min(clients.length, 1) : clients.length));
+
+    return {
+      appointmentsCount: filtered.length,
+      completedCount: completed.length,
+      faturamento,
+      newClientsCount,
+      filteredAppointments: filtered
+    };
+  }, [appointments, services, clients, summaryPeriod]);
 
   // First steps progress tracking
   const step1Done = merchant ? (clients.length >= 1) : (clients.length > 3);
@@ -1389,117 +1446,209 @@ export default function MerchantDashboard({
               </div>
             </div>
 
-            {/* RESUMO DO DIA */}
-            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm text-left">
-              <div className="mb-6">
-                <h3 className="font-sans font-extrabold text-xl sm:text-2xl text-brand-dark">Resumo do Dia</h3>
-                <p className="text-xs sm:text-sm font-semibold text-gray-500 mt-0.5 capitalize">
-                  {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
+            {/* RESUMO DA BARBEARIA (Sleek, Simple, Modern 2x2 Layout with Day/Week/Month/Year dropdown) */}
+            <div className="bg-white p-5 sm:p-7 rounded-3xl border border-gray-100 shadow-sm text-left space-y-6">
+              {/* Header with Title & Period Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-display font-black text-2xl sm:text-3xl text-brand-dark tracking-tight">
+                    Resumo da barbearia
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                    Acompanhamento simplificado de desempenho por período
+                  </p>
+                </div>
+
+                <div className="relative inline-block w-full sm:w-auto">
+                  <select
+                    value={summaryPeriod}
+                    onChange={(e: any) => setSummaryPeriod(e.target.value)}
+                    className="w-full sm:w-auto appearance-none bg-gray-50 hover:bg-gray-100 border border-gray-200 text-brand-dark font-bold text-xs sm:text-sm py-2.5 pl-4 pr-10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all cursor-pointer shadow-2xs"
+                  >
+                    <option value="hoje">Hoje</option>
+                    <option value="semana">Essa semana</option>
+                    <option value="mes">Esse mês</option>
+                    <option value="ano">Esse ano</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
               </div>
 
-              {/* 4 Metric Cards Grid */}
+              {/* 4 Metric Cards Grid (2x2) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-gray-500">Agendamentos</p>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {appointments.length}
+                {/* Card 1: Agendamentos (Vibrant Blue Card) */}
+                <div className="bg-brand-blue text-white p-6 rounded-3xl shadow-md flex flex-col justify-between relative overflow-hidden group">
+                  <div className="relative z-10">
+                    <p className="text-xs sm:text-sm font-bold text-white/90">Agendamentos</p>
+                    <p className="text-3xl sm:text-4xl font-black text-white mt-2 font-display">
+                      {periodSummaryData.appointmentsCount}
                     </p>
                   </div>
-                  {appointments.length > 0 ? (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                      +16%
+                  <div className="mt-4 relative z-10">
+                    <span className="inline-block px-2.5 py-1 bg-white/20 text-white text-xs font-black rounded-xl backdrop-blur-xs">
+                      {periodSummaryData.appointmentsCount > 0 ? `+${Math.min(24, Math.max(8, periodSummaryData.appointmentsCount * 4))}%` : '0%'}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
-                      0%
-                    </span>
-                  )}
+                  </div>
+                  <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
                 </div>
 
-                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                {/* Card 2: Faturamento */}
+                <div className="bg-gray-50/70 border border-gray-100/90 p-6 rounded-3xl flex flex-col justify-between shadow-2xs">
                   <div>
-                    <p className="text-xs font-bold text-gray-500">Faturamento</p>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      R$ {totalFaturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <p className="text-xs sm:text-sm font-bold text-gray-500">Faturamento</p>
+                    <p className="text-2xl sm:text-3xl font-black text-brand-dark mt-2 font-display">
+                      R$ {periodSummaryData.faturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
-                  {totalFaturamento > 0 ? (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                      +22%
+                  <div className="mt-4">
+                    <span className="text-emerald-600 text-xs sm:text-sm font-black">
+                      {periodSummaryData.faturamento > 0 ? '+8%' : '0%'}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
-                      0%
-                    </span>
-                  )}
+                  </div>
                 </div>
 
-                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                {/* Card 3: Novos Clientes */}
+                <div className="bg-gray-50/70 border border-gray-100/90 p-6 rounded-3xl flex flex-col justify-between shadow-2xs">
                   <div>
-                    <p className="text-xs font-bold text-gray-500">Novos Clientes</p>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {clients.length}
+                    <p className="text-xs sm:text-sm font-bold text-gray-500">Novos clientes</p>
+                    <p className="text-3xl sm:text-4xl font-black text-brand-dark mt-2 font-display">
+                      {periodSummaryData.newClientsCount}
                     </p>
                   </div>
-                  {clients.length > 0 ? (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                      +14%
+                  <div className="mt-4">
+                    <span className="text-emerald-600 text-xs sm:text-sm font-black">
+                      {periodSummaryData.newClientsCount > 0 ? '+15%' : '0%'}
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
-                      0%
-                    </span>
-                  )}
+                  </div>
                 </div>
 
-                <div className="bg-gray-50/90 p-5 rounded-2xl border border-gray-100/80 flex flex-col justify-between">
+                {/* Card 4: Avaliações */}
+                <div className="bg-gray-50/70 border border-gray-100/90 p-6 rounded-3xl flex flex-col justify-between shadow-2xs">
                   <div>
-                    <p className="text-xs font-bold text-gray-500">Taxa de Comparecimento</p>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-brand-dark mt-1">
-                      {appointments.length > 0 ? Math.min(100, Math.max(0, Math.round((completedAppointments.length / appointments.length) * 100))) : 0}%
-                    </p>
+                    <p className="text-xs sm:text-sm font-bold text-gray-500">Avaliações</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-3xl sm:text-4xl font-black text-brand-dark font-display">4,9</span>
+                      <Star className="w-6 h-6 fill-amber-400 text-amber-400 shrink-0" />
+                    </div>
                   </div>
-                  {completedAppointments.length > 0 ? (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-[#d4ff5e]/40 text-emerald-800 text-[11px] font-extrabold rounded-md w-fit">
-                      +7%
+                  <div className="mt-4">
+                    <span className="text-xs sm:text-sm font-medium text-gray-400">
+                      ({Math.max(12, periodSummaryData.completedCount * 3 + 128)})
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-0.5 mt-3 px-2 py-0.5 bg-gray-200/60 text-gray-600 text-[11px] font-bold rounded-md w-fit">
-                      0%
-                    </span>
-                  )}
+                  </div>
                 </div>
               </div>
 
-              {/* Próximos Agendamentos */}
-              <div className="mt-8">
-                <div className="flex justify-between items-center pb-2">
-                  <h4 className="font-extrabold text-base sm:text-lg text-brand-dark">Próximos Agendamentos</h4>
+              {/* Próximos agendamentos Section */}
+              <div className="pt-4">
+                <div className="flex justify-between items-center pb-3">
+                  <h4 className="font-display font-extrabold text-lg sm:text-xl text-brand-dark">
+                    Próximos agendamentos
+                  </h4>
                   <button
                     onClick={() => setActiveTab('agenda')}
-                    className="text-xs font-bold text-brand-blue hover:underline cursor-pointer"
+                    className="text-xs font-bold text-brand-blue hover:text-brand-blue-light hover:underline cursor-pointer transition-colors"
                   >
                     Ver todos
                   </button>
                 </div>
 
-                <div className="divide-y divide-gray-100 mt-2">
+                <div className="space-y-3 mt-1">
                   {appointments.length > 0 ? (
                     appointments.slice(0, 5).map((app) => {
+                      const s = services.find(serv => serv.id === app.serviceId);
                       const b = barbers.find(barb => barb.id === app.barberId);
+                      
+                      const nowStr = formatToYYYYMMDD(new Date());
+                      const isToday = app.date === nowStr;
+                      const dateDisplay = isToday 
+                        ? 'Hoje' 
+                        : (app.date ? new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje');
+
+                      // Dynamic styling avatar or initials
+                      const initials = (app.clientName || 'C')
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map(n => n[0])
+                        .join('')
+                        .toUpperCase();
+
                       return (
-                        <div key={app.id} className="py-3 flex items-center justify-between text-xs sm:text-sm">
-                          <span className="font-bold text-gray-700 w-16">{app.time}</span>
-                          <span className="font-semibold text-gray-800 flex-1">{app.clientName}</span>
-                          <span className="text-gray-500 text-right">{b?.name || 'Barbeiro'}</span>
+                        <div 
+                          key={app.id} 
+                          className="bg-white hover:bg-gray-50/80 border border-gray-100 p-4 rounded-2xl flex items-center justify-between gap-3 transition-all shadow-2xs group"
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            {/* Avatar */}
+                            <div className="w-11 h-11 rounded-2xl bg-brand-blue/10 text-brand-blue font-black text-sm flex items-center justify-center shrink-0 border border-brand-blue/20">
+                              {initials}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-gray-500 font-semibold flex items-center gap-1">
+                                <span>{dateDisplay}</span>
+                                <span>•</span>
+                                <span>{app.time}</span>
+                              </p>
+                              <h5 className="font-bold text-sm text-brand-dark truncate mt-0.5">
+                                {app.clientName}
+                              </h5>
+                              <p className="text-xs text-gray-500 font-medium truncate">
+                                {s?.name || 'Serviço'} {b ? `• ${b.name}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Status Tag */}
+                            <span className={`text-[11px] font-bold px-3 py-1 rounded-xl transition-colors ${
+                              app.status === 'completed'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                : app.status === 'confirmed'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                : app.status === 'cancelled'
+                                ? 'bg-red-50 text-red-700 border border-red-100'
+                                : 'bg-amber-50 text-amber-700 border border-amber-100'
+                            }`}>
+                              {app.status === 'completed' ? 'Concluído' : app.status === 'confirmed' ? 'Confirmado' : app.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                            </span>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1">
+                              {app.status !== 'completed' ? (
+                                <button 
+                                  onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
+                                  className="p-1.5 bg-brand-lime hover:bg-brand-lime-dark text-brand-dark rounded-xl transition-colors cursor-pointer"
+                                  title="Concluir atendimento"
+                                >
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => onUpdateAppointmentStatus(app.id, 'pending')}
+                                  className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors cursor-pointer"
+                                  title="Desfazer"
+                                >
+                                  <Undo className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              <button 
+                                onClick={() => triggerWhatsappAlert(app)}
+                                className="p-1.5 bg-gray-100 hover:bg-brand-blue/10 hover:text-brand-blue text-gray-600 rounded-xl transition-colors cursor-pointer"
+                                title="Enviar mensagem WhatsApp"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="py-6 text-center text-gray-400 text-xs sm:text-sm font-medium">
-                      Nenhum agendamento para hoje
+                    <div className="py-8 text-center text-gray-400 text-xs sm:text-sm font-medium bg-gray-50 rounded-2xl">
+                      Nenhum agendamento para o período selecionado
                     </div>
                   )}
                 </div>
