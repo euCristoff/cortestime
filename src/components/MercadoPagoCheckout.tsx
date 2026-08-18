@@ -46,11 +46,53 @@ export default function MercadoPagoCheckout({
   const [copiedCode, setCopiedCode] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isGeneratingCheckout, setIsGeneratingCheckout] = useState(false);
+  const [dynamicInitPoint, setDynamicInitPoint] = useState<string | null>(null);
   
   const [isSubmittingNotification, setIsSubmittingNotification] = useState(false);
-  const [paymentNotified, setPaymentNotified] = useState(merchant.pagamentoPendente === true);
+  const [paymentNotified, setPaymentNotified] = useState(false);
 
   const pollIntervalRef = useRef<any>(null);
+
+  // Pre-load Checkout Pro Preference upon mounting or selecting tab
+  const generateCheckoutProUrl = async () => {
+    if (dynamicInitPoint) return dynamicInitPoint;
+    setIsGeneratingCheckout(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/criar-pagamento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planName,
+          merchantUid: merchant.uid,
+          email: merchant.email
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMessage(data.error || "Erro ao conectar com o Mercado Pago.");
+        return null;
+      }
+
+      const url = data.init_point || data.sandbox_init_point;
+      if (url) {
+        setDynamicInitPoint(url);
+        return url;
+      }
+    } catch (err) {
+      console.error("Erro ao gerar link Checkout Pro:", err);
+      setErrorMessage("Não foi possível gerar a preferência de pagamento. Verifique a conexão ou as credenciais do Mercado Pago.");
+    } finally {
+      setIsGeneratingCheckout(false);
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    generateCheckoutProUrl();
+  }, [planName, merchant]);
 
   // Clear polling on unmount
   useEffect(() => {
@@ -266,15 +308,25 @@ export default function MercadoPagoCheckout({
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                onPaymentSuccess();
-                onClose();
-              }}
-              className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer border-none"
-            >
-              Voltar ao Painel
-            </button>
+            <div className="space-y-2.5 pt-2">
+              <button
+                onClick={() => setPaymentNotified(false)}
+                className="w-full bg-[#bffd32] hover:bg-[#a6e025] text-[#051b42] font-black py-3.5 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer border-none shadow-lg flex items-center justify-center gap-2"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Gerar Novo Código / Pagar Agora</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onPaymentSuccess();
+                  onClose();
+                }}
+                className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-3 rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer border-none"
+              >
+                Voltar ao Painel
+              </button>
+            </div>
           </div>
         ) : (
           /* PAYMENT OPTIONS TABS */
@@ -423,22 +475,47 @@ export default function MercadoPagoCheckout({
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl text-left flex gap-3 items-center text-[11px] text-gray-200 leading-snug">
                   <ExternalLink className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
-                    <span className="font-extrabold text-white">Pagamento Online no Mercado Pago:</span> Pague a assinatura da sua barbearia via Cartão de Crédito, Saldo em conta ou Boleto diretamente no Mercado Pago.
+                    <span className="font-extrabold text-white">Mercado Pago Checkout Pro:</span> Pague a assinatura da sua barbearia via Cartão de Crédito, Saldo no Mercado Pago, Pix ou Boleto com segurança no ambiente oficial.
                   </div>
                 </div>
 
                 <div className="bg-white/5 border border-white/15 p-4 rounded-2xl space-y-3 text-center">
-                  <a 
-                    href={paymentLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-4 px-5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer"
+                  {errorMessage && (
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-300 p-3 rounded-xl text-xs flex items-start gap-2 text-left">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
+
+                  <button 
+                    type="button"
+                    disabled={isGeneratingCheckout}
+                    onClick={async () => {
+                      let targetUrl = dynamicInitPoint;
+                      if (!targetUrl) {
+                        targetUrl = await generateCheckoutProUrl();
+                      }
+
+                      if (targetUrl) {
+                        window.location.href = targetUrl;
+                      }
+                    }}
+                    className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-4 px-5 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer border-none"
                   >
-                    <span>Pagar via Checkout Mercado Pago</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                    {isGeneratingCheckout ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Abrindo Checkout Oficial...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Pagar com Cartão / Mercado Pago</span>
+                        <ExternalLink className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
                   <p className="text-[10px] text-gray-400">
-                    Você será redirecionado para o ambiente seguro do Mercado Pago para finalizar.
+                    Você será redirecionado para a página oficial do Mercado Pago para pagar com Cartão de Crédito, Saldo, Boleto ou Pix.
                   </p>
                 </div>
               </div>

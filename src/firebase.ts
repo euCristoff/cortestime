@@ -1,7 +1,15 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  setLogLevel
+} from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import appletConfig from "../firebase-applet-config.json";
+
+// Configure Firestore log level to silent / error only (silences standard idle stream disconnection notices)
+setLogLevel("error");
 
 // Configuração oficial do seu projeto Firebase (cortestimey)
 const prodConfig = {
@@ -20,12 +28,16 @@ const activeConfig = prodConfig;
 // Inicializa o Firebase com a configuração ativa
 const app = initializeApp(activeConfig);
 
-// Inicializa o Firestore
+// Inicializa o Firestore com auto-detect de polling e persistência robusta de cache
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true,
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
 });
 
 // Inicializa o Auth com a instância ativa
 export const auth = getAuth(app);
 
 export { app };
+

@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { MercadoPagoConfig, Preference } from "mercadopago";
 import { initializeApp } from "firebase/app";
 import { 
   initializeFirestore, 
@@ -10,8 +11,12 @@ import {
   doc, 
   updateDoc,
   query,
-  where
+  where,
+  setLogLevel
 } from "firebase/firestore";
+
+// Silence benign Firestore idle stream disconnection notices
+setLogLevel("error");
 
 // Firebase Config same as src/firebase.ts
 const firebaseConfig = {
@@ -195,6 +200,86 @@ app.use(express.json());
       mpPublicKey: mpPublicKeyStatus,
       brevo: brevoStatus
     });
+  });
+
+  // Admin Authorized Email List
+  const ADMIN_AUTHORIZED_EMAILS = [
+    "cristoffcauaff9@gmail.com",
+    "cristoffcaua123456@gmail.com",
+    "cristoffcauaff123456@gmail.com",
+    "suportecortestime@gmail.com"
+  ];
+
+  function isAuthorizedAdminEmail(email?: string): boolean {
+    if (!email || typeof email !== "string") return false;
+    const clean = email.toLowerCase().trim();
+    return ADMIN_AUTHORIZED_EMAILS.includes(clean);
+  }
+
+  // Admin Verification Endpoint
+  app.post("/api/admin/verify", async (req, res) => {
+    try {
+      const { email, token } = req.body;
+      const isAdmin = isAuthorizedAdminEmail(email);
+
+      if (isAdmin) {
+        res.json({ authorized: true, role: "super_admin", email });
+      } else {
+        res.status(403).json({ authorized: false, error: "Acesso não autorizado. Área restrita ao administrador da plataforma." });
+      }
+    } catch (err: any) {
+      res.status(500).json({ authorized: false, error: err.message });
+    }
+  });
+
+  // Secure Admin Analytics Endpoint
+  app.post("/api/admin/analytics-summary", async (req, res) => {
+    try {
+      const { adminEmail } = req.body;
+      if (!isAuthorizedAdminEmail(adminEmail)) {
+        res.status(403).json({ error: "Acesso negado. Apenas o administrador autorizado pode visualizar as métricas." });
+        return;
+      }
+
+      // Fetch users, visits, events from Firestore
+      let users: any[] = [];
+      let visits: any[] = [];
+      let events: any[] = [];
+
+      try {
+        const usersSnap = await getDocs(collection(db, "users"));
+        users = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Server analytics users fetch notice:", e);
+      }
+
+      try {
+        const visitsSnap = await getDocs(collection(db, "analytics_visits"));
+        visits = visitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Server analytics visits fetch notice:", e);
+      }
+
+      try {
+        const eventsSnap = await getDocs(collection(db, "analytics_events"));
+        events = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.warn("Server analytics events fetch notice:", e);
+      }
+
+      res.json({
+        success: true,
+        usersCount: users.length,
+        visitsCount: visits.length,
+        eventsCount: events.length,
+        users,
+        visits,
+        events
+      });
+    } catch (error: any) {
+      console.error("Error in admin analytics summary endpoint:", error);
+      res.status(500).json({ error: error.message || "Erro ao processar métricas do servidor" });
+    }
   });
 
   // Proxy Endpoint: Create or Update Brevo Contact
@@ -642,6 +727,155 @@ app.use(express.json());
       res.json({ success: true, message: "Standard automation routine executed" });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Tabela oficial de produtos e preços validados no servidor (não aceita valor alterado do navegador)
+  const OFFICIAL_CATALOG: Record<string, { title: string; unit_price: number; description: string }> = {
+    "mensal": {
+      title: "Plano Mensal - Cortestime Pro",
+      unit_price: 19.90,
+      description: "Assinatura Mensal do Cortestime Pro para Barbearias"
+    },
+    "trimestral": {
+      title: "Plano Trimestral - Cortestime Pro",
+      unit_price: 49.90,
+      description: "Assinatura Trimestral do Cortestime Pro para Barbearias"
+    },
+    "anual": {
+      title: "Plano Anual - Cortestime Pro",
+      unit_price: 149.90,
+      description: "Assinatura Anual do Cortestime Pro para Barbearias"
+    },
+    "pro": {
+      title: "Plano Mensal - Cortestime Pro",
+      unit_price: 19.90,
+      description: "Assinatura Mensal do Cortestime Pro para Barbearias"
+    }
+  };
+
+  // ROTA OFICIAL: POST /api/criar-pagamento (Mercado Pago Checkout Pro)
+  app.post("/api/criar-pagamento", async (req, res) => {
+    try {
+      const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+      
+      if (!accessToken || accessToken.trim() === "") {
+        console.error("[MercadoPago] MERCADO_PAGO_ACCESS_TOKEN não está configurado.");
+        res.status(500).json({ 
+          error: "Credenciais do Mercado Pago não configuradas. Cadastre MERCADO_PAGO_ACCESS_TOKEN nas variáveis de ambiente." 
+        });
+        return;
+      }
+
+      const { planId, planName, items, merchantUid, email } = req.body;
+
+      let validatedItems: Array<{ id: string; title: string; quantity: number; unit_price: number; currency_id?: string; description?: string }> = [];
+
+      // Se enviou planId / planName (ex: 'mensal', 'trimestral', 'anual')
+      const normalizedPlanKey = String(planId || planName || "").toLowerCase().trim();
+      const catalogItem = OFFICIAL_CATALOG[normalizedPlanKey];
+
+      if (catalogItem) {
+        // Validação rígida no servidor usando o catálogo oficial
+        validatedItems = [{
+          id: normalizedPlanKey || "plano_pro",
+          title: catalogItem.title,
+          quantity: 1,
+          unit_price: catalogItem.unit_price,
+          currency_id: "BRL",
+          description: catalogItem.description
+        }];
+      } else if (Array.isArray(items) && items.length > 0) {
+        // Validação de itens enviados
+        for (const item of items) {
+          const itemKey = String(item.id || item.title || "").toLowerCase().trim();
+          const match = OFFICIAL_CATALOG[itemKey];
+          
+          if (match) {
+            validatedItems.push({
+              id: itemKey || "plano_pro",
+              title: match.title,
+              quantity: Number(item.quantity) || 1,
+              unit_price: match.unit_price,
+              currency_id: "BRL",
+              description: match.description
+            });
+          } else {
+            // Se for um item customizado ou serviço avulso da barbearia, valida preço positivo
+            const unitPrice = Number(item.unit_price);
+            const quantity = Number(item.quantity) || 1;
+            
+            if (isNaN(unitPrice) || unitPrice <= 0) {
+              res.status(400).json({ error: `Valor unitário inválido para o item "${item.title}".` });
+              return;
+            }
+            
+            validatedItems.push({
+              id: String(item.id || `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`),
+              title: String(item.title || "Serviço Barbearia"),
+              quantity,
+              unit_price: unitPrice,
+              currency_id: "BRL",
+              description: item.description ? String(item.description) : undefined
+            });
+          }
+        }
+      } else {
+        res.status(400).json({ error: "Nenhum plano ou item válido foi informado para criar a preferência." });
+        return;
+      }
+
+      // Inicializa a configuração oficial do SDK Mercado Pago
+      const client = new MercadoPagoConfig({ 
+        accessToken: accessToken.trim(),
+        options: { timeout: 10000 }
+      });
+      const preference = new Preference(client);
+
+      // Detecta URL base válida para redirecionamentos e back_urls
+      let appBaseUrl = "https://cortestime.com.br";
+      const forwardedHost = req.headers["x-forwarded-host"] || req.headers["host"];
+      if (forwardedHost) {
+        const cleanHost = String(Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost).split(",")[0].trim();
+        // Mercado Pago exige URLs públicas (não localhost ou IPs privados) em back_urls
+        if (!cleanHost.includes("localhost") && !cleanHost.includes("127.0.0.1")) {
+          const proto = req.headers["x-forwarded-proto"] || "https";
+          appBaseUrl = `${proto}://${cleanHost}`;
+        }
+      }
+
+      // Cria a preferência no Checkout Pro
+      const preferenceResponse = await preference.create({
+        body: {
+          items: validatedItems,
+          payer: {
+            email: (email && email.includes("@")) ? email : "cliente@cortestime.com.br"
+          },
+          external_reference: merchantUid ? `${merchantUid}___${normalizedPlanKey || 'checkout'}` : undefined,
+          back_urls: {
+            success: `${appBaseUrl}/?payment=success`,
+            failure: `${appBaseUrl}/?payment=failure`,
+            pending: `${appBaseUrl}/?payment=pending`
+          },
+          statement_descriptor: "CORTESTIME"
+        }
+      });
+
+      console.log(`[MercadoPago] Preferência criada com sucesso! ID: ${preferenceResponse.id}`);
+
+      // Retorna estritamente preference.id e init_point (além de sandbox_init_point se em teste)
+      res.json({
+        id: preferenceResponse.id,
+        init_point: preferenceResponse.init_point,
+        sandbox_init_point: preferenceResponse.sandbox_init_point
+      });
+    } catch (err: any) {
+      console.error("[MercadoPago] Erro ao criar preferência no Checkout Pro:", err);
+      let errMsg = err?.message || "Erro ao gerar preferência no Mercado Pago";
+      if (err?.name === "MPForbiddenError" || errMsg.includes("UNAUTHORIZED") || errMsg.includes("policy")) {
+        errMsg = "O Access Token do Mercado Pago informado é inválido ou não possui permissão para criar preferências nesta conta. Verifique suas credenciais em developers.mercadopago.com.";
+      }
+      res.status(500).json({ error: errMsg });
     }
   });
 

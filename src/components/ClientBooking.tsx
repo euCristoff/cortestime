@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   ChevronLeft, 
   ChevronRight, 
   User, 
   Check, 
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Search,
+  AlertTriangle,
+  Clock,
+  Scissors,
+  Ban,
+  RotateCcw
 } from 'lucide-react';
-import { Service, Barber, Appointment } from '../types';
+import { Service, Barber, Appointment, AppNotification } from '../types';
+import { firebaseService } from '../services/firebaseService';
+import { notificationService } from '../services/notificationService';
 
 interface ClientBookingProps {
   businessName: string;
@@ -16,6 +24,7 @@ interface ClientBookingProps {
   barbers: Barber[];
   onBookAppointment: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
   onClose: () => void;
+  merchantUid?: string;
 }
 
 export default function ClientBooking({ 
@@ -24,10 +33,11 @@ export default function ClientBooking({
   services, 
   barbers, 
   onBookAppointment, 
-  onClose 
+  onClose,
+  merchantUid
 }: ClientBookingProps) {
-  // Step 1: Service, 2: Professional, 3: Date & Time, 4: Client Info, 5: Confirmation
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Step 1: Service, 2: Professional, 3: Date & Time, 4: Client Info, 5: Confirmation, 6: Meus Agendamentos
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
@@ -37,6 +47,14 @@ export default function ClientBooking({
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>('');
+
+  // Meus Agendamentos State
+  const [searchPhone, setSearchPhone] = useState<string>('');
+  const [clientAppointments, setClientAppointments] = useState<Appointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState<boolean>(false);
+  const [cancellingApp, setCancellingApp] = useState<Appointment | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState<string | null>(null);
 
   // 30-minute interval time slots as requested
   const timeSlots = [
@@ -222,6 +240,100 @@ export default function ClientBooking({
     );
   };
 
+  const handleSearchClientAppointments = async (phoneToSearch?: string) => {
+    const rawPhone = (phoneToSearch || searchPhone || phone || '').replace(/\D/g, '');
+    if (!rawPhone || rawPhone.length < 8) {
+      setBookingError('Por favor, informe seu telefone com DDD para consultar.');
+      return;
+    }
+    setIsLoadingAppointments(true);
+    setBookingError(null);
+    setCancelSuccessMsg(null);
+
+    try {
+      let list: Appointment[] = [];
+      if (merchantUid) {
+        const merchantApps = await firebaseService.getAppointments(merchantUid);
+        list = merchantApps.filter(a => a.clientPhone.replace(/\D/g, '') === rawPhone || a.clientPhone.includes(rawPhone));
+      } else {
+        // Search in local storage
+        const localKeys = Object.keys(localStorage).filter(k => k.startsWith('cortestime_appointments_') || k === 'cortestime_guest_appointments');
+        const all: Appointment[] = [];
+        for (const k of localKeys) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(k) || '[]');
+            all.push(...parsed);
+          } catch (_) {}
+        }
+        list = all.filter(a => a.clientPhone.replace(/\D/g, '') === rawPhone || a.clientPhone.includes(rawPhone));
+      }
+      setClientAppointments(list);
+    } catch (err) {
+      console.error('Error fetching client appointments:', err);
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  };
+
+  const handleConfirmCancelAppointment = async () => {
+    if (!cancellingApp) return;
+
+    const serv = services.find(s => s.id === cancellingApp.serviceId);
+    const barber = barbers.find(b => b.id === cancellingApp.barberId);
+
+    try {
+      // 1. Update in Firebase / Local
+      await firebaseService.updateAppointmentStatus(cancellingApp.id, 'cancelled', {
+        cancelledBy: 'client',
+        cancellationReason: cancelReason.trim() || 'Cancelado pelo cliente'
+      });
+
+      // 2. Trigger push notification for Barbershop
+      notificationService.notifyCancellationToBarbershop(
+        cancellingApp,
+        serv?.name,
+        cancelReason.trim()
+      );
+
+      // 3. Save notification in database
+      const notif: AppNotification = {
+        id: `notif-cancel-${cancellingApp.id}-${Date.now()}`,
+        ownerId: merchantUid || cancellingApp.ownerId || '',
+        clientPhone: cancellingApp.clientPhone,
+        target: 'barbershop',
+        type: 'cancellation_by_client',
+        title: '🚫 Agendamento Cancelado pelo Cliente',
+        body: `O cliente ${cancellingApp.clientName} cancelou o agendamento de ${serv?.name || 'Serviço'} (${cancellingApp.date} às ${cancellingApp.time}).${cancelReason.trim() ? ` Motivo: "${cancelReason.trim()}"` : ''}`,
+        appointmentId: cancellingApp.id,
+        clientName: cancellingApp.clientName,
+        serviceName: serv?.name || '',
+        barberName: barber?.name || '',
+        date: cancellingApp.date,
+        time: cancellingApp.time,
+        reason: cancelReason.trim(),
+        createdAt: new Date().toISOString(),
+        read: false
+      };
+      await firebaseService.saveNotification(notif);
+
+      // Update local state list
+      setClientAppointments(prev => prev.map(a => a.id === cancellingApp.id ? {
+        ...a,
+        status: 'cancelled',
+        cancelledBy: 'client',
+        cancellationReason: cancelReason.trim(),
+        cancelledAt: new Date().toISOString()
+      } : a));
+
+      setCancelSuccessMsg(`Horário do dia ${cancellingApp.date} às ${cancellingApp.time} cancelado com sucesso. A barbearia foi notificada!`);
+      setCancellingApp(null);
+      setCancelReason('');
+    } catch (err) {
+      console.error('Error cancelling appointment:', err);
+      alert('Houve um erro ao cancelar o agendamento. Tente novamente.');
+    }
+  };
+
   const handleFinishBooking = () => {
     setBookingError(null);
     if (!firstName.trim()) {
@@ -256,13 +368,28 @@ export default function ClientBooking({
       
       {/* Top Header with Title and Close 'X' Button */}
       <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-        <h2 className="text-lg sm:text-xl font-normal tracking-tight text-gray-900">
-          {step === 1 && 'Escolha um serviço'}
-          {step === 2 && 'Escolha um profissional'}
-          {step === 3 && 'Escolha uma data de horário'}
-          {step === 4 && 'Coloque suas informações'}
-          {step === 5 && 'Agendamento confirmado'}
-        </h2>
+        <div>
+          <h2 className="text-lg sm:text-xl font-normal tracking-tight text-gray-900">
+            {step === 1 && 'Escolha um serviço'}
+            {step === 2 && 'Escolha um profissional'}
+            {step === 3 && 'Escolha uma data de horário'}
+            {step === 4 && 'Coloque suas informações'}
+            {step === 5 && 'Agendamento confirmado'}
+            {step === 6 && 'Meus Agendamentos'}
+          </h2>
+          {step === 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                setStep(6);
+                if (phone) handleSearchClientAppointments(phone);
+              }}
+              className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer flex items-center gap-1 mt-0.5"
+            >
+              <span>Já agendou? Consultar ou cancelar horário</span>
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={onClose}
@@ -621,13 +748,259 @@ export default function ClientBooking({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-semibold shadow-md transition-colors cursor-pointer"
-          >
-            Concluir
-          </button>
+          <div className="w-full space-y-2 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setStep(6);
+                handleSearchClientAppointments(phone);
+              }}
+              className="w-full py-2.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Ver meus agendamentos / Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3.5 rounded-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-sm font-semibold shadow-md transition-colors cursor-pointer"
+            >
+              Concluir
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 6: MEUS AGENDAMENTOS (CONSULTA & CANCELAMENTO) */}
+      {step === 6 && (
+        <div className="py-2 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-4">
+            {/* Search Box */}
+            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200/80 space-y-2">
+              <label className="text-xs font-semibold text-gray-700 block">
+                Consulte seus agendamentos pelo telefone:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  placeholder="Ex: (11) 99999-9999"
+                  value={searchPhone || phone}
+                  onChange={(e) => setSearchPhone(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSearchClientAppointments()}
+                  disabled={isLoadingAppointments}
+                  className="px-4 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>{isLoadingAppointments ? 'Buscando...' : 'Buscar'}</span>
+                </button>
+              </div>
+            </div>
+
+            {cancelSuccessMsg && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl text-xs flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{cancelSuccessMsg}</span>
+              </div>
+            )}
+
+            {bookingError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs">
+                {bookingError}
+              </div>
+            )}
+
+            {/* List of Appointments */}
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+              {clientAppointments.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs space-y-2">
+                  <CalendarIcon className="w-8 h-8 mx-auto text-gray-300 stroke-[1.5]" />
+                  <p>Digite seu telefone acima para visualizar seus agendamentos nesta barbearia.</p>
+                </div>
+              ) : (
+                clientAppointments.map((app) => {
+                  const serv = services.find(s => s.id === app.serviceId);
+                  const barb = barbers.find(b => b.id === app.barberId);
+                  const isCancelled = app.status === 'cancelled';
+                  const isCancelledByBarbershop = isCancelled && app.cancelledBy === 'barbershop';
+                  const isCancelledByClient = isCancelled && app.cancelledBy === 'client';
+
+                  return (
+                    <div 
+                      key={app.id} 
+                      className={`p-4 rounded-2xl border transition-all text-left space-y-3 ${
+                        isCancelledByBarbershop
+                          ? 'bg-red-50/60 border-red-200'
+                          : isCancelled
+                          ? 'bg-gray-50 border-gray-200 opacity-75'
+                          : 'bg-white border-gray-200 hover:border-blue-300 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-sm text-gray-900">{serv?.name || 'Serviço Agendado'}</h4>
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <User className="w-3 h-3 text-gray-400" />
+                            <span>Profissional: <strong>{barb?.name || 'Profissional'}</strong></span>
+                          </p>
+                        </div>
+
+                        {isCancelled ? (
+                          <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            Cancelado
+                          </span>
+                        ) : app.status === 'completed' ? (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            Concluído
+                          </span>
+                        ) : (
+                          <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            Confirmado
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-700 font-medium pt-1 border-t border-gray-100">
+                        <span className="flex items-center gap-1">
+                          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
+                          {app.date}
+                        </span>
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock className="w-3.5 h-3.5 text-blue-600" />
+                          {app.time}
+                        </span>
+                      </div>
+
+                      {/* Barbershop cancellation alert */}
+                      {isCancelledByBarbershop && (
+                        <div className="bg-red-100/80 border border-red-300 p-2.5 rounded-xl text-xs text-red-900 space-y-1">
+                          <p className="font-bold flex items-center gap-1.5 text-red-800">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                            Aviso: Cancelado pela Barbearia
+                          </p>
+                          {app.cancellationReason && (
+                            <p className="text-[11px] text-red-700 italic">
+                              "{app.cancellationReason}"
+                            </p>
+                          )}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedService(serv || null);
+                                setSelectedBarber(barb || null);
+                                setStep(3);
+                              }}
+                              className="text-[11px] bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Reagendar Novo Horário</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cancelled by client message */}
+                      {isCancelledByClient && (
+                        <p className="text-[11px] text-gray-500 italic bg-gray-100/70 p-2 rounded-lg">
+                          Cancelado por você{app.cancellationReason ? `: "${app.cancellationReason}"` : ''}.
+                        </p>
+                      )}
+
+                      {/* Action to Cancel if active */}
+                      {!isCancelled && app.status !== 'completed' && (
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancellingApp(app);
+                              setCancelReason('');
+                            }}
+                            className="text-xs bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-xl border border-red-200 transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Cancelar Horário</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="px-5 py-2 rounded-full border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              ← Fazer Novo Agendamento
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2 rounded-full bg-gray-900 hover:bg-black text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO PELO CLIENTE */}
+      {cancellingApp && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl space-y-4 text-left border border-gray-100">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <Ban className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-gray-900">Cancelar Agendamento?</h3>
+              <p className="text-xs text-gray-500">
+                Data: <strong>{cancellingApp.date} às {cancellingApp.time}</strong>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-700 block">
+                Motivo do cancelamento (opcional):
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Ex: Tive um imprevisto de trabalho..."
+                rows={2}
+                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+              />
+            </div>
+
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              Ao confirmar, o horário será liberado na barbearia e enviaremos um aviso automático para a equipe.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancellingApp(null)}
+                className="py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelAppointment}
+                className="py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-red-600/20"
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

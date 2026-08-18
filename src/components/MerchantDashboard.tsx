@@ -56,16 +56,23 @@ import {
   Crown,
   ArrowUpDown,
   BarChart3,
-  History
+  History,
+  AlertTriangle,
+  CalendarX,
+  XCircle,
+  Info,
+  PhoneCall,
+  Loader2
 } from 'lucide-react';
-import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser } from '../types';
+import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser, AppNotification, QueueItem, ServiceMode } from '../types';
 import { notificationService } from '../services/notificationService';
 import CortesVitrine from './CortesVitrine';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import AdminSubscriptionManager from './AdminSubscriptionManager';
+import QueueManager from './QueueManager';
 import { firebaseService } from '../services/firebaseService';
 
-export type DashboardTab = 'inicio' | 'agenda' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'indique' | 'ajuda' | 'assinatura' | 'menu';
+export type DashboardTab = 'inicio' | 'agenda' | 'fila' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'indique' | 'ajuda' | 'assinatura' | 'menu';
 
 interface MerchantDashboardProps {
   onboardingData: OnboardingData;
@@ -80,7 +87,11 @@ interface MerchantDashboardProps {
   onDeleteBarber?: (barberId: string) => void;
   onAddClient: (client: Omit<Client, 'id'>) => void;
   onAddAppointment: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
-  onUpdateAppointmentStatus: (id: string, status: Appointment['status']) => void;
+  onUpdateAppointmentStatus: (
+    id: string, 
+    status: Appointment['status'], 
+    meta?: { cancelledBy?: 'client' | 'barbershop'; cancellationReason?: string }
+  ) => void;
   onLogout: () => void;
   firebaseConnected: boolean | null;
   onOpenClientBooking?: () => void;
@@ -132,10 +143,78 @@ export default function MerchantDashboard({
     cidade: addrObj?.cidade || onboardingData.city || 'Maceió',
     estado: addrObj?.estado || onboardingData.state || 'AL',
     instagram: merchant?.vitrineInstagram || '@barbearia',
-    facebook: merchant?.vitrineFacebook || ''
+    facebook: merchant?.vitrineFacebook || '',
+    serviceMode: (merchant?.serviceMode || 'agendamento') as ServiceMode
   });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccessMsg, setConfigSuccessMsg] = useState<string | null>(null);
+
+  // Real-time Queue State
+  const [merchantQueue, setMerchantQueue] = useState<QueueItem[]>([]);
+
+  useEffect(() => {
+    let isSubscribed = true;
+    const fetchQueue = async () => {
+      if (merchant?.uid) {
+        try {
+          const list = await firebaseService.getQueue(merchant.uid);
+          if (isSubscribed) {
+            setMerchantQueue(list);
+          }
+        } catch (e) {
+          console.warn('Erro ao carregar fila:', e);
+        }
+      }
+    };
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 6000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [merchant?.uid]);
+
+  const handleAddQueueItem = (item: Omit<QueueItem, 'id' | 'status' | 'joinedAt'>) => {
+    const newItemId = `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const fullItem: QueueItem = {
+      ...item,
+      id: newItemId,
+      ownerId: merchant?.uid || '',
+      status: 'waiting',
+      joinedAt: new Date().toISOString()
+    };
+    firebaseService.saveQueueItem(fullItem, merchant?.uid);
+    setMerchantQueue(prev => [...prev, fullItem]);
+  };
+
+  const handleStartQueueService = (itemId: string, barberId?: string) => {
+    firebaseService.updateQueueItemStatus(itemId, 'in_progress', {
+      startedAt: new Date().toISOString(),
+      ...(barberId ? { barberId } : {})
+    });
+    setMerchantQueue(prev => prev.map(q => q.id === itemId ? {
+      ...q,
+      status: 'in_progress',
+      startedAt: new Date().toISOString(),
+      ...(barberId ? { barberId } : {})
+    } : q));
+  };
+
+  const handleFinishQueueService = (itemId: string) => {
+    firebaseService.updateQueueItemStatus(itemId, 'completed', {
+      finishedAt: new Date().toISOString()
+    });
+    setMerchantQueue(prev => prev.map(q => q.id === itemId ? {
+      ...q,
+      status: 'completed',
+      finishedAt: new Date().toISOString()
+    } : q));
+  };
+
+  const handleRemoveQueueItem = (itemId: string) => {
+    firebaseService.deleteQueueItem(itemId);
+    setMerchantQueue(prev => prev.filter(q => q.id !== itemId));
+  };
 
   // Change Password state
   const [passForm, setPassForm] = useState({ currentPass: '', newPass: '', confirmPass: '' });
@@ -177,11 +256,42 @@ export default function MerchantDashboard({
   const [clientSortBy, setClientSortBy] = useState<'spent' | 'appointments' | 'recent' | 'name'>('spent');
   const [summaryPeriod, setSummaryPeriod] = useState<'hoje' | 'semana' | 'mes' | 'ano'>('semana');
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
-  const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo'>('sistema');
+  const [notifSubTab, setNotifSubTab] = useState<'sistema' | 'dispositivo' | 'cancelamentos'>('sistema');
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem('read-system-milestones');
     return stored ? JSON.parse(stored) : [];
   });
+
+  // Cancellation Modal & Notifications State
+  const [cancellingAppointment, setCancellingAppointment] = useState<Appointment | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancellingApp, setIsCancellingApp] = useState(false);
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState<string | null>(null);
+  const [merchantNotifications, setMerchantNotifications] = useState<AppNotification[]>([]);
+  const [filterCancelType, setFilterCancelType] = useState<'all' | 'client' | 'barbershop'>('all');
+
+  useEffect(() => {
+    let isSubscribed = true;
+    const fetchNotifications = async () => {
+      if (merchant?.uid) {
+        try {
+          const list = await firebaseService.getNotifications(merchant.uid);
+          if (isSubscribed) {
+            setMerchantNotifications(list);
+          }
+        } catch (e) {
+          console.warn('Erro ao carregar notificações do comerciante:', e);
+        }
+      }
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 8000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [merchant?.uid, appointments]);
 
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     notificationService.getPermissionStatus()
@@ -485,12 +595,214 @@ export default function MerchantDashboard({
 
   const activeMilestones = getSystemMilestones().filter(m => m.unlocked);
 
-  const unreadCount = activeMilestones.filter(m => !readNotificationIds.includes(m.id)).length;
+  const unreadPersistedNotifsCount = merchantNotifications.filter(n => !n.read).length;
+  const unreadCount = activeMilestones.filter(m => !readNotificationIds.includes(m.id)).length + unreadPersistedNotifsCount;
 
-  const markAllNotificationsAsRead = () => {
+  const markAllNotificationsAsRead = async () => {
     const allIds = activeMilestones.map(m => m.id);
     setReadNotificationIds(allIds);
     localStorage.setItem('read-system-milestones', JSON.stringify(allIds));
+    
+    // Mark merchant notifications as read
+    for (const notif of merchantNotifications) {
+      if (!notif.read) {
+        await firebaseService.markNotificationAsRead(notif.id);
+      }
+    }
+    setMerchantNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  // Handler for barbershop cancelling an appointment
+  const handleConfirmBarbershopCancel = async () => {
+    if (!cancellingAppointment) return;
+    setIsCancellingApp(true);
+    try {
+      const srv = services.find(s => s.id === cancellingAppointment.serviceId);
+      const serviceName = srv ? srv.name : 'Atendimento';
+      const cleanReason = cancelReason.trim() || 'Imprevisto na barbearia';
+      
+      // 1. Update appointment status to cancelled with metadata
+      onUpdateAppointmentStatus(cancellingAppointment.id, 'cancelled', {
+        cancelledBy: 'barbershop',
+        cancellationReason: cleanReason
+      });
+
+      // 2. Trigger browser notification for client
+      notificationService.notifyCancellationToClient(
+        cancellingAppointment,
+        serviceName,
+        cleanReason
+      );
+
+      // 3. Save notification in Firebase & localStorage for client
+      const clientNotifId = `notif-client-cancel-${Date.now()}`;
+      await firebaseService.saveNotification({
+        id: clientNotifId,
+        ownerId: merchant?.uid || '',
+        appointmentId: cancellingAppointment.id,
+        clientName: cancellingAppointment.clientName,
+        clientPhone: cancellingAppointment.clientPhone,
+        serviceName,
+        date: cancellingAppointment.date,
+        time: cancellingAppointment.time,
+        reason: cleanReason,
+        title: '❌ Agendamento Cancelado pela Barbearia',
+        body: `Seu agendamento para ${cancellingAppointment.date} às ${cancellingAppointment.time} foi cancelado pela barbearia. Motivo: ${cleanReason}`,
+        type: 'cancellation_by_barbershop',
+        target: 'client',
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      // 4. Also notify merchant's own feed
+      const merchantNotifId = `notif-barber-cancel-${Date.now()}`;
+      const merchantNotifItem: AppNotification = {
+        id: merchantNotifId,
+        ownerId: merchant?.uid || '',
+        appointmentId: cancellingAppointment.id,
+        clientName: cancellingAppointment.clientName,
+        clientPhone: cancellingAppointment.clientPhone,
+        serviceName,
+        date: cancellingAppointment.date,
+        time: cancellingAppointment.time,
+        reason: cleanReason,
+        title: 'Você cancelou um agendamento',
+        body: `Cancelado para ${cancellingAppointment.clientName} (${cancellingAppointment.date} às ${cancellingAppointment.time}). Motivo: ${cleanReason}`,
+        type: 'cancellation_by_barbershop',
+        target: 'barbershop',
+        read: true,
+        createdAt: new Date().toISOString()
+      };
+      await firebaseService.saveNotification(merchantNotifItem);
+      setMerchantNotifications(prev => [merchantNotifItem, ...prev]);
+
+      // 5. Open WhatsApp alert preview so merchant can easily message client
+      const cleanPhone = cancellingAppointment.clientPhone.replace(/\D/g, '');
+      const waMsg = `Olá ${cancellingAppointment.clientName}, tudo bem? Informamos que seu agendamento de ${serviceName} para o dia ${cancellingAppointment.date} às ${cancellingAppointment.time} precisou ser cancelado pela barbearia. Motivo: ${cleanReason}. Gostaria de reagendar para outro horário?`;
+      
+      setCancellingAppointment(null);
+      setCancelReason('');
+      setCancelSuccessMsg('Agendamento cancelado e notificação enviada ao cliente com sucesso!');
+      setTimeout(() => setCancelSuccessMsg(null), 5000);
+
+      // Trigger WhatsApp modal
+      setWhatsappAlert({
+        isOpen: true,
+        clientName: cancellingAppointment.clientName,
+        clientPhone: cleanPhone,
+        message: waMsg
+      });
+    } catch (err) {
+      console.error('Erro ao cancelar agendamento:', err);
+    } finally {
+      setIsCancellingApp(false);
+    }
+  };
+
+  // Simulators for testing
+  const handleSimulateClientCancellation = async () => {
+    const targetApp = appointments.find(a => a.status === 'pending') || {
+      id: `app-sim-${Date.now()}`,
+      clientName: 'Lucas Ferreira (Cliente)',
+      clientPhone: '(82) 98888-7777',
+      serviceId: services[0]?.id || 's1',
+      barberId: barbers[0]?.id || 'b1',
+      date: new Date().toISOString().split('T')[0],
+      time: '15:30',
+      status: 'cancelled' as const,
+      cancelledBy: 'client' as const,
+      cancellationReason: 'Imprevisto de trabalho / Compromisso',
+      cancelledAt: new Date().toISOString()
+    };
+
+    const srv = services.find(s => s.id === targetApp.serviceId);
+    const srvName = srv ? srv.name : 'Corte & Barba';
+
+    if (appointments.some(a => a.id === targetApp.id)) {
+      onUpdateAppointmentStatus(targetApp.id, 'cancelled', {
+        cancelledBy: 'client',
+        cancellationReason: 'Imprevisto de trabalho / Compromisso'
+      });
+    }
+
+    // Trigger browser notification for barbershop
+    notificationService.notifyCancellationToBarbershop(
+      targetApp,
+      srvName,
+      'Imprevisto de trabalho / Compromisso'
+    );
+
+    // Save to Firebase & local list
+    const notifId = `notif-sim-client-cancel-${Date.now()}`;
+    const newNotif: AppNotification = {
+      id: notifId,
+      ownerId: merchant?.uid || '',
+      appointmentId: targetApp.id,
+      clientName: targetApp.clientName,
+      clientPhone: targetApp.clientPhone,
+      serviceName: srvName,
+      date: targetApp.date,
+      time: targetApp.time,
+      reason: 'Imprevisto de trabalho / Compromisso',
+      title: '⚠️ Agendamento Cancelado pelo Cliente',
+      body: `${targetApp.clientName} cancelou o agendamento de ${targetApp.date} às ${targetApp.time}. Motivo: Imprevisto de trabalho / Compromisso`,
+      type: 'cancellation_by_client',
+      target: 'barbershop',
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+
+    await firebaseService.saveNotification(newNotif);
+    setMerchantNotifications(prev => [newNotif, ...prev]);
+
+    setCancelSuccessMsg('Simulação de cancelamento pelo cliente enviada! Notificação disparada com sucesso.');
+    setTimeout(() => setCancelSuccessMsg(null), 5000);
+  };
+
+  const handleSimulateBarbershopCancellation = async () => {
+    const sampleApp: Appointment = {
+      id: `app-sim-barber-${Date.now()}`,
+      clientName: 'Marcos Silva (Cliente)',
+      clientPhone: '(82) 99999-1234',
+      serviceId: services[0]?.id || 's1',
+      barberId: barbers[0]?.id || 'b1',
+      date: new Date().toISOString().split('T')[0],
+      time: '17:00',
+      status: 'cancelled',
+      cancelledBy: 'barbershop',
+      cancellationReason: 'Manutenção urgente no espaço',
+      cancelledAt: new Date().toISOString()
+    };
+
+    notificationService.notifyCancellationToClient(
+      sampleApp,
+      services[0]?.name || 'Corte Social',
+      'Manutenção urgente no espaço'
+    );
+
+    const notifId = `notif-sim-barber-cancel-${Date.now()}`;
+    const clientNotif: AppNotification = {
+      id: notifId,
+      ownerId: merchant?.uid || '',
+      appointmentId: sampleApp.id,
+      clientName: sampleApp.clientName,
+      clientPhone: sampleApp.clientPhone,
+      serviceName: services[0]?.name || 'Corte Social',
+      date: sampleApp.date,
+      time: sampleApp.time,
+      reason: 'Manutenção urgente no espaço',
+      title: '❌ Agendamento Cancelado pela Barbearia',
+      body: `Seu agendamento para ${sampleApp.date} às ${sampleApp.time} foi cancelado pela barbearia. Motivo: Manutenção urgente no espaço`,
+      type: 'cancellation_by_barbershop',
+      target: 'client',
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+
+    await firebaseService.saveNotification(clientNotif);
+
+    setCancelSuccessMsg('Simulação de cancelamento pela barbearia disparada para o cliente!');
+    setTimeout(() => setCancelSuccessMsg(null), 5000);
   };
 
   // Synchronize selected service id for appointment form and bottom sheet
@@ -786,6 +1098,7 @@ export default function MerchantDashboard({
         vitrineCapa: configData.vitrineCapa,
         vitrineInstagram: configData.instagram,
         vitrineFacebook: configData.facebook,
+        serviceMode: configData.serviceMode,
         vitrineEndereco: {
           cep: configData.cep,
           rua: configData.rua,
@@ -946,6 +1259,7 @@ export default function MerchantDashboard({
             {[
               { id: 'inicio', label: 'Início', icon: Home },
               { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
+              { id: 'fila', label: 'Fila de Atendimento', icon: Users, badgeCount: merchantQueue.filter(q => q.status === 'waiting').length },
               { id: 'servicos', label: 'Serviços & Preços', icon: Scissors },
               { id: 'profissionais', label: 'Profissionais', icon: User },
               { id: 'clientes', label: 'Clientes', icon: Users },
@@ -991,6 +1305,17 @@ export default function MerchantDashboard({
               <ExternalLink className="w-4 h-4 text-white" />
               <span>Link & Vitrine Digital</span>
             </button>
+
+            {isSuperAdmin && (
+              <button 
+                onClick={() => setIsAdminManagerOpen(true)}
+                className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/40 shadow-sm mt-2 cursor-pointer"
+                id="btn-sidebar-superadmin"
+              >
+                <ShieldCheck className="w-4 h-4 text-purple-300" />
+                <span>Painel Admin & Analytics</span>
+              </button>
+            )}
           </nav>
         </div>
 
@@ -1109,6 +1434,7 @@ export default function MerchantDashboard({
                   {[
                     { id: 'inicio', label: 'Início', icon: Home },
                     { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
+                    { id: 'fila', label: 'Fila de Atendimento', icon: Users, badgeCount: merchantQueue.filter(q => q.status === 'waiting').length },
                     { id: 'servicos', label: 'Serviços & Preços', icon: Scissors },
                     { id: 'profissionais', label: 'Profissionais', icon: User },
                     { id: 'clientes', label: 'Clientes', icon: Users },
@@ -1162,6 +1488,21 @@ export default function MerchantDashboard({
                       <span>Link & Vitrine Digital</span>
                     </div>
                   </button>
+
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => {
+                        setIsAdminManagerOpen(true);
+                        setIsMobileDrawerOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-colors bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/40 font-bold mt-2 shadow-sm cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <ShieldCheck className="w-4 h-4 text-purple-300" />
+                        <span>Painel Admin & Analytics</span>
+                      </div>
+                    </button>
+                  )}
                 </nav>
               </div>
 
@@ -1237,9 +1578,9 @@ export default function MerchantDashboard({
                 <p className="text-xs text-gray-400">
                   {merchant?.whatsapp 
                     ? `WhatsApp: ${merchant.whatsapp} • Plano: ${merchant.plano === 'pro' ? 'Premium 💎' : `Teste Grátis (${getTrialDaysLeft()} dias restantes)`}` 
-                    : onboardingData.cep 
-                    ? `CEP: ${onboardingData.cep} • ${onboardingData.street}, ${onboardingData.number}` 
-                    : 'Acesse todos os recursos abaixo'
+                    : (onboardingData.cep && onboardingData.street)
+                    ? `CEP: ${onboardingData.cep} • ${onboardingData.street}${onboardingData.number ? `, ${onboardingData.number}` : ''}` 
+                    : `Plano: ${merchant?.plano === 'pro' ? 'Premium 💎' : `Teste Grátis (${getTrialDaysLeft()} dias restantes)`}`
                   }
                 </p>
               </div>
@@ -1367,6 +1708,45 @@ export default function MerchantDashboard({
                 </div>
 
                 <div className="absolute -right-8 -bottom-8 w-28 h-28 bg-[#d4ff5e]/10 rounded-full blur-2xl pointer-events-none" />
+              </div>
+            )}
+
+            {/* CLIENT CANCELLATIONS ALERT BANNER */}
+            {appointments.some(a => a.status === 'cancelled' && a.cancelledBy === 'client') && (
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 p-4 sm:p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-left shadow-xs">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 bg-red-600 text-white rounded-2xl shrink-0 mt-0.5 shadow-sm">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                        Atenção Barbearia
+                      </span>
+                      <span className="text-xs text-red-600 font-bold">
+                        Cancelamento recebido
+                      </span>
+                    </div>
+                    <h4 className="font-extrabold text-sm text-red-950 mt-0.5">
+                      {appointments.filter(a => a.status === 'cancelled' && a.cancelledBy === 'client').length === 1 
+                        ? '1 agendamento foi cancelado por um cliente' 
+                        : `${appointments.filter(a => a.status === 'cancelled' && a.cancelledBy === 'client').length} agendamentos foram cancelados por clientes`}
+                    </h4>
+                    <p className="text-xs text-red-700/90 leading-relaxed mt-0.5">
+                      Veja o motivo informado, libere a vaga na sua agenda ou envie uma mensagem no WhatsApp para reagendar.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveTab('notificacoes');
+                    setNotifSubTab('cancelamentos');
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shrink-0 transition-colors shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Ver Detalhes</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             )}
 
@@ -1524,18 +1904,40 @@ export default function MerchantDashboard({
 
                 {/* Card 4: Avaliações */}
                 <div className="bg-gray-50/70 border border-gray-100/90 p-6 rounded-3xl flex flex-col justify-between shadow-2xs">
-                  <div>
-                    <p className="text-xs sm:text-sm font-bold text-gray-500">Avaliações</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-3xl sm:text-4xl font-black text-brand-dark font-display">4,9</span>
-                      <Star className="w-6 h-6 fill-amber-400 text-amber-400 shrink-0" />
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <span className="text-xs sm:text-sm font-medium text-gray-400">
-                      ({Math.max(12, periodSummaryData.completedCount * 3 + 128)})
-                    </span>
-                  </div>
+                  {(() => {
+                    const customReviews = merchant?.vitrineAvaliacoes || [];
+                    const hasCustomReviews = customReviews.length > 0;
+                    const totalReviewsCount = hasCustomReviews 
+                      ? customReviews.length 
+                      : (periodSummaryData.completedCount > 0 ? periodSummaryData.completedCount : 0);
+                    
+                    const ratingScore = hasCustomReviews
+                      ? (customReviews.reduce((acc, r) => acc + (r.rating || 5), 0) / customReviews.length).toFixed(1).replace('.', ',')
+                      : (periodSummaryData.completedCount > 0 ? '5,0' : '0');
+
+                    const hasReviews = totalReviewsCount > 0;
+
+                    return (
+                      <>
+                        <div>
+                          <p className="text-xs sm:text-sm font-bold text-gray-500">Avaliações</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-3xl sm:text-4xl font-black text-brand-dark font-display">
+                              {ratingScore}
+                            </span>
+                            <Star className={`w-6 h-6 shrink-0 ${hasReviews ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <span className="text-xs sm:text-sm font-medium text-gray-400">
+                            {totalReviewsCount === 0 
+                              ? 'Nenhuma avaliação ainda' 
+                              : `(${totalReviewsCount} ${totalReviewsCount === 1 ? 'avaliação' : 'avaliações'})`}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1616,6 +2018,19 @@ export default function MerchantDashboard({
 
                             {/* Action Buttons */}
                             <div className="flex items-center gap-1">
+                              {app.status === 'pending' && (
+                                <button 
+                                  onClick={() => {
+                                    setCancellingAppointment(app);
+                                    setCancelReason('');
+                                  }}
+                                  className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors cursor-pointer"
+                                  title="Cancelar agendamento (Notificar cliente)"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
                               {app.status !== 'completed' ? (
                                 <button 
                                   onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
@@ -1703,6 +2118,43 @@ export default function MerchantDashboard({
 
             </div>
 
+            {/* QUICK FILA AO VIVO WIDGET */}
+            {(merchant?.serviceMode === 'ordem_chegada' || merchant?.serviceMode === 'ambos' || merchantQueue.length > 0) && (
+              <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white p-5 rounded-3xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-left">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-white text-amber-900 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Fila de Espera ao Vivo
+                      </span>
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                    </div>
+                    <h4 className="font-extrabold text-base text-white mt-1">
+                      {merchantQueue.filter(q => q.status === 'waiting').length === 0
+                        ? 'Nenhum cliente aguardando na fila'
+                        : merchantQueue.filter(q => q.status === 'waiting').length === 1
+                        ? '1 cliente aguardando na fila de hoje'
+                        : `${merchantQueue.filter(q => q.status === 'waiting').length} clientes aguardando na fila de hoje`}
+                    </h4>
+                    <p className="text-xs text-amber-100 mt-0.5">
+                      {merchantQueue.filter(q => q.status === 'in_progress').length} em atendimento na cadeira
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveTab('fila')}
+                  className="bg-white hover:bg-amber-50 text-amber-900 font-extrabold text-xs py-3 px-5 rounded-2xl shrink-0 uppercase tracking-wider transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Gerenciar Fila</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* AGENDA HOJE RESUMIDA */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
@@ -1750,6 +2202,19 @@ export default function MerchantDashboard({
                             {app.status === 'completed' ? 'Fechado' : app.status === 'cancelled' ? 'Cancelado' : 'Agendado'}
                           </span>
                           
+                          {app.status === 'pending' && (
+                            <button 
+                              onClick={() => {
+                                setCancellingAppointment(app);
+                                setCancelReason('');
+                              }}
+                              className="p-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors cursor-pointer"
+                              title="Cancelar agendamento (Avisar cliente)"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           {app.status === 'pending' ? (
                             <button 
                               onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
@@ -2042,6 +2507,20 @@ export default function MerchantDashboard({
                                 <div className="flex justify-between items-center mt-1 pt-1 border-t border-black/5">
                                   <span className="font-mono text-[8px] text-gray-400">{app.time}</span>
                                   <div className="flex gap-1">
+                                    {app.status === 'pending' && (
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCancellingAppointment(app);
+                                          setCancelReason('');
+                                        }}
+                                        className="p-0.5 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors"
+                                        title="Cancelar (Avisar cliente)"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    )}
+
                                     {app.status === 'pending' ? (
                                       <button 
                                         onClick={() => onUpdateAppointmentStatus(app.id, 'completed')}
@@ -2200,6 +2679,20 @@ export default function MerchantDashboard({
           </div>
         )}
 
+        {/* TAB: FILA DE ATENDIMENTO / ORDEM DE CHEGADA */}
+        {activeTab === 'fila' && (
+          <QueueManager
+            merchantUid={merchant?.uid || ''}
+            barbers={barbers}
+            services={services}
+            queue={merchantQueue}
+            onAddToQueue={handleAddQueueItem}
+            onStartService={handleStartQueueService}
+            onFinishService={handleFinishQueueService}
+            onRemoveQueueItem={handleRemoveQueueItem}
+          />
+        )}
+
         {/* TAB 3: NOTIFICAÇÕES */}
         {activeTab === 'notificacoes' && (
           <div className="space-y-6 text-left">
@@ -2209,10 +2702,10 @@ export default function MerchantDashboard({
             </div>
 
             {/* SUB-TABS SELECTOR */}
-            <div className="flex border-b border-gray-100 gap-6">
+            <div className="flex border-b border-gray-100 gap-4 sm:gap-6 overflow-x-auto pb-1 scrollbar-none">
               <button 
                 onClick={() => setNotifSubTab('sistema')}
-                className={`pb-3 font-bold text-sm tracking-wide border-b-2 transition-colors relative flex items-center gap-2 cursor-pointer ${
+                className={`pb-3 font-bold text-xs sm:text-sm tracking-wide border-b-2 transition-colors relative flex items-center gap-2 cursor-pointer shrink-0 ${
                   notifSubTab === 'sistema' ? 'border-brand-blue text-[#051b42] border-b-2 border-brand-blue' : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
@@ -2225,11 +2718,27 @@ export default function MerchantDashboard({
               </button>
               <button 
                 onClick={() => setNotifSubTab('dispositivo')}
-                className={`pb-3 font-bold text-sm tracking-wide border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+                className={`pb-3 font-bold text-xs sm:text-sm tracking-wide border-b-2 transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
                   notifSubTab === 'dispositivo' ? 'border-brand-blue text-[#051b42] border-b-2 border-brand-blue' : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
                 <span>Alertas Push (Celular)</span>
+              </button>
+              <button 
+                onClick={() => setNotifSubTab('cancelamentos')}
+                className={`pb-3 font-bold text-xs sm:text-sm tracking-wide border-b-2 transition-colors flex items-center gap-2 cursor-pointer shrink-0 ${
+                  notifSubTab === 'cancelamentos' ? 'border-red-600 text-red-700 border-b-2 border-red-600' : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <CalendarX className="w-4 h-4" />
+                  <span>Cancelamentos</span>
+                </div>
+                {appointments.filter(a => a.status === 'cancelled').length > 0 && (
+                  <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                    {appointments.filter(a => a.status === 'cancelled').length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -2487,6 +2996,181 @@ export default function MerchantDashboard({
                       3. <strong className="text-brand-dark">Aviso importante para iPhone (iOS):</strong> No iPhone, para receber notificações push de sites e aplicativos web (PWA), você precisa adicionar este site à sua <strong className="text-brand-dark">Tela de Início</strong> (Compartilhar &gt; Adicionar à Tela de Início) e então abrir o app por lá para que ele peça sua autorização de notificações.
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 3: CANCELAMENTOS & NOTIFICAÇÕES DE CANCELAMENTO */}
+            {notifSubTab === 'cancelamentos' && (
+              <div className="space-y-6 text-left">
+                {/* Header card with quick actions */}
+                <div className="bg-gradient-to-r from-red-600 via-rose-600 to-orange-600 p-6 sm:p-8 rounded-[32px] text-white shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                      <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase mb-2">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Central de Cancelamentos & Notificações</span>
+                      </div>
+                      <h3 className="font-display font-extrabold text-2xl text-white">
+                        Cancelamentos & Alertas em Tempo Real
+                      </h3>
+                      <p className="text-xs text-white/80 max-w-xl">
+                        Quando um cliente ou a barbearia cancela um horário, o sistema dispara notificações automáticas e arquiva o histórico para manter a agenda sempre organizada.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={handleSimulateClientCancellation}
+                        className="bg-white text-red-700 hover:bg-red-50 font-bold text-xs py-2.5 px-4 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Simular Cliente Cancelando</span>
+                      </button>
+                      <button
+                        onClick={handleSimulateBarbershopCancellation}
+                        className="bg-red-950/60 hover:bg-red-950 text-white font-bold text-xs py-2.5 px-4 rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Simular Barbearia Cancelando</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {cancelSuccessMsg && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>{cancelSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* Filters */}
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setFilterCancelType('all')}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        filterCancelType === 'all'
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Todos ({appointments.filter(a => a.status === 'cancelled').length})
+                    </button>
+                    <button
+                      onClick={() => setFilterCancelType('client')}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        filterCancelType === 'client'
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Por Clientes ({appointments.filter(a => a.status === 'cancelled' && a.cancelledBy === 'client').length})
+                    </button>
+                    <button
+                      onClick={() => setFilterCancelType('barbershop')}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        filterCancelType === 'barbershop'
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Pela Barbearia ({appointments.filter(a => a.status === 'cancelled' && a.cancelledBy === 'barbershop').length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* List of Cancelled Appointments */}
+                <div className="space-y-3">
+                  {appointments.filter(a => {
+                    if (a.status !== 'cancelled') return false;
+                    if (filterCancelType === 'client') return a.cancelledBy === 'client';
+                    if (filterCancelType === 'barbershop') return a.cancelledBy === 'barbershop';
+                    return true;
+                  }).length === 0 ? (
+                    <div className="bg-white p-12 rounded-3xl border border-gray-100 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-sm text-gray-900">Nenhum agendamento cancelado no filtro atual</h4>
+                      <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                        Sua agenda está limpa! Os cancelamentos feitos por clientes ou pela barbearia aparecerão aqui com o motivo e opção de contato.
+                      </p>
+                    </div>
+                  ) : (
+                    appointments
+                      .filter(a => {
+                        if (a.status !== 'cancelled') return false;
+                        if (filterCancelType === 'client') return a.cancelledBy === 'client';
+                        if (filterCancelType === 'barbershop') return a.cancelledBy === 'barbershop';
+                        return true;
+                      })
+                      .map((app) => {
+                        const serv = services.find(s => s.id === app.serviceId);
+                        const barber = barbers.find(b => b.id === app.barberId);
+                        const isByClient = app.cancelledBy === 'client';
+
+                        return (
+                          <div
+                            key={app.id}
+                            className={`p-5 rounded-3xl border transition-all ${
+                              isByClient 
+                                ? 'bg-red-50/70 border-red-200 hover:border-red-300' 
+                                : 'bg-gray-50 border-gray-200'
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                                    isByClient ? 'bg-red-600 text-white' : 'bg-gray-600 text-white'
+                                  }`}>
+                                    {isByClient ? 'Cancelado pelo Cliente' : 'Cancelado pela Barbearia'}
+                                  </span>
+                                  <span className="text-xs text-gray-400 font-mono">
+                                    {app.date} às {app.time}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-base text-gray-900">{app.clientName}</h4>
+                                  <span className="text-xs text-gray-500 font-medium">({app.clientPhone})</span>
+                                </div>
+
+                                <p className="text-xs text-gray-600">
+                                  Serviço: <strong>{serv?.name || 'Serviço'}</strong> • Profissional: <strong>{barber?.name || 'Barbeiro'}</strong>
+                                </p>
+
+                                {app.cancellationReason && (
+                                  <div className="bg-white/80 p-2.5 rounded-xl border border-red-100 text-xs text-red-900 mt-2">
+                                    <strong>Motivo informado:</strong> "{app.cancellationReason}"
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    const cleanPhone = app.clientPhone.replace(/\D/g, '');
+                                    const waMsg = `Olá ${app.clientName}, vi que o agendamento de ${serv?.name || 'serviço'} para ${app.date} às ${app.time} foi cancelado. Gostaria de verificar outros horários disponíveis conosco?`;
+                                    setWhatsappAlert({
+                                      isOpen: true,
+                                      clientName: app.clientName,
+                                      clientPhone: cleanPhone,
+                                      message: waMsg
+                                    });
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                                >
+                                  <PhoneCall className="w-3.5 h-3.5" />
+                                  <span>Falar no WhatsApp</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               </div>
             )}
@@ -2939,6 +3623,83 @@ export default function MerchantDashboard({
                       required
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* MODO DE ATENDIMENTO (AGENDAMENTO / ORDEM DE CHEGADA / AMBOS) */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-brand-blue" />
+                    <span>Modo de Atendimento da Barbearia</span>
+                  </h3>
+                  <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-extrabold px-2.5 py-1 rounded-full uppercase">
+                    Personalizável
+                  </span>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  Escolha como seus clientes serão atendidos e o que será exibido no seu link / Vitrine Digital:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {[
+                    {
+                      id: 'agendamento' as ServiceMode,
+                      title: 'Horário Marcado',
+                      desc: 'Clientes escolhem dia e horário na agenda online',
+                      icon: CalendarIcon,
+                      badge: 'Padrão'
+                    },
+                    {
+                      id: 'ordem_chegada' as ServiceMode,
+                      title: 'Ordem de Chegada',
+                      desc: 'Fila virtual em tempo real com painel de chamada',
+                      icon: Users,
+                      badge: 'Fila ao Vivo'
+                    },
+                    {
+                      id: 'ambos' as ServiceMode,
+                      title: 'Híbrido (Ambos)',
+                      desc: 'Permite agendar horário ou entrar na fila do dia',
+                      icon: Sparkles,
+                      badge: 'Mais Completo'
+                    },
+                  ].map(mode => {
+                    const isSelected = configData.serviceMode === mode.id;
+                    const ModeIcon = mode.icon;
+                    return (
+                      <button
+                        type="button"
+                        key={mode.id}
+                        onClick={() => setConfigData({ ...configData, serviceMode: mode.id })}
+                        className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 relative ${
+                          isSelected
+                            ? 'border-brand-blue bg-blue-50/60 ring-2 ring-brand-blue/20 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isSelected ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-600'}`}>
+                            <ModeIcon className="w-4 h-4" />
+                          </div>
+                          <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${isSelected ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-600'}`}>
+                            {mode.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-xs text-brand-dark">{mode.title}</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{mode.desc}</p>
+                        </div>
+                        <div className="pt-2 flex items-center gap-1.5 text-[10px] font-bold">
+                          <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-brand-blue' : 'bg-gray-300'}`} />
+                          <span className={isSelected ? 'text-brand-blue' : 'text-gray-400'}>
+                            {isSelected ? 'Ativado na Vitrine' : 'Clique para selecionar'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3668,7 +4429,8 @@ export default function MerchantDashboard({
             {/* CARDS GRID OF MODULES */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
-                { id: 'configuracoes', title: 'Configurações da Barbearia', desc: 'Dados comerciais, logo, foto de capa, redes sociais e alterar senha', icon: Settings, bg: 'bg-blue-50 border-blue-100 text-blue-800' },
+                { id: 'fila', title: 'Fila de Atendimento ao Vivo', desc: 'Gerencie a fila por ordem de chegada, chame clientes e acompanhe tempos', icon: Users, bg: 'bg-amber-50 border-amber-100 text-amber-900' },
+                { id: 'configuracoes', title: 'Configurações da Barbearia', desc: 'Dados comerciais, modo de atendimento, fotos, redes sociais e senha', icon: Settings, bg: 'bg-blue-50 border-blue-100 text-blue-800' },
                 { id: 'indique', title: 'Indique e Ganhe', desc: 'Compartilhe seu código e ganhe 1 Mês de Pro a cada indicação', icon: Gift, bg: 'bg-amber-50 border-amber-100 text-amber-900' },
                 { id: 'horarios', title: 'Horários de Atendimento', desc: 'Horários de abertura, fechamento e pausa de almoço', icon: Clock, bg: 'bg-emerald-50 border-emerald-100 text-emerald-900' },
                 { id: 'servicos', title: 'Serviços & Comissões', desc: 'Tabela de preços, duração e porcentagem de repasse', icon: Scissors, bg: 'bg-purple-50 border-purple-100 text-purple-900' },
@@ -3794,7 +4556,7 @@ export default function MerchantDashboard({
       </AnimatePresence>
 
       {/* MOBILE BOTTOM NAVIGATION TAB */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 grid grid-cols-4 py-2 text-center text-[10px] text-gray-400">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 grid grid-cols-5 py-2 text-center text-[10px] text-gray-400">
         <button 
           onClick={() => setActiveTab('inicio')}
           className={`flex flex-col items-center justify-center gap-1 transition-all ${
@@ -3814,13 +4576,32 @@ export default function MerchantDashboard({
           <span>Agenda</span>
         </button>
         <button 
+          onClick={() => setActiveTab('fila')}
+          className={`flex flex-col items-center justify-center gap-1 transition-all relative ${
+            activeTab === 'fila' ? 'text-brand-blue font-bold scale-105' : 'text-gray-400'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span>Fila</span>
+          {merchantQueue.filter(q => q.status === 'waiting').length > 0 && (
+            <span className="absolute top-0 right-3 bg-amber-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              {merchantQueue.filter(q => q.status === 'waiting').length}
+            </span>
+          )}
+        </button>
+        <button 
           onClick={() => setActiveTab('notificacoes')}
-          className={`flex flex-col items-center justify-center gap-1 transition-all ${
+          className={`flex flex-col items-center justify-center gap-1 transition-all relative ${
             activeTab === 'notificacoes' ? 'text-brand-blue font-bold scale-105' : 'text-gray-400'
           }`}
         >
           <Bell className="w-5 h-5" />
-          <span>Notificações</span>
+          <span>Alertas</span>
+          {unreadCount > 0 && (
+            <span className="absolute top-0 right-3 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              {unreadCount}
+            </span>
+          )}
         </button>
         <button 
           onClick={() => setActiveTab('menu')}
@@ -4999,6 +5780,108 @@ export default function MerchantDashboard({
                 <span>Personalizar minha Vitrine</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODAL CANCELLATION BY BARBERSHOP */}
+        {cancellingAppointment && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-[32px] p-6 sm:p-8 max-w-md w-full shadow-2xl relative border border-gray-100 my-auto text-left space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center font-bold">
+                    <CalendarX className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-extrabold text-lg text-brand-dark">Cancelar Agendamento</h3>
+                    <p className="text-xs text-gray-400">O cliente será notificado automaticamente</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCancellingAppointment(null)}
+                  className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Appointment summary info */}
+              <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-4 space-y-2 text-xs">
+                <div className="flex justify-between items-center text-gray-600">
+                  <span>Cliente:</span>
+                  <strong className="text-gray-900 font-bold">{cancellingAppointment.clientName}</strong>
+                </div>
+                <div className="flex justify-between items-center text-gray-600">
+                  <span>Telefone:</span>
+                  <strong className="text-gray-900">{cancellingAppointment.clientPhone}</strong>
+                </div>
+                <div className="flex justify-between items-center text-gray-600">
+                  <span>Data e Horário:</span>
+                  <strong className="text-red-700 font-mono">{cancellingAppointment.date} às {cancellingAppointment.time}</strong>
+                </div>
+                <div className="flex justify-between items-center text-gray-600">
+                  <span>Serviço:</span>
+                  <strong className="text-gray-900 font-bold">
+                    {services.find(s => s.id === cancellingAppointment.serviceId)?.name || 'Serviço'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Cancellation Reason input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Motivo do cancelamento (opcional):
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Ex: Imprevisto com o profissional, manutenção no espaço, reagendamento..."
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 text-xs border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white text-gray-900 placeholder:text-gray-400"
+                />
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-3 text-[11px] text-amber-900 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Ao confirmar, o horário será cancelado na agenda, o cliente receberá um alerta imediato no navegador e abriremos a mensagem formatada para você enviar no WhatsApp se desejar.
+                </span>
+              </div>
+
+              {/* Action buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCancellingAppointment(null)}
+                  className="py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  disabled={isCancellingApp}
+                  onClick={handleConfirmBarbershopCancel}
+                  className="py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-red-600/20 flex items-center justify-center gap-1.5"
+                >
+                  {isCancellingApp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Cancelando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      <span>Confirmar Cancelamento</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

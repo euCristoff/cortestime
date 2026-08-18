@@ -21,7 +21,8 @@ import {
   getRedirectResult,
   signInWithPopup
 } from "firebase/auth";
-import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData, DraftVitrine } from "../types";
+import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData, DraftVitrine, AppNotification, QueueItem, AnalyticsVisit, AnalyticsEvent } from "../types";
+import { analyticsTracker } from "./analyticsTracker";
 
 // Collection Names
 const COLL_SERVICES = "services";
@@ -29,6 +30,8 @@ const COLL_BARBERS = "barbers";
 const COLL_CLIENTS = "clients";
 const COLL_APPOINTMENTS = "appointments";
 const COLL_DRAFT_VITRINES = "draft_vitrines";
+const COLL_NOTIFICATIONS = "notifications";
+const COLL_QUEUE = "queue";
 
 // Auxiliar de Timeout para requisições do Firebase (previne carregamento infinito em conexões instáveis)
 function withTimeout<T>(
@@ -101,6 +104,9 @@ export const firebaseService = {
     expiry30Days.setDate(today.getDate() + 30);
     const partnerBenefitsExpiry = formatDate(expiry30Days);
     
+    // Get UTM / Attribution data
+    const attribution = analyticsTracker.getAttributionData();
+
     const merchant: MerchantUser = {
       uid: user.uid,
       nomeBarbearia: draft?.nomeBarbearia || nomeBarbearia,
@@ -113,6 +119,17 @@ export const firebaseService = {
       status: 'ativo',
       criadoEm: new Date().toISOString(),
       onboardingCompleted: false,
+
+      // UTM & Attribution tracking
+      utmSource: attribution.utmSource,
+      utmMedium: attribution.utmMedium,
+      utmCampaign: attribution.utmCampaign,
+      utmReferrer: attribution.utmReferrer,
+      firstVisitAt: attribution.firstVisitAt,
+      lastVisitAt: attribution.lastVisitAt,
+      lastLoginAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      lastActivityLabel: "Cadastro realizado",
 
       // Partner campaign fields
       isPartner: hasCode,
@@ -347,6 +364,8 @@ export const firebaseService = {
     expiry.setDate(today.getDate() + 7);
     const trialFim = formatDate(expiry);
     
+    const attribution = analyticsTracker.getAttributionData();
+
     const merchant: MerchantUser = {
       uid: user.uid,
       nomeBarbearia,
@@ -358,7 +377,18 @@ export const firebaseService = {
       trialFim,
       status: 'ativo',
       criadoEm: new Date().toISOString(),
-      onboardingCompleted: false
+      onboardingCompleted: false,
+
+      // UTM & Attribution
+      utmSource: attribution.utmSource,
+      utmMedium: attribution.utmMedium,
+      utmCampaign: attribution.utmCampaign,
+      utmReferrer: attribution.utmReferrer,
+      firstVisitAt: attribution.firstVisitAt,
+      lastVisitAt: attribution.lastVisitAt,
+      lastLoginAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      lastActivityLabel: "Cadastro realizado (Google)"
     };
     
     await withTimeout(
@@ -414,53 +444,207 @@ export const firebaseService = {
   },
 
   async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {
-    const cleanSlug = (slug || '').toLowerCase().trim();
-    if (!cleanSlug) return null;
-
+    if (!slug) return null;
+    
+    // Clean and normalize the query slug in multiple ways
+    let rawSlug = '';
     try {
-      // 1. Check by exact vitrineLinkPersonalizado field
-      const q = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", cleanSlug));
-      const snap = await withTimeout(getDocs(q), 10000);
-      if (!snap.empty) {
-        return snap.docs[0].data() as MerchantUser;
+      rawSlug = decodeURIComponent(slug).trim();
+    } catch (_) {
+      rawSlug = (slug || '').trim();
+    }
+    if (rawSlug.startsWith('@')) rawSlug = rawSlug.substring(1);
+    
+    const normalizeText = (text: string = ''): string => {
+      return (text || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+    };
+
+    const toAlphaNum = (text: string = ''): string => {
+      return normalizeText(text).replace(/[^a-z0-9]/g, '');
+    };
+
+    const toKebab = (text: string = ''): string => {
+      return normalizeText(text).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    };
+
+    const targetLower = normalizeText(rawSlug);
+    const targetAlpha = toAlphaNum(rawSlug);
+    const targetKebab = toKebab(rawSlug);
+
+    if (!targetAlpha && !targetLower) return null;
+
+    // Helper to evaluate if a MerchantUser matches the slug
+    const matchesMerchant = (m: Partial<MerchantUser>): boolean => {
+      if (!m) return false;
+
+      // 1. Match uid or custom link
+      if (m.uid && (m.uid === rawSlug || toAlphaNum(m.uid) === targetAlpha)) return true;
+      if (m.vitrineLinkPersonalizado) {
+        const linkRaw = normalizeText(m.vitrineLinkPersonalizado);
+        const linkAlpha = toAlphaNum(m.vitrineLinkPersonalizado);
+        const linkKebab = toKebab(m.vitrineLinkPersonalizado);
+        if (linkRaw === targetLower || linkAlpha === targetAlpha || linkKebab === targetKebab) return true;
       }
 
-      // 2. Fallback: Search all users in Firestore matching normalized nomeBarbearia or uid
+      // 2. Match nomeBarbearia
+      if (m.nomeBarbearia) {
+        const nameRaw = normalizeText(m.nomeBarbearia);
+        const nameAlpha = toAlphaNum(m.nomeBarbearia);
+        const nameKebab = toKebab(m.nomeBarbearia);
+        if (nameRaw === targetLower || nameAlpha === targetAlpha || nameKebab === targetKebab) return true;
+      }
+
+      // 3. Match onboarding businessName
+      if (m.onboardingData?.businessName) {
+        const bNameRaw = normalizeText(m.onboardingData.businessName);
+        const bNameAlpha = toAlphaNum(m.onboardingData.businessName);
+        const bNameKebab = toKebab(m.onboardingData.businessName);
+        if (bNameRaw === targetLower || bNameAlpha === targetAlpha || bNameKebab === targetKebab) return true;
+      }
+
+      // 4. Match nomeProprietario or onboarding fullName
+      if (m.nomeProprietario) {
+        const propAlpha = toAlphaNum(m.nomeProprietario);
+        const propKebab = toKebab(m.nomeProprietario);
+        if (propAlpha === targetAlpha || propKebab === targetKebab) return true;
+      }
+      if (m.onboardingData?.fullName) {
+        const fnAlpha = toAlphaNum(m.onboardingData.fullName);
+        const fnKebab = toKebab(m.onboardingData.fullName);
+        if (fnAlpha === targetAlpha || fnKebab === targetKebab) return true;
+      }
+
+      // 5. Match invite code
+      if (m.codigoConviteResgatado && toAlphaNum(m.codigoConviteResgatado) === targetAlpha) return true;
+
+      // 6. Match WhatsApp digits if slug has 8+ digits
+      if (m.whatsapp && targetAlpha.length >= 8) {
+        const phoneDigits = m.whatsapp.replace(/\D/g, '');
+        if (phoneDigits && (phoneDigits.includes(targetAlpha) || targetAlpha.includes(phoneDigits))) return true;
+      }
+
+      // 7. Match email prefix (e.g. nbarber@gmail.com -> nbarber)
+      if (m.email) {
+        const emailPrefix = toAlphaNum(m.email.split('@')[0]);
+        if (emailPrefix && emailPrefix === targetAlpha) return true;
+      }
+
+      return false;
+    };
+
+    // Helper to evaluate if a DraftVitrine matches
+    const draftToMerchant = (d: DraftVitrine): MerchantUser => {
+      return {
+        uid: d.id || `draft_${d.codigo}`,
+        email: d.resgatadoPorEmail || 'contato@cortestime.com',
+        nomeProprietario: d.nomeProprietario || 'Barbeiro',
+        nomeBarbearia: d.nomeBarbearia || 'Barbearia',
+        whatsapp: d.whatsapp || '',
+        plano: 'vitrine',
+        status: 'ativo',
+        trialInicio: '01/01/2026',
+        trialFim: '31/12/2099',
+        criadoEm: d.criadoEm || new Date().toISOString(),
+        onboardingCompleted: true,
+        vitrineWhatsApp: d.whatsapp,
+        vitrineInstagram: d.instagram,
+        vitrineEndereco: d.endereco,
+        vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
+        vitrineHorarios: d.horarios || 'Seg - Sáb: 08:00 às 20:00',
+        vitrineLogoImage: d.logoUrl,
+        vitrineCapa: d.capaUrl,
+        vitrineLinkPersonalizado: d.nomeBarbearia ? toKebab(d.nomeBarbearia) : d.codigo,
+        codigoConviteResgatado: d.codigo
+      };
+    };
+
+    // 1. Search in Firestore "users"
+    try {
+      // First try quick exact queries on vitrineLinkPersonalizado
+      const qExact = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", rawSlug));
+      const snapExact = await withTimeout(getDocs(qExact), 8000);
+      if (!snapExact.empty) {
+        return snapExact.docs[0].data() as MerchantUser;
+      }
+
+      // Scan all users with timeout protection
       const qAll = query(collection(db, "users"));
       const snapAll = await withTimeout(getDocs(qAll), 10000);
       if (!snapAll.empty) {
         for (const docSnap of snapAll.docs) {
-          const data = docSnap.data() as MerchantUser;
-          const normName = (data.nomeBarbearia || '')
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-zA-Z0-9]/g, '-');
-          if (normName === cleanSlug || data.uid === cleanSlug) {
-            return data;
+          const user = docSnap.data() as MerchantUser;
+          if (matchesMerchant(user)) {
+            return user;
           }
         }
       }
     } catch (err) {
-      console.warn("Error looking up merchant by slug in Firestore:", err);
+      console.warn("Error querying users in Firestore:", err);
     }
 
-    // 3. Fallback: Check local storage for merchant profile/session
+    // 2. Search in Firestore "draft_vitrines"
     try {
-      const cached = localStorage.getItem("cortestime_merchant_session") || localStorage.getItem("cortestime_merchant_profile");
-      if (cached) {
-        const parsed = JSON.parse(cached) as MerchantUser;
-        const normName = (parsed.nomeBarbearia || '')
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-zA-Z0-9]/g, '-');
-        if (parsed.vitrineLinkPersonalizado === cleanSlug || normName === cleanSlug || parsed.uid === cleanSlug || cleanSlug === 'sua-barbearia' || cleanSlug === 'barbearia') {
-          return parsed;
+      const qDrafts = query(collection(db, COLL_DRAFT_VITRINES));
+      const snapDrafts = await withTimeout(getDocs(qDrafts), 8000);
+      if (!snapDrafts.empty) {
+        for (const docSnap of snapDrafts.docs) {
+          const draft = docSnap.data() as DraftVitrine;
+          if (
+            (draft.codigo && (draft.codigo.trim().toUpperCase() === rawSlug.toUpperCase() || toAlphaNum(draft.codigo) === targetAlpha)) ||
+            (draft.nomeBarbearia && (toKebab(draft.nomeBarbearia) === targetKebab || toAlphaNum(draft.nomeBarbearia) === targetAlpha)) ||
+            (draft.id === rawSlug)
+          ) {
+            return draftToMerchant(draft);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error querying draft_vitrines in Firestore:", err);
+    }
+
+    // 3. Search in LocalStorage (session, cached profiles, drafts)
+    try {
+      const cachedSession = localStorage.getItem("cortestime_merchant_session");
+      if (cachedSession) {
+        const parsed = JSON.parse(cachedSession) as MerchantUser;
+        if (matchesMerchant(parsed)) return parsed;
+      }
+
+      const cachedProfile = localStorage.getItem("cortestime_merchant_profile");
+      if (cachedProfile) {
+        const parsed = JSON.parse(cachedProfile) as MerchantUser;
+        if (matchesMerchant(parsed)) return parsed;
+      }
+
+      const rawDrafts = localStorage.getItem("cortestime_draft_vitrines");
+      if (rawDrafts) {
+        const drafts: DraftVitrine[] = JSON.parse(rawDrafts);
+        for (const draft of drafts) {
+          if (
+            (draft.codigo && (draft.codigo.trim().toUpperCase() === rawSlug.toUpperCase() || toAlphaNum(draft.codigo) === targetAlpha)) ||
+            (draft.nomeBarbearia && (toKebab(draft.nomeBarbearia) === targetKebab || toAlphaNum(draft.nomeBarbearia) === targetAlpha)) ||
+            (draft.id === rawSlug)
+          ) {
+            return draftToMerchant(draft);
+          }
         }
       }
     } catch (e) {
-      console.error("Error reading cached merchant for slug lookup:", e);
+      console.warn("Error reading local cache for slug lookup:", e);
+    }
+
+    // 4. Fallback for generic preview slugs (e.g. sua-barbearia, barbearia, demo)
+    if (['sua-barbearia', 'barbearia', 'demo', 'preview', 'modelo'].includes(targetKebab)) {
+      const cached = localStorage.getItem("cortestime_merchant_session") || localStorage.getItem("cortestime_merchant_profile");
+      if (cached) {
+        try {
+          return JSON.parse(cached) as MerchantUser;
+        } catch (_) {}
+      }
     }
 
     return null;
@@ -610,13 +794,219 @@ export const firebaseService = {
     }
   },
 
-  async updateAppointmentStatus(id: string, status: Appointment['status']): Promise<void> {
+  async updateAppointmentStatus(
+    id: string, 
+    status: Appointment['status'], 
+    extra?: { cancelledBy?: 'client' | 'barbershop'; cancellationReason?: string }
+  ): Promise<void> {
     const docRef = doc(db, COLL_APPOINTMENTS, id);
+    const payload: any = { status };
+    if (extra?.cancelledBy) {
+      payload.cancelledBy = extra.cancelledBy;
+      payload.cancelledAt = new Date().toISOString();
+    }
+    if (extra?.cancellationReason !== undefined) {
+      payload.cancellationReason = extra.cancellationReason;
+    }
     await withTimeout(
-      updateDoc(docRef, { status }),
+      updateDoc(docRef, payload),
       15000,
       "Tempo limite excedido ao atualizar status do agendamento."
     );
+  },
+
+  // Live Queue / Ordem de Chegada (Isolated & Synced)
+  async saveQueueItem(item: QueueItem, ownerId: string): Promise<void> {
+    const docRef = doc(db, COLL_QUEUE, item.id);
+    await withTimeout(
+      setDoc(docRef, { ...item, ownerId }),
+      20000,
+      "Tempo esgotado ao salvar item na fila."
+    );
+
+    try {
+      const localKey = `cortestime_queue_${ownerId}`;
+      const stored = localStorage.getItem(localKey);
+      const list: QueueItem[] = stored ? JSON.parse(stored) : [];
+      const updated = [item, ...list.filter(q => q.id !== item.id)];
+      localStorage.setItem(localKey, JSON.stringify(updated));
+    } catch (_) {}
+  },
+
+  async getQueue(ownerId: string): Promise<QueueItem[]> {
+    try {
+      const q = query(collection(db, COLL_QUEUE), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        20000,
+        "Tempo limite excedido ao buscar fila de espera."
+      );
+      const list: QueueItem[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as QueueItem);
+      });
+      list.sort((a, b) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
+
+      try {
+        localStorage.setItem(`cortestime_queue_${ownerId}`, JSON.stringify(list));
+      } catch (_) {}
+
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar fila no Firebase (usando cache local):", e);
+      try {
+        const stored = localStorage.getItem(`cortestime_queue_${ownerId}`);
+        if (stored) return JSON.parse(stored);
+      } catch (_) {}
+      return [];
+    }
+  },
+
+  async updateQueueItemStatus(
+    id: string, 
+    status: QueueItem['status'], 
+    extra?: { barberId?: string; startedAt?: string; finishedAt?: string }
+  ): Promise<void> {
+    const docRef = doc(db, COLL_QUEUE, id);
+    const payload: any = { status };
+    if (extra?.barberId) payload.barberId = extra.barberId;
+    if (extra?.startedAt) payload.startedAt = extra.startedAt;
+    if (extra?.finishedAt) payload.finishedAt = extra.finishedAt;
+
+    await withTimeout(
+      updateDoc(docRef, payload),
+      15000,
+      "Tempo limite excedido ao atualizar status na fila."
+    );
+  },
+
+  async deleteQueueItem(id: string): Promise<void> {
+    const docRef = doc(db, COLL_QUEUE, id);
+    await withTimeout(
+      deleteDoc(docRef),
+      15000,
+      "Tempo esgotado ao remover cliente da fila."
+    );
+  },
+
+  // Notifications system (Isolated & Synced)
+  async saveNotification(notif: AppNotification): Promise<void> {
+    try {
+      const docRef = doc(db, COLL_NOTIFICATIONS, notif.id);
+      await withTimeout(
+        setDoc(docRef, notif),
+        15000,
+        "Tempo limite ao salvar notificação."
+      );
+    } catch (e) {
+      console.warn("Aviso ao salvar notificação no Firebase (usando cache local):", e);
+    }
+
+    // Local storage sync
+    try {
+      const localKey = notif.ownerId ? `cortestime_notifs_${notif.ownerId}` : 'cortestime_notifications';
+      const stored = localStorage.getItem(localKey);
+      const list: AppNotification[] = stored ? JSON.parse(stored) : [];
+      const updated = [notif, ...list.filter(n => n.id !== notif.id)];
+      localStorage.setItem(localKey, JSON.stringify(updated.slice(0, 50)));
+
+      if (notif.clientPhone) {
+        const clientKey = `cortestime_client_notifs_${notif.clientPhone.replace(/\D/g, '')}`;
+        const storedClient = localStorage.getItem(clientKey);
+        const listClient: AppNotification[] = storedClient ? JSON.parse(storedClient) : [];
+        localStorage.setItem(clientKey, JSON.stringify([notif, ...listClient.filter(n => n.id !== notif.id)].slice(0, 30)));
+      }
+    } catch (e) {
+      console.error("Erro no cache local de notificações:", e);
+    }
+  },
+
+  async getNotifications(ownerId: string): Promise<AppNotification[]> {
+    try {
+      const q = query(collection(db, COLL_NOTIFICATIONS), where("ownerId", "==", ownerId));
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        15000,
+        "Tempo limite excedido ao buscar notificações."
+      );
+      const list: AppNotification[] = [];
+      querySnapshot.forEach((doc) => {
+        list.push(doc.data() as AppNotification);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      // Update local cache
+      try {
+        localStorage.setItem(`cortestime_notifs_${ownerId}`, JSON.stringify(list));
+      } catch (_) {}
+      
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar notificações no Firebase, buscando cache local:", e);
+      try {
+        const stored = localStorage.getItem(`cortestime_notifs_${ownerId}`);
+        if (stored) return JSON.parse(stored);
+      } catch (_) {}
+      return [];
+    }
+  },
+
+  async getClientNotifications(clientPhone: string, ownerId?: string): Promise<AppNotification[]> {
+    const cleanPhone = (clientPhone || '').replace(/\D/g, '');
+    if (!cleanPhone) return [];
+
+    try {
+      const q = query(
+        collection(db, COLL_NOTIFICATIONS), 
+        where("clientPhone", "==", cleanPhone)
+      );
+      const querySnapshot = await withTimeout(
+        getDocs(q),
+        15000,
+        "Tempo limite ao buscar notificações do cliente."
+      );
+      const list: AppNotification[] = [];
+      querySnapshot.forEach((doc) => {
+        const n = doc.data() as AppNotification;
+        if (!ownerId || !n.ownerId || n.ownerId === ownerId) {
+          list.push(n);
+        }
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return list;
+    } catch (e) {
+      console.warn("Aviso ao buscar notificações do cliente no Firebase, buscando local:", e);
+      try {
+        const stored = localStorage.getItem(`cortestime_client_notifs_${cleanPhone}`);
+        if (stored) return JSON.parse(stored);
+      } catch (_) {}
+      return [];
+    }
+  },
+
+  async markNotificationAsRead(id: string, ownerId?: string): Promise<void> {
+    try {
+      const docRef = doc(db, COLL_NOTIFICATIONS, id);
+      await withTimeout(
+        updateDoc(docRef, { read: true }),
+        10000,
+        "Tempo limite ao atualizar notificação."
+      );
+    } catch (e) {
+      console.warn("Erro ao marcar notificação como lida no Firebase:", e);
+    }
+
+    if (ownerId) {
+      try {
+        const localKey = `cortestime_notifs_${ownerId}`;
+        const stored = localStorage.getItem(localKey);
+        if (stored) {
+          const list: AppNotification[] = JSON.parse(stored);
+          const updated = list.map(n => n.id === id ? { ...n, read: true } : n);
+          localStorage.setItem(localKey, JSON.stringify(updated));
+        }
+      } catch (_) {}
+    }
   },
 
   // Seeds initial defaults to Firestore if it's empty for this merchant
@@ -964,6 +1354,46 @@ export const firebaseService = {
       }
     } catch (e) {
       console.error("LocalStorage delete draft error:", e);
+    }
+  },
+
+  async getAllAppointmentsAdmin(): Promise<Appointment[]> {
+    try {
+      const snap = await getDocs(collection(db, COLL_APPOINTMENTS));
+      return snap.docs.map(docSnap => docSnap.data() as Appointment);
+    } catch (e) {
+      console.warn("getAllAppointmentsAdmin error:", e);
+      return [];
+    }
+  },
+
+  async getAllClientsAdmin(): Promise<Client[]> {
+    try {
+      const snap = await getDocs(collection(db, COLL_CLIENTS));
+      return snap.docs.map(docSnap => docSnap.data() as Client);
+    } catch (e) {
+      console.warn("getAllClientsAdmin error:", e);
+      return [];
+    }
+  },
+
+  async getAllServicesAdmin(): Promise<Service[]> {
+    try {
+      const snap = await getDocs(collection(db, COLL_SERVICES));
+      return snap.docs.map(docSnap => docSnap.data() as Service);
+    } catch (e) {
+      console.warn("getAllServicesAdmin error:", e);
+      return [];
+    }
+  },
+
+  async getAllBarbersAdmin(): Promise<Barber[]> {
+    try {
+      const snap = await getDocs(collection(db, COLL_BARBERS));
+      return snap.docs.map(docSnap => docSnap.data() as Barber);
+    } catch (e) {
+      console.warn("getAllBarbersAdmin error:", e);
+      return [];
     }
   }
 };

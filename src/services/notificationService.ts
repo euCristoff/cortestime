@@ -163,8 +163,44 @@ export const notificationService = {
     }
   },
 
+  // Format date helper (YYYY-MM-DD -> DD/MM)
+  formatDatePt(dateStr: string): string {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}`;
+    }
+    return dateStr;
+  },
+
+  // Notify Barbershop when a client cancels
+  notifyCancellationToBarbershop(appointment: { id: string; clientName: string; date: string; time: string; serviceId?: string }, serviceName?: string, reason?: string) {
+    const dataFormatada = this.formatDatePt(appointment.date);
+    const servText = serviceName ? ` (${serviceName})` : '';
+    const reasonText = reason ? ` Motivo: "${reason}"` : '';
+    
+    this.triggerNotification(
+      '🚫 Cancelamento de Horário',
+      `O cliente ${appointment.clientName} cancelou o agendamento de ${dataFormatada} às ${appointment.time}${servText}.${reasonText}`,
+      `cancel-barber-${appointment.id}-${Date.now()}`
+    );
+  },
+
+  // Notify Client when the barbershop cancels
+  notifyCancellationToClient(appointment: { id: string; clientName: string; date: string; time: string }, businessName: string, serviceName?: string, reason?: string) {
+    const dataFormatada = this.formatDatePt(appointment.date);
+    const servText = serviceName ? ` de ${serviceName}` : '';
+    const reasonText = reason ? ` Motivo: "${reason}".` : '';
+    
+    this.triggerNotification(
+      '⚠️ Agendamento Cancelado pela Barbearia',
+      `Olá ${appointment.clientName}, seu agendamento${servText} na ${businessName} para o dia ${dataFormatada} às ${appointment.time} foi cancelado.${reasonText} Clique para reagendar.`,
+      `cancel-client-${appointment.id}-${Date.now()}`
+    );
+  },
+
   // Force trigger test simulations instantly
-  simulateNotification(type: '30min' | '5min' | 'tomorrow', clientName: string = 'João Silva', time: string = '14:00', serviceName: string = 'Cabelo & Barba') {
+  simulateNotification(type: '30min' | '5min' | 'tomorrow' | 'cancel_client' | 'cancel_barbershop', clientName: string = 'João Silva', time: string = '14:00', serviceName: string = 'Cabelo & Barba') {
     if (type === '30min') {
       this.triggerNotification(
         '⏰ Atendimento em breve',
@@ -182,6 +218,18 @@ export const notificationService = {
         '📅 Agenda de amanhã',
         `Você tem 6 atendimentos agendados para amanhã.`,
         'test-tomorrow'
+      );
+    } else if (type === 'cancel_client') {
+      this.triggerNotification(
+        '🚫 Cancelamento de Horário',
+        `O cliente ${clientName} cancelou o agendamento de hoje às ${time} (${serviceName}).`,
+        'test-cancel-client'
+      );
+    } else if (type === 'cancel_barbershop') {
+      this.triggerNotification(
+        '⚠️ Agendamento Cancelado pela Barbearia',
+        `Olá ${clientName}, seu agendamento de ${serviceName} para hoje às ${time} foi cancelado pela barbearia.`,
+        'test-cancel-barbershop'
       );
     }
   }

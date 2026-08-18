@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
@@ -30,10 +30,21 @@ import {
   ShieldCheck,
   X,
   Calendar,
-  User
+  User,
+  AlertTriangle,
+  Ban,
+  Search,
+  LogOut,
+  Bell,
+  Users,
+  Radio,
+  CheckCircle2,
+  ChevronRight,
+  Info
 } from 'lucide-react';
-import { MerchantUser, Service, Barber, Appointment } from '../types';
+import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem } from '../types';
 import { firebaseService } from '../services/firebaseService';
+import { notificationService } from '../services/notificationService';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import ClientBooking from './ClientBooking';
 
@@ -223,6 +234,254 @@ export default function CortesVitrine({
   const [downgradeNotice, setDowngradeNotice] = useState<string | null>(() => {
     return localStorage.getItem('cortestime_downgrade_notice');
   });
+
+  // Client Area State
+  const [isClientLoggedIn, setIsClientLoggedIn] = useState<boolean>(false);
+  const [clientAppointments, setClientAppointments] = useState<Appointment[]>([]);
+  const [clientNotifications, setClientNotifications] = useState<AppNotification[]>([]);
+  const [isLoadingClientData, setIsLoadingClientData] = useState<boolean>(false);
+  const [clientAreaError, setClientAreaError] = useState<string | null>(null);
+  const [cancellingClientApp, setCancellingClientApp] = useState<Appointment | null>(null);
+  const [clientCancelReason, setClientCancelReason] = useState<string>('');
+  const [clientCancelSuccessMsg, setClientCancelSuccessMsg] = useState<string | null>(null);
+
+  // Live Queue / Fila ao Vivo State
+  const [liveQueue, setLiveQueue] = useState<QueueItem[]>([]);
+  const [isLoadingQueue, setIsLoadingQueue] = useState<boolean>(false);
+  const [showJoinQueueModal, setShowJoinQueueModal] = useState<boolean>(false);
+  const [joinQueueName, setJoinQueueName] = useState<string>('');
+  const [joinQueuePhone, setJoinQueuePhone] = useState<string>('');
+  const [joinQueueServiceId, setJoinQueueServiceId] = useState<string>(services[0]?.id || '');
+  const [joinQueueBarberId, setJoinQueueBarberId] = useState<string>('');
+  const [isJoiningQueue, setIsJoiningQueue] = useState<boolean>(false);
+  const [joinQueueError, setJoinQueueError] = useState<string | null>(null);
+  const [activeQueueItemId, setActiveQueueItemId] = useState<string | null>(() => {
+    // Restore client's active queue token if exists in session
+    return localStorage.getItem(`cortestime_my_queue_${merchant?.uid || 'guest'}`);
+  });
+
+  // Real-time polling for public vitrine live queue
+  useEffect(() => {
+    let isSubscribed = true;
+    const fetchLiveQueue = async () => {
+      if (!merchant?.uid) return;
+      try {
+        const list = await firebaseService.getQueue(merchant.uid);
+        if (isSubscribed) {
+          setLiveQueue(list);
+        }
+      } catch (err) {
+        console.warn('Erro ao sincronizar fila ao vivo da vitrine:', err);
+      }
+    };
+
+    fetchLiveQueue();
+    const interval = setInterval(fetchLiveQueue, 5000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [merchant?.uid]);
+
+  // Derived queue metrics
+  const waitingQueue = liveQueue.filter(q => q.status === 'waiting');
+  const inProgressQueue = liveQueue.filter(q => q.status === 'in_progress');
+  
+  // Calculate average service duration based on registered services
+  const defaultAvgServiceMin = services.length > 0
+    ? Math.round(services.reduce((acc, s) => acc + (s.durationMin || 30), 0) / services.length)
+    : 30;
+  
+  const activeBarbersCount = Math.max((barbers && barbers.length > 0 ? barbers.length : 1), 1);
+  
+  // Estimate wait time based on service duration of waiting clients
+  const calculateEstimatedTimeForPosition = (positionZeroIndexed: number) => {
+    if (positionZeroIndexed <= 0) return 0;
+    const itemsAhead = waitingQueue.slice(0, positionZeroIndexed);
+    const sumDuration = itemsAhead.reduce((acc, item) => {
+      const serv = services.find(s => s.id === item.serviceId);
+      return acc + (serv?.durationMin || defaultAvgServiceMin);
+    }, 0);
+    return Math.max(Math.ceil(sumDuration / activeBarbersCount), 5);
+  };
+
+  // Check if current user is in queue
+  const myQueueItem = activeQueueItemId
+    ? liveQueue.find(q => q.id === activeQueueItemId)
+    : null;
+
+  const myQueuePosition = myQueueItem && myQueueItem.status === 'waiting'
+    ? waitingQueue.findIndex(q => q.id === myQueueItem.id) + 1
+    : 0;
+
+  const myQueueEstimatedMinutes = myQueuePosition > 0
+    ? calculateEstimatedTimeForPosition(myQueuePosition - 1)
+    : 0;
+
+  const handleJoinQueue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinQueueName.trim()) {
+      setJoinQueueError('Por favor, informe seu nome.');
+      return;
+    }
+    const cleanPhone = joinQueuePhone.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 8) {
+      setJoinQueueError('Por favor, informe seu WhatsApp para avisos.');
+      return;
+    }
+
+    setIsJoiningQueue(true);
+    setJoinQueueError(null);
+
+    try {
+      const newItemId = `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const selectedService = services.find(s => s.id === joinQueueServiceId) || services[0];
+      
+      const newQueueItem: QueueItem = {
+        id: newItemId,
+        ownerId: merchant.uid || '',
+        clientName: joinQueueName.trim(),
+        clientPhone: joinQueuePhone.trim(),
+        serviceId: selectedService?.id || 'service-default',
+        barberId: joinQueueBarberId || undefined,
+        status: 'waiting',
+        joinedAt: new Date().toISOString()
+      };
+
+      await firebaseService.saveQueueItem(newQueueItem, merchant.uid || '');
+      setLiveQueue(prev => [...prev, newQueueItem]);
+      setActiveQueueItemId(newItemId);
+      localStorage.setItem(`cortestime_my_queue_${merchant?.uid || 'guest'}`, newItemId);
+
+      setShowJoinQueueModal(false);
+      setJoinQueueName('');
+      setJoinQueuePhone('');
+    } catch (err) {
+      console.error('Erro ao entrar na fila:', err);
+      setJoinQueueError('Não foi possível entrar na fila agora. Tente novamente.');
+    } finally {
+      setIsJoiningQueue(false);
+    }
+  };
+
+  const handleLeaveQueue = async () => {
+    if (!activeQueueItemId) return;
+    if (!confirm('Deseja realmente sair da fila de espera?')) return;
+
+    try {
+      await firebaseService.deleteQueueItem(activeQueueItemId);
+      setLiveQueue(prev => prev.filter(q => q.id !== activeQueueItemId));
+      setActiveQueueItemId(null);
+      localStorage.removeItem(`cortestime_my_queue_${merchant?.uid || 'guest'}`);
+    } catch (err) {
+      console.error('Erro ao sair da fila:', err);
+    }
+  };
+
+  const fetchClientData = async (phoneToFetch: string) => {
+    const raw = phoneToFetch.replace(/\D/g, '');
+    if (!raw || raw.length < 8) return;
+    setIsLoadingClientData(true);
+    setClientAreaError(null);
+
+    try {
+      // 1. Fetch appointments
+      let allApps: Appointment[] = [];
+      if (merchant.uid) {
+        const remoteApps = await firebaseService.getAppointments(merchant.uid);
+        allApps = remoteApps.filter(a => a.clientPhone.replace(/\D/g, '') === raw || a.clientPhone.includes(raw));
+      } else {
+        const localKeys = Object.keys(localStorage).filter(k => k.startsWith('cortestime_appointments_') || k === 'cortestime_guest_appointments');
+        const list: Appointment[] = [];
+        for (const k of localKeys) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(k) || '[]');
+            list.push(...parsed);
+          } catch (_) {}
+        }
+        allApps = list.filter(a => a.clientPhone.replace(/\D/g, '') === raw || a.clientPhone.includes(raw));
+      }
+      setClientAppointments(allApps);
+
+      // 2. Fetch client notifications (including cancellation notices from barbershop)
+      const notifs = await firebaseService.getClientNotifications(raw);
+      setClientNotifications(notifs);
+    } catch (err) {
+      console.error('Error loading client area data:', err);
+    } finally {
+      setIsLoadingClientData(false);
+    }
+  };
+
+  const handleClientLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientPhone.trim() || clientPhone.replace(/\D/g, '').length < 8) {
+      setClientAreaError('Por favor, informe um telefone válido com DDD.');
+      return;
+    }
+    setClientAreaError(null);
+    setIsClientLoggedIn(true);
+    await fetchClientData(clientPhone);
+  };
+
+  const handleConfirmCancelFromClientArea = async () => {
+    if (!cancellingClientApp) return;
+
+    const serv = services.find(s => s.id === cancellingClientApp.serviceId);
+    const barber = (barbers || []).find(b => b.id === cancellingClientApp.barberId);
+
+    try {
+      // 1. Update appointment in Firebase & LocalStorage
+      await firebaseService.updateAppointmentStatus(cancellingClientApp.id, 'cancelled', {
+        cancelledBy: 'client',
+        cancellationReason: clientCancelReason.trim() || 'Cancelado pelo cliente na Área do Cliente'
+      });
+
+      // 2. Trigger push notification for Barbershop
+      notificationService.notifyCancellationToBarbershop(
+        cancellingClientApp,
+        serv?.name,
+        clientCancelReason.trim()
+      );
+
+      // 3. Save notification for barbershop
+      const notif: AppNotification = {
+        id: `notif-cancel-${cancellingClientApp.id}-${Date.now()}`,
+        ownerId: merchant.uid || cancellingClientApp.ownerId || '',
+        clientPhone: cancellingClientApp.clientPhone,
+        target: 'barbershop',
+        type: 'cancellation_by_client',
+        title: '🚫 Cancelamento pelo Cliente (Área do Cliente)',
+        body: `O cliente ${cancellingClientApp.clientName} cancelou o agendamento de ${serv?.name || 'Serviço'} (${cancellingClientApp.date} às ${cancellingClientApp.time}).${clientCancelReason.trim() ? ` Motivo: "${clientCancelReason.trim()}"` : ''}`,
+        appointmentId: cancellingClientApp.id,
+        clientName: cancellingClientApp.clientName,
+        serviceName: serv?.name || '',
+        barberName: barber?.name || '',
+        date: cancellingClientApp.date,
+        time: cancellingClientApp.time,
+        reason: clientCancelReason.trim(),
+        createdAt: new Date().toISOString(),
+        read: false
+      };
+      await firebaseService.saveNotification(notif);
+
+      // Update state
+      setClientAppointments(prev => prev.map(a => a.id === cancellingClientApp.id ? {
+        ...a,
+        status: 'cancelled',
+        cancelledBy: 'client',
+        cancellationReason: clientCancelReason.trim(),
+        cancelledAt: new Date().toISOString()
+      } : a));
+
+      setClientCancelSuccessMsg(`Horário do dia ${cancellingClientApp.date} às ${cancellingClientApp.time} cancelado com sucesso. A barbearia foi avisada!`);
+      setCancellingClientApp(null);
+      setClientCancelReason('');
+    } catch (err) {
+      console.error('Error cancelling appointment in client area:', err);
+      alert('Erro ao cancelar o agendamento. Tente novamente.');
+    }
+  };
 
   const handleCloseDowngradeNotice = () => {
     localStorage.removeItem('cortestime_downgrade_notice');
@@ -509,63 +768,45 @@ export default function CortesVitrine({
             )}
 
             {/* Customer Reviews Section */}
-            <div className="py-6 border-b border-gray-100 space-y-3 text-left">
-              <div className="flex items-center justify-between">
-                <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-3 py-1 rounded-full text-amber-900 text-xs font-extrabold shadow-2xs">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  <span>4,9 de 5 (127 avaliações)</span>
+            {merchant.vitrineAvaliacoes && merchant.vitrineAvaliacoes.length > 0 && (
+              <div className="py-6 border-b border-gray-100 space-y-3 text-left">
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200/80 px-3 py-1 rounded-full text-amber-900 text-xs font-extrabold shadow-2xs">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>
+                      {(merchant.vitrineAvaliacoes.reduce((acc, r) => acc + (r.rating || 5), 0) / merchant.vitrineAvaliacoes.length).toFixed(1).replace('.', ',')} de 5 ({merchant.vitrineAvaliacoes.length} {merchant.vitrineAvaliacoes.length === 1 ? 'avaliação' : 'avaliações'})
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-extrabold text-brand-dark flex items-center gap-1.5">
+                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                    <span>Avaliações dos Clientes</span>
+                  </h4>
+                </div>
+
+                {/* Real Customer Reviews */}
+                <div className="space-y-2.5">
+                  {merchant.vitrineAvaliacoes.map((rev, idx) => (
+                    <div key={rev.id || idx} className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`w-3.5 h-3.5 ${i < (rev.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
+                          ))}
+                        </div>
+                        {rev.timeAgo && (
+                          <span className="text-[10px] text-gray-400 font-medium">{rev.timeAgo}</span>
+                        )}
+                      </div>
+                      <p className="text-xs font-medium text-gray-800">"{rev.comment}"</p>
+                      <span className="text-[10px] text-gray-500 font-extrabold block">— {rev.author}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div>
-                <h4 className="text-sm font-extrabold text-brand-dark flex items-center gap-1.5">
-                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  <span>Avaliações dos Clientes</span>
-                </h4>
-              </div>
-
-              {/* Clean Customer Reviews */}
-              <div className="space-y-2.5">
-                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <span className="text-[10px] text-gray-400 font-medium">Há 2 dias</span>
-                  </div>
-                  <p className="text-xs font-medium text-gray-800">"Excelente atendimento, corte impecável e ambiente muito agradável!"</p>
-                  <span className="text-[10px] text-gray-500 font-extrabold block">— Lucas Silva</span>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <span className="text-[10px] text-gray-400 font-medium">Há 5 dias</span>
-                  </div>
-                  <p className="text-xs font-medium text-gray-800">"Melhor corte da cidade! Pontualidade nota 10."</p>
-                  <span className="text-[10px] text-gray-500 font-extrabold block">— Mateus Oliveira</span>
-                </div>
-
-                <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-2xs space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <span className="text-[10px] text-gray-400 font-medium">Há 1 semana</span>
-                  </div>
-                  <p className="text-xs font-medium text-gray-800">"Voltarei com certeza. Atendimento top de linha!"</p>
-                  <span className="text-[10px] text-gray-500 font-extrabold block">— Gabriel Costa</span>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Hero Booking Card (Design matching Image 1) */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100 text-center space-y-5 my-6">
@@ -1460,6 +1701,146 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
+                  {/* SEÇÃO: FILA AO VIVO NA VITRINE */}
+                  <div className="bg-gradient-to-b from-white to-gray-50/80 rounded-3xl p-5 shadow-sm border border-gray-100 text-left space-y-4 my-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                          <Scissors className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-extrabold text-gray-900 flex items-center gap-1.5">
+                            <span>✂️ Fila ao vivo</span>
+                            {waitingQueue.length > 0 && (
+                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.2 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Aberta
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[10px] text-gray-400">Atendimento por ordem de chegada</p>
+                        </div>
+                      </div>
+
+                      {waitingQueue.length > 0 ? (
+                        <div className="text-right">
+                          <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                            {waitingQueue.length} {waitingQueue.length === 1 ? 'pessoa' : 'pessoas'} na fila
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
+                          Fila livre
+                        </span>
+                      )}
+                    </div>
+
+                    {/* STATUS BANNER DO CLIENTE CASO ELE JÁ ESTEJA NA FILA */}
+                    {myQueueItem && myQueueItem.status === 'waiting' && (
+                      <div className="bg-gradient-to-br from-emerald-50 to-blue-50 border-2 border-emerald-400/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-md">
+                            Sua Posição
+                          </span>
+                          <span className="text-xs text-gray-600 font-bold">
+                            {myQueueItem.clientName}
+                          </span>
+                        </div>
+
+                        <div className="flex items-baseline justify-between pt-1">
+                          <div>
+                            <span className="text-3xl font-black text-emerald-950 font-display">
+                              #{myQueuePosition}
+                            </span>
+                            <p className="text-xs font-semibold text-emerald-800 mt-0.5">
+                              {myQueuePosition === 1 ? (
+                                <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                                  🎉 Você é o próximo!
+                                </span>
+                              ) : (
+                                <span>{myQueuePosition - 1} {myQueuePosition - 1 === 1 ? 'pessoa' : 'pessoas'} na sua frente</span>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="text-right">
+                            <div className="flex items-center justify-end gap-1 text-xs font-mono font-black text-brand-blue">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>~{myQueueEstimatedMinutes} min</span>
+                            </div>
+                            <span className="text-[9px] text-gray-400 block mt-0.5">
+                              Tempo estimado
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
+                          <span className="text-gray-500 italic">
+                            Avisaremos você quando sua vez chegar!
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleLeaveQueue}
+                            className="text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer"
+                          >
+                            Desistir / Sair
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {myQueueItem && myQueueItem.status === 'in_progress' && (
+                      <div className="bg-blue-50 border-2 border-blue-400 rounded-2xl p-3.5 text-center space-y-1.5">
+                        <span className="text-xs font-black text-blue-900 flex items-center justify-center gap-1.5">
+                          <Scissors className="w-4 h-4 text-blue-600 animate-bounce" />
+                          Sua vez chegou!
+                        </span>
+                        <p className="text-xs text-blue-700">
+                          Você está sendo atendido na cadeira agora. Bom corte!
+                        </p>
+                      </div>
+                    )}
+
+                    {/* SE O CLIENTE NÃO ESTÁ NA FILA */}
+                    {!myQueueItem && (
+                      <div className="space-y-2.5">
+                        {waitingQueue.length === 0 ? (
+                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-1">
+                            <p className="text-xs text-gray-600 font-medium">
+                              No momento não há clientes na fila.
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              Entre na fila agora para ser o primeiro atendido!
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs text-gray-700">
+                              <span className="font-medium">Tempo médio de espera:</span>
+                              <span className="font-mono font-bold text-gray-900 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-brand-blue" />
+                                ~{calculateEstimatedTimeForPosition(waitingQueue.length)} min
+                              </span>
+                            </div>
+                            <p className="text-[9px] text-gray-400 leading-tight">
+                              * O tempo é uma estimativa calculada pela duração dos serviços e pode sofrer variações.
+                            </p>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowJoinQueueModal(true)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs py-3 px-4 rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Entrar na Fila ao Vivo</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Hero Booking Card (Design matching Image 1) */}
                   <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 text-center space-y-3.5 my-4">
                     <div className="space-y-0.5">
@@ -1952,7 +2333,7 @@ export default function CortesVitrine({
         )}
       </AnimatePresence>
 
-      {/* CLIENT AREA LOGIN MODAL (Design matching Image 2) */}
+      {/* CLIENT AREA MODAL & DASHBOARD */}
       <AnimatePresence>
         {showClientAreaModal && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1960,20 +2341,23 @@ export default function CortesVitrine({
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl relative"
+              className="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl relative max-h-[90vh] flex flex-col"
             >
-              {/* Top Blue Header Banner matching Image 2 */}
-              <div className="h-28 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 relative flex items-center justify-center">
+              {/* Top Blue Header Banner */}
+              <div className="h-24 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 relative flex items-center justify-center shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowClientAreaModal(false)}
+                  onClick={() => {
+                    setShowClientAreaModal(false);
+                    setIsClientLoggedIn(false);
+                  }}
                   className="absolute top-3 right-3 text-white/80 hover:text-white bg-black/20 hover:bg-black/40 p-1.5 rounded-full transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
                 
-                {/* Circle Logo Container matching Image 2 */}
-                <div className="absolute -bottom-8 w-20 h-20 rounded-full bg-white border-4 border-white shadow-md flex items-center justify-center text-blue-600 font-extrabold text-xs text-center p-1 overflow-hidden">
+                {/* Circle Logo Container */}
+                <div className="absolute -bottom-7 w-16 h-16 rounded-full bg-white border-4 border-white shadow-md flex items-center justify-center text-blue-600 font-extrabold text-xs text-center p-1 overflow-hidden">
                   {logoImage ? (
                     <img src={logoImage} alt={logoText} className="w-full h-full object-cover rounded-full" />
                   ) : (
@@ -1983,69 +2367,500 @@ export default function CortesVitrine({
               </div>
 
               {/* Modal Body */}
-              <div className="pt-12 pb-8 px-6 text-center space-y-4">
-                <h3 className="text-lg font-bold text-gray-900">
-                  Faça o login
-                </h3>
+              <div className="pt-10 pb-6 px-6 text-center space-y-4 overflow-y-auto flex-1 text-left">
+                {!isClientLoggedIn ? (
+                  <div className="space-y-4 text-center">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        Área do Cliente
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Consulte e gerencie seus agendamentos na {merchant.nomeBarbearia || 'Barbearia'}
+                      </p>
+                    </div>
 
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!clientPhone.trim()) {
-                      alert('Por favor, informe o telefone cadastrado.');
-                      return;
-                    }
-                    alert(`Entrando na Área do Cliente para o telefone ${clientPhone}...`);
-                    setShowClientAreaModal(false);
-                    // Open booking or client appointment list
-                    if (onBookOnline) {
-                      onBookOnline();
-                    } else {
-                      setShowSiteBookingModal(true);
-                    }
-                  }}
-                  className="space-y-3 text-left"
+                    {clientAreaError && (
+                      <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl border border-red-100">
+                        {clientAreaError}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleClientLogin} className="space-y-3 text-left">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 block mb-1">
+                          Telefone (WhatsApp)
+                        </label>
+                        <input
+                          type="tel"
+                          value={clientPhone}
+                          onChange={(e) => setClientPhone(e.target.value)}
+                          placeholder="(11) 99999-9999"
+                          required
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 block mb-1">
+                          Senha (opcional)
+                        </label>
+                        <input
+                          type="password"
+                          value={clientPass}
+                          onChange={(e) => setClientPass(e.target.value)}
+                          placeholder="Digite se tiver uma senha"
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isLoadingClientData}
+                        className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm py-3.5 rounded-full transition-colors shadow-md shadow-blue-500/20 cursor-pointer mt-2 flex items-center justify-center gap-2"
+                      >
+                        {isLoadingClientData ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Entrando...</span>
+                          </>
+                        ) : (
+                          <span>Acessar Meus Agendamentos</span>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Logged in Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900">
+                          Meus Agendamentos
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          {clientPhone}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsClientLoggedIn(false);
+                          setClientAppointments([]);
+                          setClientCancelSuccessMsg(null);
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer bg-red-50 px-2.5 py-1 rounded-lg"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sair</span>
+                      </button>
+                    </div>
+
+                    {clientCancelSuccessMsg && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{clientCancelSuccessMsg}</span>
+                      </div>
+                    )}
+
+                    {/* BARBERSHOP CANCELLATION NOTIFICATIONS ALERT BANNER */}
+                    {clientAppointments.some(a => a.status === 'cancelled' && a.cancelledBy === 'barbershop') && (
+                      <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-3.5 space-y-2">
+                        <div className="flex items-center gap-2 text-red-800 font-bold text-xs">
+                          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                          <span>Atenção: Agendamento Cancelado pela Barbearia</span>
+                        </div>
+                        {clientAppointments
+                          .filter(a => a.status === 'cancelled' && a.cancelledBy === 'barbershop')
+                          .slice(0, 2)
+                          .map((cancelledItem) => {
+                            const serv = services.find(s => s.id === cancelledItem.serviceId);
+                            return (
+                              <div key={cancelledItem.id} className="bg-white/80 p-2.5 rounded-xl text-xs space-y-1 text-red-950">
+                                <p className="font-semibold">
+                                  {serv?.name || 'Serviço'} - {cancelledItem.date} às {cancelledItem.time}
+                                </p>
+                                {cancelledItem.cancellationReason && (
+                                  <p className="text-[11px] text-red-700 italic">
+                                    Motivo informado: "{cancelledItem.cancellationReason}"
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowClientAreaModal(false);
+                            if (onBookOnline) {
+                              onBookOnline();
+                            } else {
+                              setShowSiteBookingModal(true);
+                            }
+                          }}
+                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Reagendar Novo Horário</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* APPOINTMENTS LIST */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                          Seus Horários ({clientAppointments.length})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => fetchClientData(clientPhone)}
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                        >
+                          Atualizar
+                        </button>
+                      </div>
+
+                      {isLoadingClientData ? (
+                        <div className="py-8 text-center text-xs text-gray-400">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
+                          <p>Carregando seus agendamentos...</p>
+                        </div>
+                      ) : clientAppointments.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-gray-400 bg-gray-50 rounded-2xl border border-gray-100 p-4 space-y-2">
+                          <Calendar className="w-8 h-8 text-gray-300 mx-auto" />
+                          <p>Nenhum agendamento encontrado para este número.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowClientAreaModal(false);
+                              if (onBookOnline) {
+                                onBookOnline();
+                              } else {
+                                setShowSiteBookingModal(true);
+                              }
+                            }}
+                            className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                          >
+                            + Agendar um horário agora
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                          {clientAppointments.map((app) => {
+                            const serv = services.find(s => s.id === app.serviceId);
+                            const barber = (barbers || []).find(b => b.id === app.barberId);
+                            const isCancelled = app.status === 'cancelled';
+                            const isCancelledByBarbershop = isCancelled && app.cancelledBy === 'barbershop';
+                            const isCancelledByClient = isCancelled && app.cancelledBy === 'client';
+
+                            return (
+                              <div
+                                key={app.id}
+                                className={`p-4 rounded-2xl border transition-all text-left space-y-2.5 ${
+                                  isCancelledByBarbershop
+                                    ? 'bg-red-50/60 border-red-200'
+                                    : isCancelled
+                                    ? 'bg-gray-50 border-gray-200 opacity-70'
+                                    : 'bg-white border-gray-200 hover:border-blue-300 shadow-xs'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <h5 className="font-bold text-sm text-gray-900">{serv?.name || 'Serviço'}</h5>
+                                    <p className="text-xs text-gray-500">
+                                      Profissional: <strong>{barber?.name || 'Barbeiro'}</strong>
+                                    </p>
+                                  </div>
+
+                                  {isCancelled ? (
+                                    <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                      Cancelado
+                                    </span>
+                                  ) : app.status === 'completed' ? (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                      Concluído
+                                    </span>
+                                  ) : (
+                                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                      Confirmado
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-3 text-xs text-gray-700 pt-1 border-t border-gray-100 font-medium">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                                    {app.date}
+                                  </span>
+                                  <span className="flex items-center gap-1 font-mono">
+                                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                    {app.time}
+                                  </span>
+                                  {serv?.price ? (
+                                    <span className="text-gray-500 font-normal ml-auto">
+                                      R$ {serv.price.toFixed(0)}
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                {isCancelledByBarbershop && (
+                                  <p className="text-[11px] text-red-700 bg-red-100/60 p-2 rounded-lg italic">
+                                    Cancelado pela barbearia{app.cancellationReason ? `: "${app.cancellationReason}"` : ''}
+                                  </p>
+                                )}
+
+                                {isCancelledByClient && (
+                                  <p className="text-[11px] text-gray-500 bg-gray-100 p-2 rounded-lg italic">
+                                    Cancelado por você{app.cancellationReason ? `: "${app.cancellationReason}"` : ''}
+                                  </p>
+                                )}
+
+                                {!isCancelled && app.status !== 'completed' && (
+                                  <div className="pt-2 flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCancellingClientApp(app);
+                                        setClientCancelReason('');
+                                      }}
+                                      className="text-xs bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-xl border border-red-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Ban className="w-3.5 h-3.5" />
+                                      <span>Cancelar Horário</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-100 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowClientAreaModal(false);
+                          if (onBookOnline) {
+                            onBookOnline();
+                          } else {
+                            setShowSiteBookingModal(true);
+                          }
+                        }}
+                        className="flex-1 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs py-3 rounded-xl transition-colors cursor-pointer shadow-md shadow-blue-500/20 text-center"
+                      >
+                        + Novo Agendamento
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO PELO CLIENTE NA VITRINE */}
+      <AnimatePresence>
+        {cancellingClientApp && (
+          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl space-y-4 text-left border border-gray-100"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                <Ban className="w-6 h-6" />
+              </div>
+
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-bold text-gray-900">Cancelar Agendamento?</h3>
+                <p className="text-xs text-gray-500">
+                  Data: <strong>{cancellingClientApp.date} às {cancellingClientApp.time}</strong>
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700 block">
+                  Motivo do cancelamento (opcional):
+                </label>
+                <textarea
+                  value={clientCancelReason}
+                  onChange={(e) => setClientCancelReason(e.target.value)}
+                  placeholder="Ex: Tive um imprevisto..."
+                  rows={2}
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                />
+              </div>
+
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Ao confirmar o cancelamento, seu horário será liberado e enviaremos um alerta imediato para a barbearia.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCancellingClientApp(null)}
+                  className="py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  <div>
-                    <input
-                      type="tel"
-                      value={clientPhone}
-                      onChange={(e) => setClientPhone(e.target.value)}
-                      placeholder="Telefone cadastrado (com DDD)"
-                      required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
-                    />
-                  </div>
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCancelFromClientArea}
+                  className="py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-red-600/20"
+                >
+                  Confirmar Cancelamento
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-                  <div>
-                    <input
-                      type="password"
-                      value={clientPass}
-                      onChange={(e) => setClientPass(e.target.value)}
-                      placeholder="Senha"
-                      required
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
-                    />
-                  </div>
+      {/* MODAL: ENTRAR NA FILA AO VIVO */}
+      <AnimatePresence>
+        {showJoinQueueModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 text-left space-y-4 relative"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setShowJoinQueueModal(false);
+                  setJoinQueueError(null);
+                }}
+                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
 
-                  <div className="text-center pt-1">
-                    <button
-                      type="button"
-                      onClick={() => alert('Para redefinir sua senha, entre em contato diretamente com a barbearia via WhatsApp.')}
-                      className="text-xs text-gray-500 hover:text-blue-600 font-medium cursor-pointer"
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                  <Scissors className="w-3 h-3 text-emerald-600" />
+                  <span>Fila ao vivo</span>
+                </div>
+                <h3 className="text-lg font-black text-gray-900 leading-tight">
+                  Entrar na Fila de Espera
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Preencha seus dados para garantir sua posição na fila por ordem de chegada.
+                </p>
+              </div>
+
+              {joinQueueError && (
+                <div className="bg-red-50 text-red-700 border border-red-200 text-xs p-3 rounded-xl">
+                  {joinQueueError}
+                </div>
+              )}
+
+              <form onSubmit={handleJoinQueue} className="space-y-3.5">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    Seu Nome Completo <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={joinQueueName}
+                    onChange={(e) => setJoinQueueName(e.target.value)}
+                    placeholder="Ex: Carlos Silva"
+                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all font-medium text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    WhatsApp para Avisos <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={joinQueuePhone}
+                    onChange={(e) => setJoinQueuePhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-9999"
+                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all font-medium text-gray-900"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Enviaremos alertas quando seu atendimento for se aproximar.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">
+                    Serviço Desejado
+                  </label>
+                  <select
+                    value={joinQueueServiceId}
+                    onChange={(e) => setJoinQueueServiceId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all font-medium text-gray-900 cursor-pointer"
+                  >
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} - R$ {s.price.toFixed(2)} ({s.durationMin} min)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {barbers && barbers.length > 0 && (
+                  <div>
+                    <label className="text-xs font-bold text-gray-700 block mb-1">
+                      Preferência de Barbeiro (Opcional)
+                    </label>
+                    <select
+                      value={joinQueueBarberId}
+                      onChange={(e) => setJoinQueueBarberId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all font-medium text-gray-900 cursor-pointer"
                     >
-                      Esqueceu a senha?
-                    </button>
+                      <option value="">Qualquer barbeiro disponível</option>
+                      {barbers.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                )}
 
+                <div className="bg-emerald-50/70 border border-emerald-100 p-3 rounded-xl text-[11px] text-emerald-900 space-y-1">
+                  <div className="flex items-center justify-between font-bold">
+                    <span>Posição estimada:</span>
+                    <span>#{waitingQueue.length + 1}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-emerald-800">
+                    <span>Tempo de espera aprox.:</span>
+                    <span>~{calculateEstimatedTimeForPosition(waitingQueue.length)} min</span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
                   <button
                     type="submit"
-                    className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm py-3.5 rounded-full transition-colors shadow-md shadow-blue-500/20 cursor-pointer mt-2"
+                    disabled={isJoiningQueue}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs py-3 rounded-xl transition-all shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Logar
+                    {isJoiningQueue ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Entrando na fila...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Confirmar Entrada na Fila</span>
+                      </>
+                    )}
                   </button>
-                </form>
-              </div>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

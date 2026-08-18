@@ -20,7 +20,10 @@ import {
   Eye,
   Check,
   MessageSquare,
-  BadgeAlert
+  BadgeAlert,
+  Clock,
+  Layers,
+  Scissors
 } from 'lucide-react';
 import { OnboardingData } from '../types';
 import { notificationService } from '../services/notificationService';
@@ -32,7 +35,7 @@ interface OnboardingWizardProps {
 }
 
 export default function OnboardingWizard({ initialData, onComplete, onBackToLanding }: OnboardingWizardProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(() => {
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(() => {
     if (initialData?.fullName && initialData?.cellphone && initialData?.email && initialData?.businessName) {
       return 2;
     }
@@ -46,8 +49,9 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
     cellphone: initialData?.cellphone || '',
     email: initialData?.email || '',
     businessName: initialData?.businessName || '',
+    serviceMode: initialData?.serviceMode || 'agendamento',
     objectives: initialData?.objectives || ['Organizar agenda'], // Pre-selected in screenshot 5
-    cep: initialData?.cep || '57150-000',
+    cep: initialData?.cep || '',
     neighborhood: initialData?.neighborhood || '',
     street: initialData?.street || '',
     number: initialData?.number || '',
@@ -70,13 +74,13 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
     useRef<HTMLInputElement>(null),
   ];
 
-  // Auto-generate sms code on transition to step 4
+  // Auto-generate sms code on transition to step 5
   useEffect(() => {
-    if (step === 4) {
+    if (step === 5) {
       const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
       setSmsCode(generatedCode);
       
-      // Request notification permission automatically on step 4
+      // Request notification permission automatically on step 5
       if (notificationService.isSupported() && notificationService.getPermissionStatus() === 'default') {
         notificationService.requestPermission();
       }
@@ -131,13 +135,17 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
     setStep(3);
   };
 
-  const handleNextStep3 = (e: React.FormEvent) => {
+  const handleNextStep3 = () => {
+    setStep(4);
+  };
+
+  const handleNextStep4 = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.cep || !formData.neighborhood || !formData.street || !formData.number) {
       alert('Por favor, preencha os campos obrigatórios do endereço.');
       return;
     }
-    setStep(4);
+    setStep(5);
   };
 
   const handleSmsChange = (index: number, value: string) => {
@@ -165,7 +173,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
   const handleConfirmVerification = () => {
     const enteredCode = smsDigits.join('');
     if (enteredCode === smsCode) {
-      setStep(5);
+      setStep(6);
     } else {
       setSmsError('Código inválido. Digite o código de 6 dígitos recebido por SMS.');
     }
@@ -245,7 +253,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
         </div>
 
         <div className="text-xs font-bold text-gray-400">
-          Passo {step} de 5
+          Passo {step} de 6
         </div>
       </header>
 
@@ -337,7 +345,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
             </motion.div>
           )}
 
-          {/* STEP 2: SELECIONAR OBJETIVOS */}
+          {/* STEP 2: MODO DE ATENDIMENTO */}
           {step === 2 && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
@@ -345,8 +353,116 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
               className="space-y-6 text-left"
             >
               <div>
+                <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Modo de Operação</p>
+                <h2 className="font-display font-bold text-2xl text-brand-dark mt-1">Como sua barbearia atende?</h2>
+                <p className="text-xs text-gray-500 mt-1">Escolha o modelo principal para personalizar sua agenda e vitrine virtual</p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Opção 1: Por agendamento */}
+                <div 
+                  onClick={() => setFormData({ ...formData, serviceMode: 'agendamento' })}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                    formData.serviceMode === 'agendamento'
+                      ? 'bg-[#f0f7ff] border-brand-blue shadow-sm'
+                      : 'border-gray-100 bg-white hover:border-gray-200'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-all ${
+                    formData.serviceMode === 'agendamento'
+                      ? 'border-brand-blue bg-brand-blue text-white'
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {formData.serviceMode === 'agendamento' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Calendar className={`w-4 h-4 ${formData.serviceMode === 'agendamento' ? 'text-brand-blue' : 'text-gray-500'}`} />
+                      <h4 className="font-bold text-sm text-brand-dark">Por agendamento</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Clientes escolhem um horário marcado para serem atendidos com hora certa.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção 2: Por ordem de chegada */}
+                <div 
+                  onClick={() => setFormData({ ...formData, serviceMode: 'ordem_chegada' })}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                    formData.serviceMode === 'ordem_chegada'
+                      ? 'bg-[#f0f7ff] border-brand-blue shadow-sm'
+                      : 'border-gray-100 bg-white hover:border-gray-200'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-all ${
+                    formData.serviceMode === 'ordem_chegada'
+                      ? 'border-brand-blue bg-brand-blue text-white'
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {formData.serviceMode === 'ordem_chegada' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Users className={`w-4 h-4 ${formData.serviceMode === 'ordem_chegada' ? 'text-brand-blue' : 'text-gray-500'}`} />
+                      <h4 className="font-bold text-sm text-brand-dark">Por ordem de chegada</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Clientes entram em uma fila digital/presencial e são atendidos conforme chegam.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opção 3: Os dois */}
+                <div 
+                  onClick={() => setFormData({ ...formData, serviceMode: 'ambos' })}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                    formData.serviceMode === 'ambos'
+                      ? 'bg-[#f0f7ff] border-brand-blue shadow-sm'
+                      : 'border-gray-100 bg-white hover:border-gray-200'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-all ${
+                    formData.serviceMode === 'ambos'
+                      ? 'border-brand-blue bg-brand-blue text-white'
+                      : 'border-gray-300 bg-white'
+                  }`}>
+                    {formData.serviceMode === 'ambos' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Layers className={`w-4 h-4 ${formData.serviceMode === 'ambos' ? 'text-brand-blue' : 'text-gray-500'}`} />
+                      <h4 className="font-bold text-sm text-brand-dark">Os dois</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      A barbearia trabalha com agendamentos e também recebe clientes sem horário marcado.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleNextStep2}
+                className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-brand-blue/10 transition-all uppercase text-xs tracking-wider"
+              >
+                Continuar
+              </button>
+            </motion.div>
+          )}
+
+          {/* STEP 3: SELECIONAR OBJETIVOS */}
+          {step === 3 && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-6 text-left"
+            >
+              <div>
                 <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Informações adicionais</p>
-                <h2 className="font-display font-bold text-2xl text-brand-dark mt-1">Selecione seu principal objetivo para o success</h2>
+                <h2 className="font-display font-bold text-2xl text-brand-dark mt-1">Selecione seu principal objetivo para o sucesso</h2>
               </div>
 
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -381,7 +497,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
               </div>
 
               <button 
-                onClick={handleNextStep2}
+                onClick={handleNextStep3}
                 className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-brand-blue/10 transition-all uppercase text-xs tracking-wider"
               >
                 Continuar
@@ -389,8 +505,8 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
             </motion.div>
           )}
 
-          {/* STEP 3: ENDEREÇO DO NEGÓCIO */}
-          {step === 3 && (
+          {/* STEP 4: ENDEREÇO DO NEGÓCIO */}
+          {step === 4 && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -402,7 +518,7 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
                 <p className="text-xs text-gray-500 mt-1">Informe seu endereço para ser encontrado facilmente pelos clientes</p>
               </div>
 
-              <form onSubmit={handleNextStep3} className="space-y-4">
+              <form onSubmit={handleNextStep4} className="space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-gray-600">CEP</label>
@@ -482,8 +598,8 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
             </motion.div>
           )}
 
-          {/* STEP 4: SMS CONFIRMATION CODE */}
-          {step === 4 && (
+          {/* STEP 5: SMS CONFIRMATION CODE */}
+          {step === 5 && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -554,8 +670,8 @@ export default function OnboardingWizard({ initialData, onComplete, onBackToLand
             </motion.div>
           )}
 
-          {/* STEP 5: INSTALL CORTESTIME */}
-          {step === 5 && (
+          {/* STEP 6: INSTALL CORTESTIME */}
+          {step === 6 && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}

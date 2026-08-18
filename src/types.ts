@@ -34,8 +34,30 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  cancelledBy?: 'client' | 'barbershop';
+  cancellationReason?: string;
+  cancelledAt?: string;
   notes?: string;
   isWaitlist?: boolean;
+}
+
+export interface AppNotification {
+  id: string;
+  ownerId?: string;
+  clientPhone?: string;
+  target: 'barbershop' | 'client';
+  type: 'cancellation_by_client' | 'cancellation_by_barbershop' | 'appointment_created' | 'reminder' | 'system';
+  title: string;
+  body: string;
+  appointmentId?: string;
+  clientName?: string;
+  serviceName?: string;
+  date?: string;
+  time?: string;
+  barberName?: string;
+  reason?: string;
+  createdAt: string;
+  read: boolean;
 }
 
 export interface OnboardingData {
@@ -44,6 +66,7 @@ export interface OnboardingData {
   whatsapp?: string;
   email: string;
   businessName: string;
+  serviceMode?: ServiceMode;
   objectives: string[];
   cep: string;
   neighborhood: string;
@@ -66,6 +89,7 @@ export interface MerchantUser {
   status: 'ativo' | 'suspenso' | 'expirado' | 'inativo';
   criadoEm: string;
   onboardingCompleted?: boolean;
+  onboardingData?: OnboardingData;
   isAdmin?: boolean;
   
   // Subscription & Manual Payment fields
@@ -90,6 +114,7 @@ export interface MerchantUser {
   vitrineLinkBio?: string;
   vitrineProdutos?: { id: string; name: string; price: number; imageUrl?: string }[];
   vitrineGaleria?: string[];
+  vitrineAvaliacoes?: { id: string; author: string; rating: number; comment: string; timeAgo?: string; date?: string }[];
   
   // Invite code / Draft vitrine redemption fields
   codigoConviteResgatado?: string;
@@ -107,6 +132,133 @@ export interface MerchantUser {
   // PWA / App Installation tracking
   appInstalled?: boolean;
   installRemindersDismissed?: boolean;
+
+  // Service Mode (Agendamento, Ordem de Chegada / Fila, ou Ambos)
+  serviceMode?: ServiceMode;
+
+  // UTM & Analytics Attribution fields
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmReferrer?: string;
+  firstVisitAt?: string;
+  lastVisitAt?: string;
+  lastLoginAt?: string;
+  lastActivityAt?: string;
+  lastActivityLabel?: string;
+  activeDaysCount30d?: number;
+}
+
+export type ServiceMode = 'agendamento' | 'ordem_chegada' | 'ambos';
+
+export interface UTMData {
+  source: string;
+  medium?: string;
+  campaign?: string;
+  referrer?: string;
+  timestamp: string;
+  path?: string;
+  visitorId: string;
+}
+
+export interface AnalyticsVisit {
+  id: string;
+  visitorId: string;
+  sessionId: string;
+  utmSource: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  referrer?: string;
+  path: string;
+  timestamp: string;
+  dateStr: string;
+  userUid?: string;
+}
+
+export type AnalyticsEventType = 
+  | 'login' 
+  | 'signup'
+  | 'dashboard_open' 
+  | 'appointment_create' 
+  | 'appointment_status_update' 
+  | 'client_create' 
+  | 'barber_create' 
+  | 'service_create' 
+  | 'service_update' 
+  | 'billing_view' 
+  | 'vitrine_view' 
+  | 'vitrine_customization' 
+  | 'config_update' 
+  | 'queue_add' 
+  | 'queue_start' 
+  | 'queue_finish'
+  | 'onboarding_complete';
+
+export interface AnalyticsEvent {
+  id: string;
+  merchantUid: string;
+  merchantName?: string;
+  eventType: AnalyticsEventType;
+  eventLabel: string;
+  metadata?: Record<string, any>;
+  timestamp: string;
+  dateStr: string;
+}
+
+export type MerchantActivityStatus = 'active' | 'low_activity' | 'inactive';
+
+export interface MerchantAnalyticsSummary {
+  merchant: MerchantUser;
+  status: MerchantActivityStatus;
+  lastAccessFormatted: string;
+  lastActivityFormatted: string;
+  frequencyText: string;
+  activeDays7d: number;
+  activeDays30d: number;
+  activeDays90d: number;
+  totalAppointments: number;
+  totalClients: number;
+  totalBarbers: number;
+  totalServices: number;
+  recentEvents: AnalyticsEvent[];
+}
+
+export interface FunnelStage {
+  id: string;
+  title: string;
+  description: string;
+  count: number;
+  percentage: number;
+  dropoffPercentage?: number;
+}
+
+export interface SourceMetric {
+  source: string;
+  visits: number;
+  signups: number;
+  conversionRate: number;
+}
+
+export interface CampaignMetric {
+  campaign: string;
+  source: string;
+  visits: number;
+  signups: number;
+  conversionRate: number;
+}
+
+export interface QueueItem {
+  id: string;
+  ownerId?: string;
+  clientName: string;
+  clientPhone: string;
+  serviceId: string;
+  barberId?: string;
+  status: 'waiting' | 'in_progress' | 'completed' | 'cancelled';
+  joinedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  notes?: string;
 }
 
 export interface DraftVitrine {

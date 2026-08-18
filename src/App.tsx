@@ -6,9 +6,12 @@ import OnboardingWizard from './components/OnboardingWizard';
 import MerchantDashboard from './components/MerchantDashboard';
 import ClientBooking from './components/ClientBooking';
 import CortesVitrine from './components/CortesVitrine';
+import AdminAnalyticsDashboard from './components/AdminAnalyticsDashboard';
+import { Store, Search, ArrowLeft, Sparkles, ExternalLink, AlertCircle } from 'lucide-react';
 import { Service, Barber, Client, Appointment, OnboardingData, MerchantUser } from './types';
 import { firebaseService } from './services/firebaseService';
 import { notificationService } from './services/notificationService';
+import { analyticsTracker } from './services/analyticsTracker';
 
 function isTrialActive(trialFimStr: string): boolean {
   // Format is DD/MM/YYYY
@@ -126,64 +129,107 @@ export default function App() {
   const [publicVitrineMerchant, setPublicVitrineMerchant] = useState<MerchantUser | null>(null);
   const [publicVitrineServices, setPublicVitrineServices] = useState<Service[]>([]);
   const [isPublicVitrineLoading, setIsPublicVitrineLoading] = useState(false);
+  const [vitrineNotFoundSlug, setVitrineNotFoundSlug] = useState<string | null>(null);
+
+  // Admin Analytics Route State (/admin/analytics or ?admin=analytics)
+  const [isAdminAnalyticsRoute, setIsAdminAnalyticsRoute] = useState<boolean>(() => {
+    const path = window.location.pathname.toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    return (
+      path === '/admin/analytics' || 
+      path === '/admin/analytics/' || 
+      path.includes('/admin/analytics') || 
+      params.get('admin') === 'analytics' || 
+      params.get('analytics') === 'true'
+    );
+  });
+
+  // Initialize UTM attribution and track visit on app mount
+  useEffect(() => {
+    analyticsTracker.initTracking();
+  }, []);
 
   // Set default document title on mount
   useEffect(() => {
-    document.title = "Cortestime — Agendamento para Barbearias";
-  }, []);
+    if (isAdminAnalyticsRoute) {
+      document.title = "Analytics Privado — CortesTime Admin";
+    } else if (!publicVitrineMerchant && !vitrineNotFoundSlug) {
+      document.title = "Cortestime — Agendamento para Barbearias";
+    }
+  }, [isAdminAnalyticsRoute, publicVitrineMerchant, vitrineNotFoundSlug]);
+
+  const loadVitrineBySlug = async (targetSlug: string) => {
+    if (!targetSlug) return;
+    setIsPublicVitrineLoading(true);
+    setVitrineNotFoundSlug(null);
+
+    try {
+      const m = await firebaseService.getMerchantBySlug(targetSlug);
+      if (m) {
+        setPublicVitrineMerchant(m);
+        const vitrineTitle = `${m.vitrineLogo || m.nomeBarbearia} — Vitrine & Agendamento | Cortestime`;
+        document.title = vitrineTitle;
+
+        // Update OG meta tags dynamically for client
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) ogTitle.setAttribute('content', vitrineTitle);
+        const ogDesc = document.querySelector('meta[property="og:description"]');
+        if (ogDesc) ogDesc.setAttribute('content', m.vitrineSlogan || `Agende seu horário na ${m.nomeBarbearia} pelo Cortestime.`);
+        if (m.vitrineLogoImage || m.vitrineCapa) {
+          const ogImg = document.querySelector('meta[property="og:image"]');
+          if (ogImg) ogImg.setAttribute('content', m.vitrineLogoImage || m.vitrineCapa || '');
+        }
+
+        try {
+          const fetchedServices = await firebaseService.getServices(m.uid);
+          setPublicVitrineServices(fetchedServices.length > 0 ? fetchedServices : defaultServices);
+          
+          const fetchedBarbers = await firebaseService.getBarbers(m.uid);
+          if (fetchedBarbers.length > 0) {
+            setBarbers(fetchedBarbers);
+          }
+        } catch (e) {
+          console.error("Error loading services for public vitrine:", e);
+          setPublicVitrineServices(defaultServices);
+        }
+      } else {
+        setVitrineNotFoundSlug(targetSlug);
+      }
+    } catch (err) {
+      console.error("Error fetching merchant by slug:", err);
+      setVitrineNotFoundSlug(targetSlug);
+    } finally {
+      setIsPublicVitrineLoading(false);
+    }
+  };
 
   // Check for public vitrine slug on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    let slug = params.get('v') || params.get('vitrine');
+    let slug = params.get('v') || 
+               params.get('vitrine') || 
+               params.get('barbearia') || 
+               params.get('b') || 
+               params.get('d') || 
+               params.get('draft') || 
+               params.get('convite') || 
+               params.get('code') || 
+               params.get('codigo');
 
     if (!slug) {
       const pathParts = window.location.pathname.split('/').filter(Boolean);
-      if (pathParts.length >= 2 && (pathParts[0] === 'vitrine' || pathParts[0] === 'v')) {
+      if (pathParts.length >= 2 && (pathParts[0] === 'vitrine' || pathParts[0] === 'v' || pathParts[0] === 'd' || pathParts[0] === 'convite')) {
         slug = decodeURIComponent(pathParts[1]);
+      } else if (pathParts.length === 1) {
+        const reserved = ['admin', 'login', 'register', 'dashboard', 'checkout', 'api', 'app', 'auth', 'onboarding'];
+        if (!reserved.includes(pathParts[0].toLowerCase())) {
+          slug = decodeURIComponent(pathParts[0]);
+        }
       }
     }
 
     if (slug) {
-      setIsPublicVitrineLoading(true);
-      firebaseService.getMerchantBySlug(slug).then(async (m) => {
-        if (m) {
-          setPublicVitrineMerchant(m);
-          const vitrineTitle = `${m.vitrineLogo || m.nomeBarbearia} — Vitrine & Agendamento | Cortestime`;
-          document.title = vitrineTitle;
-
-          // Update OG meta tags dynamically for client
-          const ogTitle = document.querySelector('meta[property="og:title"]');
-          if (ogTitle) ogTitle.setAttribute('content', vitrineTitle);
-          const ogDesc = document.querySelector('meta[property="og:description"]');
-          if (ogDesc) ogDesc.setAttribute('content', m.vitrineSlogan || `Agende seu horário na ${m.nomeBarbearia} pelo Cortestime.`);
-          if (m.vitrineLogoImage || m.vitrineCapa) {
-            const ogImg = document.querySelector('meta[property="og:image"]');
-            if (ogImg) ogImg.setAttribute('content', m.vitrineLogoImage || m.vitrineCapa || '');
-          }
-
-          try {
-            const fetchedServices = await firebaseService.getServices(m.uid);
-            setPublicVitrineServices(fetchedServices.length > 0 ? fetchedServices : defaultServices);
-            
-            const fetchedBarbers = await firebaseService.getBarbers(m.uid);
-            if (fetchedBarbers.length > 0) {
-              setBarbers(fetchedBarbers);
-            }
-          } catch (e) {
-            console.error("Error loading services for public vitrine:", e);
-            setPublicVitrineServices(defaultServices);
-          }
-        } else {
-          alert('Barbearia / Vitrine não encontrada.');
-          // Clear query parameters
-          window.history.replaceState({}, document.title, '/');
-        }
-      }).catch((err) => {
-        console.error("Error fetching merchant by slug:", err);
-      }).finally(() => {
-        setIsPublicVitrineLoading(false);
-      });
+      loadVitrineBySlug(slug);
     }
   }, []);
 
@@ -217,16 +263,16 @@ export default function App() {
 
   // Compute OnboardingData dynamically based on current logged in Merchant
   const onboardingData: OnboardingData = currentMerchant ? {
-    fullName: currentMerchant.nomeProprietario,
-    cellphone: currentMerchant.whatsapp,
-    email: currentMerchant.email,
-    businessName: currentMerchant.nomeBarbearia,
-    objectives: ['Organizar agenda'],
-    cep: '57150-000',
-    neighborhood: 'Centro',
-    street: 'Rua Principal',
-    number: '123',
-    complement: ''
+    fullName: currentMerchant.nomeProprietario || '',
+    cellphone: currentMerchant.whatsapp || '',
+    email: currentMerchant.email || '',
+    businessName: currentMerchant.nomeBarbearia || 'Minha Barbearia',
+    objectives: currentMerchant.onboardingData?.objectives || ['Organizar agenda'],
+    cep: currentMerchant.onboardingData?.cep || '',
+    neighborhood: currentMerchant.onboardingData?.neighborhood || '',
+    street: currentMerchant.onboardingData?.street || '',
+    number: currentMerchant.onboardingData?.number || '',
+    complement: currentMerchant.onboardingData?.complement || ''
   } : defaultOnboarding;
 
   // Listen to Auth State Changes (with LocalStorage session persistence)
@@ -586,6 +632,9 @@ export default function App() {
       localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
+    if (currentMerchant?.uid) {
+      analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'service_create', `Serviço Criado: ${item.name}`, { serviceId: id, price: item.price });
+    }
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveService(item, currentMerchant.uid);
     }
@@ -600,6 +649,9 @@ export default function App() {
       localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
+    if (currentMerchant?.uid) {
+      analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'barber_create', `Profissional Adicionado: ${item.name}`, { barberId: id });
+    }
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveBarber(item, currentMerchant.uid);
     }
@@ -638,6 +690,9 @@ export default function App() {
       localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
+    if (currentMerchant?.uid) {
+      analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'client_create', `Cliente Cadastrado: ${item.name}`, { clientId: id });
+    }
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveClient(item, currentMerchant.uid);
     }
@@ -652,20 +707,41 @@ export default function App() {
       localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
+    if (currentMerchant?.uid) {
+      analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'appointment_create', `Agendamento Criado: ${item.clientName}`, { appointmentId: id, date: item.date, time: item.time });
+    }
     if (firebaseConnected && currentMerchant) {
       await firebaseService.saveAppointment(item, currentMerchant.uid);
     }
   };
 
-  const handleUpdateAppointmentStatus = async (id: string, status: Appointment['status']) => {
+  const handleUpdateAppointmentStatus = async (
+    id: string, 
+    status: Appointment['status'], 
+    meta?: { cancelledBy?: 'client' | 'barbershop'; cancellationReason?: string }
+  ) => {
     setAppointments(prev => {
-      const updated = prev.map(app => app.id === id ? { ...app, status } : app);
+      const updated = prev.map(app => {
+        if (app.id === id) {
+          return {
+            ...app,
+            status,
+            ...(meta?.cancelledBy ? { cancelledBy: meta.cancelledBy } : {}),
+            ...(meta?.cancellationReason ? { cancellationReason: meta.cancellationReason } : {}),
+            ...(status === 'cancelled' ? { cancelledAt: new Date().toISOString() } : {})
+          };
+        }
+        return app;
+      });
       const key = currentMerchant ? `cortestime_appointments_${currentMerchant.uid}` : 'cortestime_guest_appointments';
       localStorage.setItem(key, JSON.stringify(updated));
       return updated;
     });
+    if (currentMerchant?.uid) {
+      analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'appointment_status_update', `Status de Agendamento Alterado para ${status}`, { appointmentId: id, status });
+    }
     if (firebaseConnected) {
-      await firebaseService.updateAppointmentStatus(id, status);
+      await firebaseService.updateAppointmentStatus(id, status, meta);
     }
   };
 
@@ -886,7 +962,99 @@ export default function App() {
         />
       )}
 
-      {publicVitrineMerchant ? (
+      {isAdminAnalyticsRoute ? (
+        <AdminAnalyticsDashboard 
+          currentMerchant={currentMerchant} 
+          onClose={() => {
+            setIsAdminAnalyticsRoute(false);
+            window.history.replaceState({}, document.title, '/');
+            setViewMode(currentMerchant ? 'dashboard' : 'landing');
+          }} 
+        />
+      ) : vitrineNotFoundSlug && !publicVitrineMerchant ? (
+        <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-gray-100 space-y-5 text-left">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center mb-2">
+              <Store className="w-7 h-7" />
+            </div>
+            
+            <div>
+              <h2 className="font-display font-extrabold text-xl text-[#051b42]">
+                Vitrine não encontrada
+              </h2>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                Não localizamos nenhuma barbearia com o link ou código <span className="font-mono font-bold text-[#051b42] bg-gray-100 px-1.5 py-0.5 rounded">"{vitrineNotFoundSlug}"</span>. O link pode ter sido digitado incorretamente ou a barbearia ainda não configurou seu perfil.
+              </p>
+            </div>
+
+            {/* Quick search input */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const inputEl = form.elements.namedItem('searchSlug') as HTMLInputElement;
+                if (inputEl?.value) {
+                  loadVitrineBySlug(inputEl.value);
+                }
+              }}
+              className="space-y-2 pt-2"
+            >
+              <label className="text-xs font-bold text-gray-700">Buscar por nome ou código:</label>
+              <div className="flex gap-2">
+                <input 
+                  name="searchSlug"
+                  type="text" 
+                  placeholder="Ex: nbarber ou BARBER-XXXX"
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#051b42] focus:outline-none focus:border-[#051b42] font-medium"
+                />
+                <button 
+                  type="submit"
+                  className="bg-[#051b42] hover:bg-[#072a6b] text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Buscar</span>
+                </button>
+              </div>
+            </form>
+
+            <div className="pt-3 border-t border-gray-100 space-y-2.5">
+              <button 
+                onClick={() => {
+                  setVitrineNotFoundSlug(null);
+                  loadVitrineBySlug('demo');
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-brand-lime text-brand-dark font-extrabold text-xs flex items-center justify-center gap-2 hover:bg-brand-lime-dark transition-colors cursor-pointer shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Ver Barbearia Demonstração</span>
+              </button>
+
+              <button 
+                onClick={() => {
+                  setVitrineNotFoundSlug(null);
+                  window.history.replaceState({}, document.title, '/');
+                  setAuthMode('register');
+                  setViewMode('auth');
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-[#051b42] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <span>Criar Minha Barbearia Grátis</span>
+              </button>
+
+              <button 
+                onClick={() => {
+                  setVitrineNotFoundSlug(null);
+                  window.history.replaceState({}, document.title, '/');
+                  setViewMode('landing');
+                }}
+                className="w-full py-2.5 px-4 text-center text-xs text-gray-500 hover:text-gray-800 font-medium transition-colors cursor-pointer"
+              >
+                Ir para a Página Inicial
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : publicVitrineMerchant ? (
         viewMode === 'clientBooking' ? (
           <ClientBooking 
             businessName={publicVitrineMerchant.nomeBarbearia}

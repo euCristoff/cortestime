@@ -26,11 +26,13 @@ import {
   Store,
   ExternalLink,
   Tag,
-  Eye
+  Eye,
+  BarChart3
 } from 'lucide-react';
 import { MerchantUser, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import CortesVitrine from './CortesVitrine';
+import AdminAnalyticsDashboard from './AdminAnalyticsDashboard';
 
 interface AdminSubscriptionManagerProps {
   currentAdmin: MerchantUser;
@@ -43,7 +45,7 @@ export default function AdminSubscriptionManager({
   onClose,
   onUpdateMerchant
 }: AdminSubscriptionManagerProps) {
-  const [adminTab, setAdminTab] = useState<'users' | 'drafts'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'drafts' | 'analytics'>('users');
   const [merchants, setMerchants] = useState<MerchantUser[]>([]);
   const [draftVitrines, setDraftVitrines] = useState<DraftVitrine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -395,6 +397,21 @@ export default function AdminSubscriptionManager({
         {/* TABS SELECTOR */}
         <div className="flex border-b border-gray-100 shrink-0 gap-6">
           <button
+            onClick={() => setAdminTab('analytics')}
+            className={`pb-3 text-xs md:text-sm font-extrabold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              adminTab === 'analytics'
+                ? 'border-brand-blue text-brand-blue'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-amber-500" />
+            <span>Analytics & Métricas</span>
+            <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.2 rounded-full">
+              Privado
+            </span>
+          </button>
+
+          <button
             onClick={() => setAdminTab('users')}
             className={`pb-3 text-xs md:text-sm font-extrabold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
               adminTab === 'users'
@@ -434,6 +451,13 @@ export default function AdminSubscriptionManager({
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <span>{actionSuccess}</span>
           </motion.div>
+        )}
+
+        {/* TAB 0: ANALYTICS DASHBOARD */}
+        {adminTab === 'analytics' && (
+          <div className="flex-1 overflow-y-auto rounded-2xl -mx-4 md:-mx-8 -mb-4 md:-mb-8">
+            <AdminAnalyticsDashboard currentMerchant={currentAdmin} />
+          </div>
         )}
 
         {/* TAB 1: USER SUBSCRIPTIONS */}
