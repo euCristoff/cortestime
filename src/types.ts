@@ -120,11 +120,9 @@ export interface MerchantUser {
   codigoConviteResgatado?: string;
   vitrineDraftResgatada?: boolean;
   draftJustClaimed?: boolean;
-  indicacoesHistorico?: { id?: string; barbeariaName: string; data: string; status: string; statusTipo: 'ativado' | 'pendente' }[];
 
   // Partner Campaign fields
   isPartner?: boolean;
-  hasPartnerBadge?: boolean; // ⭐ Barbearia Indicada (permanente)
   partnerBenefitsExpiry?: string; // Expiration date for 30-day gallery and reviews
   partnerStoryConfirmed?: boolean;
   partnerWelcomeShown?: boolean;

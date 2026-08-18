@@ -910,12 +910,6 @@ export default function CortesVitrine({
                 <span className="bg-emerald-500/25 text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full tracking-wider uppercase">
                   Grátis
                 </span>
-                {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
-                  <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[10px] font-black px-2.5 py-0.5 rounded-full tracking-wider uppercase flex items-center gap-1">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
-                    <span>Barbearia Indicada</span>
-                  </span>
-                )}
               </div>
               <p className="text-xs text-gray-400 mt-0.5">
                 {isOnlyView ? `Painel Digital • ${merchant.nomeBarbearia}` : 'Divulgue sua barbearia com o mini-site gratuito'}
@@ -1551,12 +1545,6 @@ export default function CortesVitrine({
                     </div>
                     <h2 className="font-sans font-extrabold text-base tracking-tight text-[#051b42] flex items-center justify-center gap-1.5 flex-wrap">
                       <span>{logoText}</span>
-                      {Boolean(merchant.hasPartnerBadge || merchant.isPartner) && (
-                        <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs">
-                          <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
-                          <span>Barbearia Indicada</span>
-                        </span>
-                      )}
                     </h2>
                     {slogan && (
                       <p className="text-[11px] text-gray-500 italic mt-1 font-medium max-w-[220px] mx-auto leading-tight">
@@ -1701,208 +1689,212 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
-                  {/* SEÇÃO: FILA AO VIVO NA VITRINE */}
-                  <div className="bg-gradient-to-b from-white to-gray-50/80 rounded-3xl p-5 shadow-sm border border-gray-100 text-left space-y-4 my-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                          <Scissors className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-extrabold text-gray-900 flex items-center gap-1.5">
-                            <span>✂️ Fila ao vivo</span>
-                            {waitingQueue.length > 0 && (
-                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.2 rounded-full">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Aberta
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-[10px] text-gray-400">Atendimento por ordem de chegada</p>
-                        </div>
-                      </div>
-
-                      {waitingQueue.length > 0 ? (
-                        <div className="text-right">
-                          <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                            {waitingQueue.length} {waitingQueue.length === 1 ? 'pessoa' : 'pessoas'} na fila
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
-                          Fila livre
-                        </span>
-                      )}
-                    </div>
-
-                    {/* STATUS BANNER DO CLIENTE CASO ELE JÁ ESTEJA NA FILA */}
-                    {myQueueItem && myQueueItem.status === 'waiting' && (
-                      <div className="bg-gradient-to-br from-emerald-50 to-blue-50 border-2 border-emerald-400/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-md">
-                            Sua Posição
-                          </span>
-                          <span className="text-xs text-gray-600 font-bold">
-                            {myQueueItem.clientName}
-                          </span>
-                        </div>
-
-                        <div className="flex items-baseline justify-between pt-1">
+                  {/* SEÇÃO: FILA AO VIVO NA VITRINE (Apenas se serviceMode for 'ordem_chegada' ou 'ambos') */}
+                  {(merchant?.serviceMode === 'ordem_chegada' || merchant?.serviceMode === 'ambos') && (
+                    <div className="bg-gradient-to-b from-white to-gray-50/80 rounded-3xl p-5 shadow-sm border border-gray-100 text-left space-y-4 my-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                            <Scissors className="w-4 h-4" />
+                          </div>
                           <div>
-                            <span className="text-3xl font-black text-emerald-950 font-display">
-                              #{myQueuePosition}
-                            </span>
-                            <p className="text-xs font-semibold text-emerald-800 mt-0.5">
-                              {myQueuePosition === 1 ? (
-                                <span className="text-emerald-700 font-extrabold flex items-center gap-1">
-                                  🎉 Você é o próximo!
+                            <h4 className="text-sm font-extrabold text-gray-900 flex items-center gap-1.5">
+                              <span>✂️ Fila ao vivo</span>
+                              {waitingQueue.length > 0 && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.2 rounded-full">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Aberta
                                 </span>
-                              ) : (
-                                <span>{myQueuePosition - 1} {myQueuePosition - 1 === 1 ? 'pessoa' : 'pessoas'} na sua frente</span>
                               )}
-                            </p>
+                            </h4>
+                            <p className="text-[10px] text-gray-400">Atendimento por ordem de chegada</p>
                           </div>
+                        </div>
 
+                        {waitingQueue.length > 0 ? (
                           <div className="text-right">
-                            <div className="flex items-center justify-end gap-1 text-xs font-mono font-black text-brand-blue">
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>~{myQueueEstimatedMinutes} min</span>
-                            </div>
-                            <span className="text-[9px] text-gray-400 block mt-0.5">
-                              Tempo estimado
+                            <span className="text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                              {waitingQueue.length} {waitingQueue.length === 1 ? 'pessoa' : 'pessoas'} na fila
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
-                          <span className="text-gray-500 italic">
-                            Avisaremos você quando sua vez chegar!
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleLeaveQueue}
-                            className="text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer"
-                          >
-                            Desistir / Sair
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {myQueueItem && myQueueItem.status === 'in_progress' && (
-                      <div className="bg-blue-50 border-2 border-blue-400 rounded-2xl p-3.5 text-center space-y-1.5">
-                        <span className="text-xs font-black text-blue-900 flex items-center justify-center gap-1.5">
-                          <Scissors className="w-4 h-4 text-blue-600 animate-bounce" />
-                          Sua vez chegou!
-                        </span>
-                        <p className="text-xs text-blue-700">
-                          Você está sendo atendido na cadeira agora. Bom corte!
-                        </p>
-                      </div>
-                    )}
-
-                    {/* SE O CLIENTE NÃO ESTÁ NA FILA */}
-                    {!myQueueItem && (
-                      <div className="space-y-2.5">
-                        {waitingQueue.length === 0 ? (
-                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-1">
-                            <p className="text-xs text-gray-600 font-medium">
-                              No momento não há clientes na fila.
-                            </p>
-                            <p className="text-[10px] text-gray-400">
-                              Entre na fila agora para ser o primeiro atendido!
-                            </p>
                           </div>
                         ) : (
-                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-1.5">
-                            <div className="flex justify-between items-center text-xs text-gray-700">
-                              <span className="font-medium">Tempo médio de espera:</span>
-                              <span className="font-mono font-bold text-gray-900 flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-brand-blue" />
-                                ~{calculateEstimatedTimeForPosition(waitingQueue.length)} min
+                          <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
+                            Fila livre
+                          </span>
+                        )}
+                      </div>
+
+                      {/* STATUS BANNER DO CLIENTE CASO ELE JÁ ESTEJA NA FILA */}
+                      {myQueueItem && myQueueItem.status === 'waiting' && (
+                        <div className="bg-gradient-to-br from-emerald-50 to-blue-50 border-2 border-emerald-400/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-md">
+                              Sua Posição
+                            </span>
+                            <span className="text-xs text-gray-600 font-bold">
+                              {myQueueItem.clientName}
+                            </span>
+                          </div>
+
+                          <div className="flex items-baseline justify-between pt-1">
+                            <div>
+                              <span className="text-3xl font-black text-emerald-950 font-display">
+                                #{myQueuePosition}
+                              </span>
+                              <p className="text-xs font-semibold text-emerald-800 mt-0.5">
+                                {myQueuePosition === 1 ? (
+                                  <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                                    🎉 Você é o próximo!
+                                  </span>
+                                ) : (
+                                  <span>{myQueuePosition - 1} {myQueuePosition - 1 === 1 ? 'pessoa' : 'pessoas'} na sua frente</span>
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="flex items-center justify-end gap-1 text-xs font-mono font-black text-brand-blue">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>~{myQueueEstimatedMinutes} min</span>
+                              </div>
+                              <span className="text-[9px] text-gray-400 block mt-0.5">
+                                Tempo estimado
                               </span>
                             </div>
-                            <p className="text-[9px] text-gray-400 leading-tight">
-                              * O tempo é uma estimativa calculada pela duração dos serviços e pode sofrer variações.
-                            </p>
                           </div>
-                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => setShowJoinQueueModal(true)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs py-3 px-4 rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Entrar na Fila ao Vivo</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                          <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
+                            <span className="text-gray-500 italic">
+                              Avisaremos você quando sua vez chegar!
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleLeaveQueue}
+                              className="text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer"
+                            >
+                              Desistir / Sair
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-                  {/* Hero Booking Card (Design matching Image 1) */}
-                  <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 text-center space-y-3.5 my-4">
-                    <div className="space-y-0.5">
-                      <h3 className="text-2xl font-light tracking-tight text-gray-900 leading-tight">
-                        Agende seu
-                      </h3>
-                      <div className="flex items-center justify-center gap-2 flex-nowrap">
-                        <span className="text-2xl font-light tracking-tight text-gray-900">
-                          horário
-                        </span>
-                        <div className="relative inline-flex items-center bg-[#edf3ff] border border-blue-100/80 text-black font-extrabold text-base px-3 py-0.5 rounded-xl shadow-2xs transform -rotate-1 shrink-0">
-                          online
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#2563eb] rounded-full ring-2 ring-white" />
+                      {myQueueItem && myQueueItem.status === 'in_progress' && (
+                        <div className="bg-blue-50 border-2 border-blue-400 rounded-2xl p-3.5 text-center space-y-1.5">
+                          <span className="text-xs font-black text-blue-900 flex items-center justify-center gap-1.5">
+                            <Scissors className="w-4 h-4 text-blue-600 animate-bounce" />
+                            Sua vez chegou!
+                          </span>
+                          <p className="text-xs text-blue-700">
+                            Você está sendo atendido na cadeira agora. Bom corte!
+                          </p>
+                        </div>
+                      )}
+
+                      {/* SE O CLIENTE NÃO ESTÁ NA FILA */}
+                      {!myQueueItem && (
+                        <div className="space-y-2.5">
+                          {waitingQueue.length === 0 ? (
+                            <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center space-y-1">
+                              <p className="text-xs text-gray-600 font-medium">
+                                No momento não há clientes na fila.
+                              </p>
+                              <p className="text-[10px] text-gray-400">
+                                Entre na fila agora para ser o primeiro atendido!
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-1.5">
+                              <div className="flex justify-between items-center text-xs text-gray-700">
+                                <span className="font-medium">Tempo médio de espera:</span>
+                                <span className="font-mono font-bold text-gray-900 flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-brand-blue" />
+                                  ~{calculateEstimatedTimeForPosition(waitingQueue.length)} min
+                                </span>
+                              </div>
+                              <p className="text-[9px] text-gray-400 leading-tight">
+                                * O tempo é uma estimativa calculada pela duração dos serviços e pode sofrer variações.
+                              </p>
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setShowJoinQueueModal(true)}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs py-3 px-4 rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Entrar na Fila ao Vivo</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hero Booking Card (Apenas se serviceMode for 'agendamento' (padrão) ou 'ambos') */}
+                  {(merchant?.serviceMode !== 'ordem_chegada') && (
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 text-center space-y-3.5 my-4">
+                      <div className="space-y-0.5">
+                        <h3 className="text-2xl font-light tracking-tight text-gray-900 leading-tight">
+                          Agende seu
+                        </h3>
+                        <div className="flex items-center justify-center gap-2 flex-nowrap">
+                          <span className="text-2xl font-light tracking-tight text-gray-900">
+                            horário
+                          </span>
+                          <div className="relative inline-flex items-center bg-[#edf3ff] border border-blue-100/80 text-black font-extrabold text-base px-3 py-0.5 rounded-xl shadow-2xs transform -rotate-1 shrink-0">
+                            online
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#2563eb] rounded-full ring-2 ring-white" />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <p className="text-[11px] text-gray-400 font-normal max-w-[210px] mx-auto leading-relaxed">
-                      Escolha o serviço, dia e horário que deseja ser atendido
-                    </p>
+                      <p className="text-[11px] text-gray-400 font-normal max-w-[210px] mx-auto leading-relaxed">
+                        Escolha o serviço, dia e horário que deseja ser atendido
+                      </p>
 
-                    <div className="pt-1 space-y-2">
-                      {/* Main AGENDAR button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onBookOnline) {
-                            onBookOnline();
-                          } else {
-                            setShowSiteBookingModal(true);
-                          }
-                        }}
-                        className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 text-white font-medium text-sm py-3 px-6 rounded-full transition-all shadow-md shadow-blue-500/20 cursor-pointer block"
-                      >
-                        Agendar
-                      </button>
-
-                      {/* Area do Cliente link */}
-                      <button
-                        type="button"
-                        onClick={() => setShowClientAreaModal(true)}
-                        className="text-xs font-semibold text-gray-800 hover:text-blue-600 transition-colors py-0.5 cursor-pointer block mx-auto"
-                      >
-                        Área do Cliente
-                      </button>
-                    </div>
-
-                    {/* WhatsApp icon */}
-                    {permitirWhatsApp && whatsapp && (
-                      <div className="pt-0.5 flex justify-center">
-                        <a
-                          href={formattedWhatsAppUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-400 hover:text-emerald-600 transition-colors"
-                          title="Agendar via WhatsApp"
+                      <div className="pt-1 space-y-2">
+                        {/* Main AGENDAR button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onBookOnline) {
+                              onBookOnline();
+                            } else {
+                              setShowSiteBookingModal(true);
+                            }
+                          }}
+                          className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 text-white font-medium text-sm py-3 px-6 rounded-full transition-all shadow-md shadow-blue-500/20 cursor-pointer block"
                         >
-                          <MessageSquare className="w-4 h-4 fill-current" />
-                        </a>
+                          Agendar
+                        </button>
+
+                        {/* Area do Cliente link */}
+                        <button
+                          type="button"
+                          onClick={() => setShowClientAreaModal(true)}
+                          className="text-xs font-semibold text-gray-800 hover:text-blue-600 transition-colors py-0.5 cursor-pointer block mx-auto"
+                        >
+                          Área do Cliente
+                        </button>
                       </div>
-                    )}
-                  </div>
+
+                      {/* WhatsApp icon */}
+                      {permitirWhatsApp && whatsapp && (
+                        <div className="pt-0.5 flex justify-center">
+                          <a
+                            href={formattedWhatsAppUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-400 hover:text-emerald-600 transition-colors"
+                            title="Agendar via WhatsApp"
+                          >
+                            <MessageSquare className="w-4 h-4 fill-current" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               </div>

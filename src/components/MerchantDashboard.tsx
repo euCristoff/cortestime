@@ -72,7 +72,7 @@ import AdminSubscriptionManager from './AdminSubscriptionManager';
 import QueueManager from './QueueManager';
 import { firebaseService } from '../services/firebaseService';
 
-export type DashboardTab = 'inicio' | 'agenda' | 'fila' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'indique' | 'ajuda' | 'assinatura' | 'menu';
+export type DashboardTab = 'inicio' | 'agenda' | 'fila' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'ajuda' | 'assinatura' | 'menu';
 
 interface MerchantDashboardProps {
   onboardingData: OnboardingData;
@@ -246,10 +246,7 @@ export default function MerchantDashboard({
   const [supportForm, setSupportForm] = useState({ assunto: '', mensagem: '' });
   const [isSendingSupport, setIsSendingSupport] = useState(false);
   const [supportSentMsg, setSupportSentMsg] = useState<string | null>(null);
-
-  // Indique e Ganhe Copied States
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [showQueueInfoModal, setShowQueueInfoModal] = useState(false);
 
   // Filter clients/services search
   const [clientSearchTerm, setClientSearchTerm] = useState('');
@@ -1266,7 +1263,6 @@ export default function MerchantDashboard({
               { id: 'notificacoes', label: 'Notificações', icon: Bell, badgeCount: unreadCount },
               { id: 'configuracoes', label: 'Configurações', icon: Settings },
               { id: 'horarios', label: 'Horários de Atend.', icon: Clock },
-              { id: 'indique', label: 'Indique e Ganhe', icon: Gift, isSpecial: true },
               { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
               { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
             ].map((item) => {
@@ -1441,7 +1437,6 @@ export default function MerchantDashboard({
                     { id: 'notificacoes', label: 'Notificações', icon: Bell, badgeCount: unreadCount },
                     { id: 'configuracoes', label: 'Configurações', icon: Settings },
                     { id: 'horarios', label: 'Horários de Atendimento', icon: Clock },
-                    { id: 'indique', label: 'Indique e Ganhe', icon: Gift, isSpecial: true },
                     { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
                     { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
                     { id: 'menu', label: 'Gestão & Menu Hub', icon: MenuIcon },
@@ -3633,14 +3628,37 @@ export default function MerchantDashboard({
                     <Clock className="w-4 h-4 text-brand-blue" />
                     <span>Modo de Atendimento da Barbearia</span>
                   </h3>
-                  <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-extrabold px-2.5 py-1 rounded-full uppercase">
-                    Personalizável
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQueueInfoModal(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-blue bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-full transition-all cursor-pointer"
+                      title="Entenda como funciona a Fila e os Modos"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>Como funciona a Fila?</span>
+                    </button>
+                    <span className="text-[10px] bg-brand-blue/10 text-brand-blue font-extrabold px-2.5 py-1 rounded-full uppercase">
+                      Personalizável
+                    </span>
+                  </div>
                 </div>
 
                 <p className="text-xs text-gray-500">
                   Escolha como seus clientes serão atendidos e o que será exibido no seu link / Vitrine Digital:
                 </p>
+
+                {configData.serviceMode === 'agendamento' && (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      <p className="font-bold text-[11px] text-amber-900">Modo Somente Horário Marcado Ativo</p>
+                      <p className="text-[11px] text-amber-700 mt-0.5">
+                        A aba e os cartões de <strong>Fila de Espera</strong> ficam ocultos no seu painel e na vitrine dos clientes. Apenas a agenda tradicional de horários estará visível.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   {[
@@ -4035,170 +4053,6 @@ export default function MerchantDashboard({
           </div>
         )}
 
-        {/* TAB: INDIQUE E GANHE */}
-        {activeTab === 'indique' && (() => {
-          const indicacoesList = merchant?.indicacoesHistorico || [];
-          const totalIndicacoes = indicacoesList.length;
-          const barbeariasAtivasCount = indicacoesList.filter(i => i.statusTipo === 'ativado').length;
-          const mesesGanhosCount = barbeariasAtivasCount;
-
-          return (
-          <div className="space-y-6 text-left max-w-4xl">
-            <div>
-              <span className="text-[10px] bg-amber-500/15 text-amber-600 font-extrabold px-2.5 py-1 rounded-full uppercase border border-amber-500/30">
-                Programa Barbearias Parceiras Cortestime
-              </span>
-              <h2 className="font-display font-extrabold text-2xl text-brand-dark mt-1">Indique e Ganhe 🎁</h2>
-              <p className="text-xs text-gray-500">Convide outros barbeiros e ganhe 1 Mês de Plano Pro gratuito para cada indicação que criar a conta!</p>
-            </div>
-
-            {/* METRICS ROW */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Indicações Realizadas</p>
-                <p className="font-display font-extrabold text-3xl text-brand-dark">{totalIndicacoes} {totalIndicacoes === 1 ? 'Barbeiro' : 'Barbeiros'}</p>
-              </div>
-
-              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Barbearias Ativas</p>
-                <p className="font-display font-extrabold text-3xl text-emerald-600">{barbeariasAtivasCount} {barbeariasAtivasCount === 1 ? 'Assinante' : 'Assinantes'}</p>
-              </div>
-
-              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-1">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Meses Pro Ganhos</p>
-                <p className="font-display font-extrabold text-3xl text-amber-500">{mesesGanhosCount} {mesesGanhosCount === 1 ? 'Mês Grátis 🎉' : 'Meses Grátis 🎉'}</p>
-              </div>
-            </div>
-
-            {/* LINK & CODE BOX */}
-            <div className="bg-gradient-to-br from-[#051b42] to-[#092e6e] text-white p-6 rounded-3xl shadow-xl space-y-6 relative overflow-hidden">
-              <div className="space-y-2">
-                <h3 className="font-display font-extrabold text-xl text-white">Seu Código Exclusivo de Indicação</h3>
-                <p className="text-xs text-gray-200">Compartilhe o link ou seu código com amigos barbeiros para eles resgatarem na tela de cadastro:</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white/10 p-4 rounded-2xl border border-white/10 space-y-2">
-                  <span className="text-[10px] text-amber-300 font-bold uppercase">Código de Convite</span>
-                  <div className="flex justify-between items-center bg-black/30 p-2.5 rounded-xl">
-                    <span className="font-mono font-black text-amber-400 text-sm">
-                      {merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}
-                    </span>
-                    <button 
-                      onClick={() => {
-                        const code = merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`;
-                        navigator.clipboard.writeText(code);
-                        setCopiedCode(true);
-                        setTimeout(() => setCopiedCode(false), 3000);
-                      }}
-                      className="text-xs bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedCode ? 'Copiado!' : 'Copiar'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white/10 p-4 rounded-2xl border border-white/10 space-y-2">
-                  <span className="text-[10px] text-amber-300 font-bold uppercase">Link Direto de Indicação</span>
-                  <div className="flex justify-between items-center bg-black/30 p-2.5 rounded-xl">
-                    <span className="font-mono text-xs text-gray-300 truncate max-w-[180px]">
-                      {`https://cortestime.com.br/convite/${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}`}
-                    </span>
-                    <button 
-                      onClick={() => {
-                        const link = `https://cortestime.com.br/convite/${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`}`;
-                        navigator.clipboard.writeText(link);
-                        setCopiedLink(true);
-                        setTimeout(() => setCopiedLink(false), 3000);
-                      }}
-                      className="text-xs bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedLink ? 'Copiado!' : 'Copiar'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <a 
-                  href={`https://wa.me/?text=${encodeURIComponent(`Olá! Estou te convidando para conhecer o Cortestime, o sistema completo de agenda e vitrine para barbearias. Cadastre-se usando o meu código de parceiro ${merchant?.codigoConviteResgatado || `CORTESTIME-${(merchant?.uid?.substring(0, 5) || 'PRO').toUpperCase()}`} para ganhar benefícios exclusivos! Acesse: https://cortestime.com.br`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer border-none text-center"
-                >
-                  <Share2 className="w-4 h-4" />
-                  <span>Compartilhar Convite no WhatsApp</span>
-                </a>
-              </div>
-            </div>
-
-            {/* HISTÓRICO DE RECOMPENSAS */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Histórico de Indicações e Recompensas</h3>
-              {indicacoesList.length === 0 ? (
-                <div className="text-center py-8 px-4 bg-gray-50 rounded-2xl border border-gray-100 text-gray-500 text-xs space-y-1">
-                  <p className="font-extrabold text-sm text-brand-dark">Você ainda não possui indicações</p>
-                  <p className="text-gray-400">Compartilhe seu código ou link exclusivo com outros barbeiros. A cada barbearia indicada que assinar o sistema, você ganha 1 Mês de Plano Pro grátis!</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 uppercase font-bold text-[10px]">
-                        <th className="p-3">Barbearia Indicada</th>
-                        <th className="p-3">Data da Indicação</th>
-                        <th className="p-3">Status do Benefício</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-gray-700">
-                      {indicacoesList.map((item, idx) => (
-                        <tr key={item.id || idx} className="hover:bg-gray-50">
-                          <td className="p-3 font-bold text-brand-dark">{item.barbeariaName}</td>
-                          <td className="p-3 text-gray-500">{item.data}</td>
-                          <td className="p-3">
-                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                              item.statusTipo === 'ativado' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {item.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* COMO FUNCIONA */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-              <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Como funciona a indicação?</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-amber-500 font-black text-lg">1.</span>
-                  <p className="font-bold text-brand-dark">Envie seu código</p>
-                  <p className="text-gray-500 text-[11px]">Envie o link exclusivo ou seu código para outro dono de barbearia.</p>
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-amber-500 font-black text-lg">2.</span>
-                  <p className="font-bold text-brand-dark">Cadastro do Amigo</p>
-                  <p className="text-gray-500 text-[11px]">O convidado digita seu código no cadastro e ganha os benefícios de parceiro.</p>
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-1">
-                  <span className="text-amber-500 font-black text-lg">3.</span>
-                  <p className="font-bold text-brand-dark">Ganhe 1 Mês Pro</p>
-                  <p className="text-gray-500 text-[11px]">Você ganha 1 Mês de Plano Pro gratuito adicionado automaticamente!</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          );
-        })()}
-
         {/* TAB: CENTRAL DE AJUDA */}
         {activeTab === 'ajuda' && (
           <div className="space-y-6 text-left max-w-4xl">
@@ -4244,6 +4098,10 @@ export default function MerchantDashboard({
               <div className="space-y-3">
                 {[
                   {
+                    q: 'Como funciona a Fila de Atendimento (Ordem de Chegada) e como ocultá-la?',
+                    a: 'A Fila Virtual permite que clientes entrem na lista de espera em tempo real pelo celular ou presencialmente. Se a sua barbearia trabalha apenas com horário marcado, vá em "Configurações" > "Modo de Atendimento da Barbearia" e selecione "Horário Marcado". Isso oculta automaticamente a fila da sua tela e da vitrine pública dos clientes.'
+                  },
+                  {
                     q: 'Como configurar o agendamento online para os clientes?',
                     a: 'Acesse o menu "Link & Vitrine Digital" no painel e clique em "Ativar Mini-Site". O sistema gerará o seu link exclusivo que você pode colocar na bio do seu Instagram ou enviar aos clientes.'
                   },
@@ -4258,10 +4116,6 @@ export default function MerchantDashboard({
                   {
                     q: 'Como assinar ou renovar o Plano Pro?',
                     a: 'Clique no botão "Assinar Plano Pro" no topo do menu lateral e escolha a opção Mensal ou Anual para pagar via Pix ou cartão pelo Mercado Pago.'
-                  },
-                  {
-                    q: 'Como usar o programa Indique e Ganhe?',
-                    a: 'Acesse a aba "Indique e Ganhe", copie seu código exclusivo e envie para outros barbeiros. Quando eles criarem a conta, você ganha 1 Mês Pro grátis automaticamente.'
                   }
                 ]
                 .filter(item => item.q.toLowerCase().includes(faqSearch.toLowerCase()) || item.a.toLowerCase().includes(faqSearch.toLowerCase()))
@@ -4431,7 +4285,6 @@ export default function MerchantDashboard({
               {[
                 { id: 'fila', title: 'Fila de Atendimento ao Vivo', desc: 'Gerencie a fila por ordem de chegada, chame clientes e acompanhe tempos', icon: Users, bg: 'bg-amber-50 border-amber-100 text-amber-900' },
                 { id: 'configuracoes', title: 'Configurações da Barbearia', desc: 'Dados comerciais, modo de atendimento, fotos, redes sociais e senha', icon: Settings, bg: 'bg-blue-50 border-blue-100 text-blue-800' },
-                { id: 'indique', title: 'Indique e Ganhe', desc: 'Compartilhe seu código e ganhe 1 Mês de Pro a cada indicação', icon: Gift, bg: 'bg-amber-50 border-amber-100 text-amber-900' },
                 { id: 'horarios', title: 'Horários de Atendimento', desc: 'Horários de abertura, fechamento e pausa de almoço', icon: Clock, bg: 'bg-emerald-50 border-emerald-100 text-emerald-900' },
                 { id: 'servicos', title: 'Serviços & Comissões', desc: 'Tabela de preços, duração e porcentagem de repasse', icon: Scissors, bg: 'bg-purple-50 border-purple-100 text-purple-900' },
                 { id: 'profissionais', title: 'Profissionais (Barbeiros)', desc: 'Equipe de barbeiros cadastrados, fotos e especialidades', icon: User, bg: 'bg-indigo-50 border-indigo-100 text-indigo-900' },
@@ -4465,30 +4318,6 @@ export default function MerchantDashboard({
                   </button>
                 );
               })}
-            </div>
-
-            {/* PROGRAMA DE PARCEIROS CARD */}
-            <div className="bg-gradient-to-br from-[#051b42] to-[#092e6e] text-white p-6 rounded-3xl relative overflow-hidden space-y-4 border border-amber-500/30 shadow-xl">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full font-black uppercase tracking-wider flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
-                  <span>Programa Barbearias Parceiras Cortestime</span>
-                </span>
-              </div>
-              <div className="space-y-2 text-left">
-                <h3 className="font-display font-extrabold text-xl text-white">
-                  🎉 Benefícios Exclusivos de Parceiro Ativos
-                </h3>
-                <p className="text-xs text-gray-200 leading-relaxed max-w-xl">
-                  Sua barbearia possui 7 dias de Agenda Pro, Selo "Barbearia Indicada" permanente na Vitrine, Galeria Ilimitada por 30 dias e Sistema de Avaliações ativado.
-                </p>
-              </div>
-              <button 
-                onClick={() => setActiveTab('indique')}
-                className="bg-brand-lime text-brand-dark font-black text-xs py-3 px-5 rounded-2xl uppercase tracking-wider transition-all shadow-md cursor-pointer border-none"
-              >
-                Acessar Meu Código de Indicação
-              </button>
             </div>
           </div>
         )}
@@ -5880,6 +5709,79 @@ export default function MerchantDashboard({
                       <span>Confirmar Cancelamento</span>
                     </>
                   )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODAL INFORMATIVO DA FILA / MODOS DE ATENDIMENTO */}
+        {showQueueInfoModal && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-[32px] p-6 sm:p-8 max-w-lg w-full shadow-2xl relative border border-gray-100 my-auto text-left space-y-5"
+            >
+              <button
+                type="button"
+                onClick={() => setShowQueueInfoModal(false)}
+                className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors z-20 cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                <div className="w-11 h-11 rounded-2xl bg-brand-blue/10 text-brand-blue flex items-center justify-center font-bold">
+                  <Scissors className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-brand-dark">Como funciona a Fila e os Modos?</h3>
+                  <p className="text-xs text-gray-500">Entenda a diferença entre Fila ao Vivo e Agendamento Online</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-xs text-gray-600 leading-relaxed">
+                <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-brand-blue flex items-center gap-1.5 text-xs">
+                    <Users className="w-4 h-4" />
+                    <span>1. O que é a Fila Virtual (Ordem de Chegada)?</span>
+                  </p>
+                  <p className="text-[11px] text-gray-600">
+                    A Fila permite que clientes cheguem na barbearia ou entrem no link da vitrine pelo celular e peguem uma senha/posição virtual. O sistema calcula automaticamente a posição dele, o tempo estimado de espera e avisa quando for a vez. Você chama o próximo com um clique.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-amber-900 flex items-center gap-1.5 text-xs">
+                    <CalendarIcon className="w-4 h-4 text-amber-700" />
+                    <span>2. O que acontece ao escolher "Somente Agendamento"?</span>
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    Se sua barbearia trabalha <strong>apenas com horário marcado</strong>, a opção de Fila fica 100% oculta da sua tela e da Vitrine dos clientes. Não haverá botão para entrar na fila nem estimativa de espera — apenas a sua agenda clássica de horários.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-purple-900 flex items-center gap-1.5 text-xs">
+                    <Sparkles className="w-4 h-4 text-purple-700" />
+                    <span>3. Modo Híbrido (Ambos)</span>
+                  </p>
+                  <p className="text-[11px] text-purple-800">
+                    Permite que clientes agendem um horário com antecedência para os próximos dias OU entrem na fila de atendimento do dia caso venham de improviso.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowQueueInfoModal(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-brand-blue hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Entendi
                 </button>
               </div>
             </motion.div>
