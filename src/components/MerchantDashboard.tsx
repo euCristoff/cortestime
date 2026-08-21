@@ -1253,7 +1253,7 @@ export default function MerchantDashboard({
 
           {/* Navigation links */}
           <nav className="flex flex-col gap-1 text-xs">
-            {[
+            {([
               { id: 'inicio', label: 'Início', icon: Home },
               { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
               { id: 'fila', label: 'Fila de Atendimento', icon: Users, badgeCount: merchantQueue.filter(q => q.status === 'waiting').length },
@@ -1265,7 +1265,7 @@ export default function MerchantDashboard({
               { id: 'horarios', label: 'Horários de Atend.', icon: Clock },
               { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
               { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
-            ].map((item) => {
+            ] as { id: string; label: string; icon: any; badgeCount?: number; isSpecial?: boolean }[]).map((item) => {
               const IconComp = item.icon;
               const isActive = activeTab === item.id;
               return (
@@ -1427,7 +1427,7 @@ export default function MerchantDashboard({
 
                 {/* Nav items list */}
                 <nav className="space-y-1 text-left text-xs font-bold">
-                  {[
+                  {([
                     { id: 'inicio', label: 'Início', icon: Home },
                     { id: 'agenda', label: 'Agenda', icon: CalendarIcon },
                     { id: 'fila', label: 'Fila de Atendimento', icon: Users, badgeCount: merchantQueue.filter(q => q.status === 'waiting').length },
@@ -1440,7 +1440,7 @@ export default function MerchantDashboard({
                     { id: 'ajuda', label: 'Central de Ajuda', icon: HelpCircle },
                     { id: 'assinatura', label: 'Minha Assinatura', icon: ShieldCheck },
                     { id: 'menu', label: 'Gestão & Menu Hub', icon: MenuIcon },
-                  ].map((item) => {
+                  ] as { id: string; label: string; icon: any; badgeCount?: number; isSpecial?: boolean }[]).map((item) => {
                     const IconComp = item.icon;
                     const isActive = activeTab === item.id;
                     return (

@@ -17,7 +17,10 @@ import {
   MessageSquare, 
   Sparkles,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  HelpCircle,
+  Info,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Barber, Service, QueueItem } from '../types';
@@ -45,6 +48,7 @@ export default function QueueManager({
 }: QueueManagerProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isTvModeOpen, setIsTvModeOpen] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [calledClient, setCalledClient] = useState<{ name: string; barberName?: string; serviceName?: string } | null>(null);
   
   // Add item form state
@@ -169,6 +173,15 @@ export default function QueueManager({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowInfoModal(true)}
+            className="bg-blue-50 hover:bg-blue-100 text-brand-blue font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-200"
+            title="Como funciona a Fila e o Pop-up?"
+          >
+            <HelpCircle className="w-4 h-4 text-brand-blue" />
+            <span className="hidden sm:inline">Como funciona?</span>
+          </button>
+
           <button
             onClick={() => setIsTvModeOpen(true)}
             className="bg-gray-900 hover:bg-black text-white font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
@@ -833,6 +846,79 @@ export default function QueueManager({
               </p>
             </div>
           </motion.div>
+        )}
+
+        {/* MODAL INFORMATIVO DA FILA / POP-UP EXPLICATIVO */}
+        {showInfoModal && (
+          <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-[32px] p-6 sm:p-8 max-w-lg w-full shadow-2xl relative border border-gray-100 my-auto text-left space-y-5"
+            >
+              <button
+                type="button"
+                onClick={() => setShowInfoModal(false)}
+                className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors z-20 cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-brand-dark">Como funciona a Fila Virtual?</h3>
+                  <p className="text-xs text-gray-500">Tudo o que você precisa saber sobre o sistema de ordem de chegada</p>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 text-xs text-gray-600 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-amber-900 flex items-center gap-1.5 text-xs">
+                    <Users className="w-4 h-4 text-amber-700" />
+                    <span>O que é a Fila Virtual?</span>
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    A Fila Virtual permite atender clientes por ordem de chegada sem aglomeração na recepção. O cliente pode entrar na fila presencialmente ou pelo celular ao acessar o link da sua Vitrine.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-brand-blue flex items-center gap-1.5 text-xs">
+                    <Sparkles className="w-4 h-4 text-brand-blue" />
+                    <span>Como o cliente acompanha a vez?</span>
+                  </p>
+                  <p className="text-[11px] text-gray-600">
+                    Ao entrar na fila, o cliente recebe um pop-up com o número da sua posição (ex: #3 da fila), o tempo estimado de espera calculado automaticamente e a opção de acompanhar em tempo real.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-2xl space-y-1">
+                  <p className="font-extrabold text-purple-900 flex items-center gap-1.5 text-xs">
+                    <CalendarIcon className="w-4 h-4 text-purple-700" />
+                    <span>E se eu escolher "Somente Agendamento"?</span>
+                  </p>
+                  <p className="text-[11px] text-purple-800">
+                    Caso você defina seu modo de atendimento como <strong>"Somente Horário Marcado"</strong> em Configurações, a Fila Virtual é desativada da sua Vitrine e do fluxo dos clientes. Eles só verão a agenda para marcar data e hora.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowInfoModal(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-brand-blue hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Entendi
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

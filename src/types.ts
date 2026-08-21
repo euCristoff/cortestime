@@ -30,7 +30,10 @@ export interface Appointment {
   clientName: string;
   clientPhone: string;
   serviceId: string;
+  serviceName?: string;
   barberId: string;
+  barberName?: string;
+  price?: number;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
@@ -116,6 +119,21 @@ export interface MerchantUser {
   vitrineGaleria?: string[];
   vitrineAvaliacoes?: { id: string; author: string; rating: number; comment: string; timeAgo?: string; date?: string }[];
   
+  // Vitrine Action Mode & WhatsApp Direct Configuration
+  vitrineModoAcao?: 'agendamento' | 'whatsapp';
+  vitrineMensagemWhatsAppPersonalizada?: string;
+  vitrineUsarSaudacaoHorarioWhatsApp?: boolean;
+
+  // Vitrine Template & Theme Styling
+  vitrineTemplate?: 'modelo1' | 'modelo2';
+  vitrinePrimaryColor?: string;
+  vitrineSecondaryColor?: string;
+  vitrineGradientEnabled?: boolean;
+  vitrineThemePreset?: string;
+
+  // Horário & Atendimento de Hoje (Recurso Dinâmico)
+  vitrineHorarioHoje?: VitrineHorarioHoje;
+
   // Invite code / Draft vitrine redemption fields
   codigoConviteResgatado?: string;
   vitrineDraftResgatada?: boolean;
@@ -123,6 +141,7 @@ export interface MerchantUser {
 
   // Partner Campaign fields
   isPartner?: boolean;
+  hasPartnerBadge?: boolean;
   partnerBenefitsExpiry?: string; // Expiration date for 30-day gallery and reviews
   partnerStoryConfirmed?: boolean;
   partnerWelcomeShown?: boolean;
@@ -278,5 +297,18 @@ export interface DraftVitrine {
   dataResgate?: string;
   criadoEm: string;
   criadoPorAdmin?: string;
+}
+
+export interface VitrineHorarioHoje {
+  ativo: boolean; // se o status especial de hoje está ativo
+  status: 'atendendo' | 'nao_atende';
+  inicio?: string; // ex: '09:00' ou '14:00'
+  fim?: string; // ex: '18:00' ou '20:00'
+  temIntervalo?: boolean;
+  intervaloInicio?: string; // ex: '12:00'
+  intervaloFim?: string; // ex: '14:00'
+  proximoAtendimento?: string; // ex: 'Amanhã, das 09:00 às 18:00'
+  mensagem?: string; // aviso rápido opcional
+  dataAtualizacao?: string; // data em que foi publicado (ex: '2026-08-20')
 }
 

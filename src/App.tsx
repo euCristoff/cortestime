@@ -1033,7 +1033,7 @@ export default function App() {
                 onClick={() => {
                   setVitrineNotFoundSlug(null);
                   window.history.replaceState({}, document.title, '/');
-                  setAuthMode('register');
+                  setAuthMode('signup');
                   setViewMode('auth');
                 }}
                 className="w-full py-3 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-[#051b42] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
