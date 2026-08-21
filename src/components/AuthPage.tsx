@@ -10,9 +10,10 @@ interface AuthPageProps {
   onAuthSuccess: (merchant: MerchantUser) => void;
   onBackToLanding: () => void;
   initialMode?: 'login' | 'signup';
+  trialDays?: number;
 }
 
-export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode = 'login' }: AuthPageProps) {
+export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode = 'login', trialDays = 7 }: AuthPageProps) {
   const [isLogin, setIsLogin] = useState<boolean>(initialMode === 'login');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +299,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         googleUser,
         nomeBarbearia,
         nomeProprietario,
-        whatsapp
+        whatsapp,
+        trialDays
       );
       setCreatedMerchant(merchant);
       setShowInstallStep(true);
@@ -314,7 +316,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     setIsLoading(true);
     setError(null);
     try {
-      const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp, codigoConvite);
+      const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp, codigoConvite, trialDays);
       setCreatedMerchant(merchant);
       setShowInstallStep(true);
     } catch (err: any) {
@@ -525,7 +527,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                   {isLogin ? 'Acesse sua barbearia' : 'Cadastre sua barbearia'}
                 </h2>
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mt-1.5">
-                  {isLogin ? 'Pronto para começar?' : 'Teste grátis por 7 dias'}
+                  {isLogin ? 'Pronto para começar?' : `Teste grátis por ${trialDays} dias`}
                 </p>
               </div>
 

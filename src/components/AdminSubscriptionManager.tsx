@@ -307,6 +307,22 @@ export default function AdminSubscriptionManager({
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const handleCopyLink15Days = (draft?: DraftVitrine) => {
+    const origin = window.location.origin;
+    let url = `${origin}/?dias=15`;
+    if (draft) {
+      url = `${origin}/?dias=15&convite=${encodeURIComponent(draft.codigo)}`;
+    }
+    navigator.clipboard.writeText(url);
+    const key = draft ? `link-${draft.codigo}` : 'link-15';
+    setCopiedCode(key);
+    setActionSuccess(`🔗 Link especial de 15 dias copiado com sucesso! Envie para o barbeiro.`);
+    setTimeout(() => {
+      setCopiedCode(null);
+      setActionSuccess(null);
+    }, 4000);
+  };
+
   const handleDeleteDraft = async (draft: DraftVitrine) => {
     if (!confirm(`Tem certeza que deseja excluir o código "${draft.codigo}" (${draft.nomeBarbearia})?`)) return;
     try {
@@ -676,13 +692,24 @@ export default function AdminSubscriptionManager({
 
                           {/* 3. EXTEND TRIAL */}
                           {isTrial && (
-                            <button
-                              onClick={() => handleExtendTrial(merchant, 7)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-sm"
-                            >
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>+7d Teste</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleExtendTrial(merchant, 7)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-2.5 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                title="Estender teste grátis por +7 dias"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>+7d</span>
+                              </button>
+                              <button
+                                onClick={() => handleExtendTrial(merchant, 15)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-2.5 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                                title="Conceder +15 dias de teste grátis para este barbeiro"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                <span>+15d Teste</span>
+                              </button>
+                            </div>
                           )}
 
                           {/* 4. CANCEL / MUTE TO FREE */}
@@ -721,16 +748,36 @@ export default function AdminSubscriptionManager({
                 />
               </div>
 
-              <button
-                onClick={() => {
-                  handleGenerateCode();
-                  setIsDraftModalOpen(true);
-                }}
-                className="w-full sm:w-auto bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all text-xs flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Criar Vitrine Rascunho</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => handleCopyLink15Days()}
+                  className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-2.5 px-4 rounded-xl shadow-md transition-all text-xs flex items-center justify-center gap-1.5 uppercase tracking-wider cursor-pointer shrink-0"
+                  title="Copiar link especial que concede 15 dias de teste grátis para qualquer barbeiro"
+                >
+                  {copiedCode === 'link-15' ? (
+                    <>
+                      <Check className="w-4 h-4 text-brand-lime" />
+                      <span>Link 15 Dias Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-white" />
+                      <span>Copiar Link Teste 15 Dias</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleGenerateCode();
+                    setIsDraftModalOpen(true);
+                  }}
+                  className="w-full sm:w-auto bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all text-xs flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Criar Vitrine Rascunho</span>
+                </button>
+              </div>
             </div>
 
             {/* DRAFT LIST */}
@@ -811,6 +858,25 @@ export default function AdminSubscriptionManager({
                           >
                             <Eye className="w-4 h-4 text-brand-blue" />
                             <span>Ver Vitrine</span>
+                          </button>
+
+                          {/* COPY 15-DAY LINK BUTTON */}
+                          <button
+                            onClick={() => handleCopyLink15Days(draft)}
+                            className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                            title="Copiar link de convite que já carrega este rascunho com 15 dias de teste grátis"
+                          >
+                            {copiedCode === `link-${draft.codigo}` ? (
+                              <>
+                                <Check className="w-4 h-4 text-brand-lime" />
+                                <span>Link 15d Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-4 h-4 text-white" />
+                                <span>Link 15 Dias</span>
+                              </>
+                            )}
                           </button>
 
                           {/* COPY CODE BUTTON */}

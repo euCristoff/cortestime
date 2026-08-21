@@ -65,7 +65,8 @@ export const firebaseService = {
     nomeBarbearia: string, 
     nomeProprietario: string, 
     whatsapp: string,
-    inviteCode?: string
+    inviteCode?: string,
+    customTrialDays?: number
   ): Promise<MerchantUser> {
     let draft: DraftVitrine | null = null;
     const hasCode = Boolean(inviteCode && inviteCode.trim());
@@ -96,9 +97,11 @@ export const firebaseService = {
     
     const trialInicio = formatDate(today);
     
-    const expiry7Days = new Date();
-    expiry7Days.setDate(today.getDate() + 7);
-    const trialFim = formatDate(expiry7Days);
+    // Check if a custom trial period was provided (e.g. 15 days from invite or query param)
+    const customDays = customTrialDays && customTrialDays > 0 ? customTrialDays : 7;
+    const expiryDate = new Date();
+    expiryDate.setDate(today.getDate() + customDays);
+    const trialFim = formatDate(expiryDate);
 
     const expiry30Days = new Date();
     expiry30Days.setDate(today.getDate() + 30);
@@ -349,7 +352,7 @@ export const firebaseService = {
     return { user, isNew: true };
   },
 
-  async saveGoogleMerchantProfile(user: FirebaseUser, nomeBarbearia: string, nomeProprietario: string, whatsapp: string): Promise<MerchantUser> {
+  async saveGoogleMerchantProfile(user: FirebaseUser, nomeBarbearia: string, nomeProprietario: string, whatsapp: string, customTrialDays?: number): Promise<MerchantUser> {
     const today = new Date();
     const formatDate = (date: Date) => {
       const dd = String(date.getDate()).padStart(2, '0');
@@ -360,8 +363,9 @@ export const firebaseService = {
     
     const trialInicio = formatDate(today);
     
+    const customDays = customTrialDays && customTrialDays > 0 ? customTrialDays : 7;
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 7);
+    expiry.setDate(today.getDate() + customDays);
     const trialFim = formatDate(expiry);
     
     const attribution = analyticsTracker.getAttributionData();

@@ -144,6 +144,27 @@ export default function App() {
     );
   });
 
+  // Check for custom trial days parameter in URL (e.g. ?dias=15, ?trial=15, ?teste=15, ?promo=15, ?t=15)
+  const [trialDays] = useState<number>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const customParam = params.get('dias') || 
+                          params.get('trial') || 
+                          params.get('teste') || 
+                          params.get('promo') || 
+                          params.get('tempo') ||
+                          params.get('t') ||
+                          params.get('days');
+      if (customParam) {
+        const parsed = parseInt(customParam, 10);
+        if (!isNaN(parsed) && parsed > 0 && parsed <= 365) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return 7; // Default trial is 7 days
+  });
+
   // Initialize UTM attribution and track visit on app mount
   useEffect(() => {
     analyticsTracker.initTracking();
@@ -874,6 +895,7 @@ export default function App() {
           }}
           currentMerchant={currentMerchant}
           firebaseConnected={firebaseConnected}
+          trialDays={trialDays}
         />
       )}
 
@@ -882,6 +904,7 @@ export default function App() {
           onAuthSuccess={handleAuthSuccess}
           onBackToLanding={() => setViewMode('landing')}
           initialMode={authMode}
+          trialDays={trialDays}
         />
       )}
 

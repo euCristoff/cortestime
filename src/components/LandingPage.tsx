@@ -24,9 +24,10 @@ interface LandingPageProps {
   onLogin: () => void;
   firebaseConnected?: boolean | null;
   currentMerchant?: MerchantUser | null;
+  trialDays?: number;
 }
 
-export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, currentMerchant }: LandingPageProps) {
+export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, currentMerchant, trialDays = 7 }: LandingPageProps) {
   return (
     <div id="landing-page" className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1E1E1E]">
       
@@ -113,28 +114,10 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
                   <span>Acessar Meu Painel</span>
                 </>
               ) : (
-                'Teste Grátis por 7 dias'
+                `Teste Grátis por ${trialDays} dias`
               )}
             </button>
           </motion.div>
-
-          {/* Real-time stats */}
-          <div className="flex gap-6 items-center mt-6 pt-6 border-t border-gray-100">
-            <div>
-              <p className="font-display font-bold text-2xl text-brand-dark">5.000+</p>
-              <p className="text-xs text-gray-500">Barbearias ativas</p>
-            </div>
-            <div className="h-8 w-px bg-gray-200"></div>
-            <div>
-              <p className="font-display font-bold text-2xl text-brand-dark">1.2M+</p>
-              <p className="text-xs text-gray-500">Cortes agendados/mês</p>
-            </div>
-            <div className="h-8 w-px bg-gray-200"></div>
-            <div>
-              <p className="font-display font-bold text-2xl text-brand-dark">4.9★</p>
-              <p className="text-xs text-gray-500">Avaliação do app</p>
-            </div>
-          </div>
         </div>
 
         <div className="md:col-span-5 relative flex justify-center items-center">
@@ -458,7 +441,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
               onClick={onStartTrial}
               className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-sm px-8 py-3.5 rounded-full transition-colors uppercase tracking-wider"
             >
-              Começar Teste de 5 Dias
+              Começar Teste de {trialDays} Dias
             </button>
           </div>
           <div className="pt-6 border-t border-gray-800 text-[11px] text-gray-500">
