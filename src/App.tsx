@@ -1084,6 +1084,9 @@ export default function App() {
             businessLogo={publicVitrineMerchant.vitrineLogoImage}
             services={publicVitrineServices}
             barbers={barbers}
+            merchantWhatsApp={publicVitrineMerchant.whatsapp || ''}
+            customWhatsAppMessage={publicVitrineMerchant.vitrineMensagemWhatsAppAgendamento || publicVitrineMerchant.vitrineMensagemWhatsApp || ''}
+            barberName={publicVitrineMerchant.nomeProprietario || publicVitrineMerchant.nomeBarbearia || ''}
             onBookAppointment={async (app) => {
               // Save booking to public merchant's appointments
               try {
@@ -1122,6 +1125,9 @@ export default function App() {
               businessLogo={currentMerchant?.vitrineLogoImage}
               services={services}
               barbers={barbers}
+              merchantWhatsApp={currentMerchant?.whatsapp || ''}
+              customWhatsAppMessage={currentMerchant?.vitrineMensagemWhatsAppAgendamento || currentMerchant?.vitrineMensagemWhatsApp || ''}
+              barberName={currentMerchant?.nomeProprietario || currentMerchant?.nomeBarbearia || ''}
               onBookAppointment={handleAddAppointment}
               onClose={() => setViewMode(currentMerchant ? 'dashboard' : 'landing')}
             />

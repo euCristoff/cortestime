@@ -25,6 +25,9 @@ interface ClientBookingProps {
   onBookAppointment: (appointment: Omit<Appointment, 'id' | 'status'>) => void;
   onClose: () => void;
   merchantUid?: string;
+  merchantWhatsApp?: string;
+  customWhatsAppMessage?: string;
+  barberName?: string;
 }
 
 export default function ClientBooking({ 
@@ -34,7 +37,10 @@ export default function ClientBooking({
   barbers, 
   onBookAppointment, 
   onClose,
-  merchantUid
+  merchantUid,
+  merchantWhatsApp,
+  customWhatsAppMessage,
+  barberName
 }: ClientBookingProps) {
   // Step 1: Service, 2: Professional, 3: Date & Time, 4: Client Info, 5: Confirmation, 6: Meus Agendamentos
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
@@ -746,6 +752,34 @@ export default function ClientBooking({
                 <span className="text-gray-900 font-medium">Seu email</span>
               </div>
             </div>
+
+            {/* WhatsApp Confirmation Notification Button */}
+            {merchantWhatsApp && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hora = new Date().getHours();
+                    const saudacao = hora >= 5 && hora < 12 ? 'Bom dia' : hora >= 12 && hora < 18 ? 'Boa tarde' : 'Boa noite';
+                    const dataStr = selectedDate ? selectedDate.toLocaleDateString('pt-BR') : today.toLocaleDateString('pt-BR');
+                    const rawMsg = customWhatsAppMessage || 'Olá {barbeiro}, {saudacao}! Meu agendamento para {servico} na {barbearia} foi solicitado para {data} às {horario}. Aguardo confirmação! ✂️';
+                    const formattedMsg = rawMsg
+                      .replace(/\{saudacao\}|\{saudação\}/gi, saudacao)
+                      .replace(/\{barbeiro\}/gi, barberName || selectedBarber?.name || businessName || 'Barbeiro')
+                      .replace(/\{barbearia\}/gi, businessName || 'Barbearia')
+                      .replace(/\{servico\}|\{serviço\}/gi, selectedService?.name || 'Corte')
+                      .replace(/\{data\}/gi, dataStr)
+                      .replace(/\{horario\}|\{horário\}/gi, selectedTime || '15:00')
+                      .replace(/\{cliente\}/gi, `${firstName} ${lastName}`.trim() || 'Cliente');
+                    const cleanPhone = merchantWhatsApp.replace(/\D/g, '');
+                    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(formattedMsg)}`, '_blank');
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-98"
+                >
+                  <span>💬 Enviar confirmação no WhatsApp</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="w-full space-y-2 pt-2">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
@@ -56,26 +56,17 @@ import { firebaseService } from '../services/firebaseService';
 import { notificationService } from '../services/notificationService';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import ClientBooking from './ClientBooking';
+import { 
+  THEME_PRESETS, 
+  VitrineTokens, 
+  VitrineThemePreset, 
+  resolveVitrineTokens, 
+  hexToRgba, 
+  getContrastTextColor 
+} from '../utils/vitrineTheme';
 
-export interface ThemePreset {
-  id: string;
-  name: string;
-  primary: string;
-  secondary: string;
-  gradient?: boolean;
-  textLight?: boolean;
-}
-
-export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'classico', name: 'Clássico', primary: '#78350f', secondary: '#d97706', gradient: true, textLight: true },
-  { id: 'dark', name: 'Dark', primary: '#0f172a', secondary: '#e11d48', gradient: false, textLight: true },
-  { id: 'carvao', name: 'Carvão', primary: '#18181b', secondary: '#ca8a04', gradient: true, textLight: true },
-  { id: 'premium', name: 'Premium', primary: '#ca8a04', secondary: '#09090b', gradient: true, textLight: true },
-  { id: 'negresco', name: 'Negresco', primary: '#000000', secondary: '#eab308', gradient: false, textLight: true },
-  { id: 'aco', name: 'Aço', primary: '#334155', secondary: '#64748b', gradient: true, textLight: true },
-  { id: 'cortestime', name: 'Cortestime', primary: '#051b42', secondary: '#2563eb', gradient: true, textLight: true },
-  { id: 'esmeralda', name: 'Esmeralda', primary: '#064e3b', secondary: '#10b981', gradient: true, textLight: true },
-];
+export type { VitrineThemePreset as ThemePreset };
+export { THEME_PRESETS };
 
 interface CortesVitrineProps {
   merchant: MerchantUser;
@@ -193,10 +184,22 @@ export default function CortesVitrine({
   const [modoAcao, setModoAcao] = useState<'agendamento' | 'whatsapp'>(
     merchant.vitrineModoAcao || 'agendamento'
   );
-  // Mensagem personalizada para o WhatsApp
+  // Mensagens personalizadas para o WhatsApp
+  const [mensagemWhatsAppAgendamento, setMensagemWhatsAppAgendamento] = useState<string>(
+    merchant.vitrineMensagemWhatsAppAgendamento || 
+    merchant.vitrineMensagemWhatsAppPersonalizada || 
+    'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️'
+  );
+  const [mensagemWhatsAppOrdemChegada, setMensagemWhatsAppOrdemChegada] = useState<string>(
+    merchant.vitrineMensagemWhatsAppOrdemChegada || 
+    'Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.'
+  );
   const [mensagemWhatsAppCustom, setMensagemWhatsAppCustom] = useState<string>(
     merchant.vitrineMensagemWhatsAppPersonalizada || ''
   );
+  const [activeMsgTab, setActiveMsgTab] = useState<'agendamento' | 'ordem_chegada'>('agendamento');
+  const [showVarsGuide, setShowVarsGuide] = useState<boolean>(true);
+
   // Usar saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite)
   const [usarSaudacaoHorario, setUsarSaudacaoHorario] = useState<boolean>(
     merchant.vitrineUsarSaudacaoHorarioWhatsApp ?? true
@@ -230,28 +233,72 @@ export default function CortesVitrine({
     return logoText || merchant.nomeBarbearia || 'Barbearia';
   };
 
-  const getMensagemWhatsAppGerada = (servicoEscolhido?: string) => {
+  const getMensagemWhatsAppGerada = (
+    servicoOuParams?: string | {
+      servico?: string;
+      data?: string;
+      horario?: string;
+      cliente?: string;
+      contexto?: 'agendamento' | 'ordem_chegada' | 'geral';
+    },
+    contextoParam?: 'agendamento' | 'ordem_chegada' | 'geral'
+  ) => {
     const saudacao = getSaudacaoHorario();
     const nomeBarbeiro = getNomeBarbeiro();
     const nomeBarbearia = getNomeBarbearia();
 
-    if (mensagemWhatsAppCustom && mensagemWhatsAppCustom.trim()) {
-      return mensagemWhatsAppCustom
-        .replace(/\{saudacao\}/gi, saudacao)
-        .replace(/\{barbeiro\}/gi, nomeBarbeiro)
-        .replace(/\{barbearia\}/gi, nomeBarbearia)
-        .replace(/\{servico\}/gi, servicoEscolhido || 'corte de cabelo');
+    let servico = 'Corte Masculino';
+    let dataStr = new Date().toLocaleDateString('pt-BR');
+    let horarioStr = '15:00';
+    let clienteStr = 'Cliente';
+    let contexto: 'agendamento' | 'ordem_chegada' | 'geral' = contextoParam || 'geral';
+
+    if (typeof servicoOuParams === 'string') {
+      servico = servicoOuParams || servico;
+    } else if (servicoOuParams && typeof servicoOuParams === 'object') {
+      if (servicoOuParams.servico) servico = servicoOuParams.servico;
+      if (servicoOuParams.data) dataStr = servicoOuParams.data;
+      if (servicoOuParams.horario) horarioStr = servicoOuParams.horario;
+      if (servicoOuParams.cliente) clienteStr = servicoOuParams.cliente;
+      if (servicoOuParams.contexto) contexto = servicoOuParams.contexto;
     }
 
-    if (servicoEscolhido) {
-      return `Olá ${nomeBarbeiro}, ${saudacao}! Vi a vitrine da ${nomeBarbearia} e gostaria de agendar o serviço: *${servicoEscolhido}*. Vocês estão abertos hoje e têm horário disponível?`;
+    let template = '';
+    if (contexto === 'agendamento') {
+      template = mensagemWhatsAppAgendamento || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️';
+    } else if (contexto === 'ordem_chegada') {
+      template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.';
+    } else {
+      if (modoAcao === 'whatsapp') {
+        template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. Vocês estão atendendo hoje? Gostaria de saber se tem horário disponível para {servico}!';
+      } else {
+        template = mensagemWhatsAppAgendamento || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia} e gostaria de agendar o serviço: *{servico}*. Vocês estão abertos hoje e têm horário disponível?';
+      }
     }
-    return `Olá ${nomeBarbeiro}, ${saudacao}! Vi a vitrine da ${nomeBarbearia}. Vocês estão atendendo hoje? Gostaria de saber se tem horário disponível!`;
+
+    return template
+      .replace(/\{saudacao\}|\{saudação\}/gi, saudacao)
+      .replace(/\{barbeiro\}/gi, nomeBarbeiro)
+      .replace(/\{barbearia\}/gi, nomeBarbearia)
+      .replace(/\{servico\}|\{serviço\}/gi, servico)
+      .replace(/\{data\}/gi, dataStr)
+      .replace(/\{horario\}|\{horário\}/gi, horarioStr)
+      .replace(/\{cliente\}/gi, clienteStr);
   };
 
-  const getWhatsAppLink = (servicoEscolhido?: string) => {
+  const getWhatsAppLink = (
+    servicoEscolhido?: string, 
+    contexto: 'agendamento' | 'ordem_chegada' | 'geral' = 'geral',
+    extraParams?: { data?: string; horario?: string; cliente?: string }
+  ) => {
     const cleanPhone = (whatsapp || merchant.whatsapp || '').replace(/\D/g, '') || '5582987243056';
-    const msg = getMensagemWhatsAppGerada(servicoEscolhido);
+    const msg = getMensagemWhatsAppGerada(
+      {
+        servico: servicoEscolhido || 'Corte',
+        contexto,
+        ...extraParams
+      }
+    );
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -316,6 +363,11 @@ export default function CortesVitrine({
   const [secondaryColor, setSecondaryColor] = useState<string>(merchant.vitrineSecondaryColor || '#2563eb');
   const [gradientEnabled, setGradientEnabled] = useState<boolean>(merchant.vitrineGradientEnabled ?? true);
   const [showTemplateModal, setShowTemplateModal] = useState<boolean>(false);
+
+  // Dynamic Vitrine Design Tokens (applied across entire public page & live preview)
+  const tokens: VitrineTokens = useMemo(() => {
+    return resolveVitrineTokens(themePreset, primaryColor, secondaryColor, gradientEnabled);
+  }, [themePreset, primaryColor, secondaryColor, gradientEnabled]);
 
   // Horário de Hoje (Recurso Dinâmico e Ágil)
   const [horarioHoje, setHorarioHoje] = useState<VitrineHorarioHoje>(() => {
@@ -453,6 +505,29 @@ export default function CortesVitrine({
       clearInterval(interval);
     };
   }, [merchant?.uid]);
+
+  // Synchronize state when merchant object or UID changes (e.g. reload or session update)
+  useEffect(() => {
+    if (merchant) {
+      if (merchant.vitrineThemePreset) setThemePreset(merchant.vitrineThemePreset);
+      if (merchant.vitrinePrimaryColor) setPrimaryColor(merchant.vitrinePrimaryColor);
+      if (merchant.vitrineSecondaryColor) setSecondaryColor(merchant.vitrineSecondaryColor);
+      if (merchant.vitrineGradientEnabled !== undefined) setGradientEnabled(merchant.vitrineGradientEnabled);
+      if (merchant.vitrineTemplate) setTemplate(merchant.vitrineTemplate);
+      if (merchant.vitrineHorarios) setHorarios(merchant.vitrineHorarios);
+      if (merchant.vitrineLocalizacao) setLocalizacao(merchant.vitrineLocalizacao);
+      if (merchant.vitrineWhatsApp) setWhatsapp(merchant.vitrineWhatsApp);
+      if (merchant.vitrineModoAcao) setModoAcao(merchant.vitrineModoAcao);
+      if (merchant.vitrineLogo) setLogoText(merchant.vitrineLogo);
+      if (merchant.vitrineLogoImage !== undefined) setLogoImage(merchant.vitrineLogoImage);
+      if (merchant.vitrineSlogan) setSlogan(merchant.vitrineSlogan);
+      if (merchant.vitrineCapa) setCapa(merchant.vitrineCapa);
+      if (merchant.vitrineLinkPersonalizado) setLinkPersonalizado(merchant.vitrineLinkPersonalizado);
+      if (merchant.vitrineProdutos) setProducts(merchant.vitrineProdutos);
+      if (merchant.vitrineGaleria) setGallery(merchant.vitrineGaleria);
+      if (merchant.vitrineHorarioHoje) setHorarioHoje(merchant.vitrineHorarioHoje);
+    }
+  }, [merchant?.uid, merchant?.vitrinePrimaryColor, merchant?.vitrineSecondaryColor, merchant?.vitrineThemePreset, merchant?.vitrineTemplate]);
 
   // Derived queue metrics
   const waitingQueue = liveQueue.filter(q => q.status === 'waiting');
@@ -704,7 +779,9 @@ export default function CortesVitrine({
         vitrineWhatsApp: whatsapp || '',
         vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
         vitrineModoAcao: modoAcao,
-        vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppCustom,
+        vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppAgendamento || mensagemWhatsAppCustom,
+        vitrineMensagemWhatsAppAgendamento: mensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: mensagemWhatsAppOrdemChegada,
         vitrineUsarSaudacaoHorarioWhatsApp: usarSaudacaoHorario,
         vitrineInstagram: instagram || '',
         vitrineLinkBio: linkBio || '',
@@ -745,7 +822,9 @@ export default function CortesVitrine({
           vitrineWhatsApp: whatsapp,
           vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
           vitrineModoAcao: modoAcao,
-          vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppCustom,
+          vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppAgendamento || mensagemWhatsAppCustom,
+          vitrineMensagemWhatsAppAgendamento: mensagemWhatsAppAgendamento,
+          vitrineMensagemWhatsAppOrdemChegada: mensagemWhatsAppOrdemChegada,
           vitrineUsarSaudacaoHorarioWhatsApp: usarSaudacaoHorario,
           vitrineInstagram: instagram,
           vitrineLinkBio: linkBio,
@@ -818,26 +897,58 @@ export default function CortesVitrine({
   const renderBarbersSection = (isPreview = false) => {
     if (!barbers || barbers.length === 0) return null;
     return (
-      <div className={`border-b border-gray-100 ${isPreview ? 'py-3' : 'py-5'}`}>
-        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1">
-          <Users className="w-3.5 h-3.5 text-brand-blue" />
+      <div 
+        className={`border-b ${isPreview ? 'py-3' : 'py-5'}`}
+        style={{ borderBottomColor: tokens.dividerColor }}
+      >
+        <h4 
+          className="text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1.5"
+          style={{ color: tokens.textMuted }}
+        >
+          <Users className="w-3.5 h-3.5" style={{ color: tokens.primaryColor }} />
           <span>Nossa Equipe de Barbeiros</span>
         </h4>
         <div className="grid grid-cols-2 gap-2.5">
           {barbers.map(b => (
-            <div key={b.id} className="bg-white p-2.5 rounded-2xl border border-gray-100 flex items-center gap-2.5 shadow-2xs">
-              <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
+            <div 
+              key={b.id} 
+              className="p-2.5 rounded-2xl border flex items-center gap-2.5 shadow-2xs transition-colors"
+              style={{
+                backgroundColor: tokens.cardBg,
+                borderColor: tokens.cardBorder,
+              }}
+            >
+              <div 
+                className="w-9 h-9 rounded-full overflow-hidden shrink-0 border"
+                style={{
+                  backgroundColor: tokens.cardInnerBg,
+                  borderColor: tokens.cardBorder,
+                }}
+              >
                 {b.avatar ? (
                   <img src={b.avatar} alt={b.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center font-bold text-xs text-gray-600">
+                  <div 
+                    className="w-full h-full flex items-center justify-center font-bold text-xs"
+                    style={{ color: tokens.textPrimary }}
+                  >
                     {b.name.charAt(0)}
                   </div>
                 )}
               </div>
               <div className="min-w-0">
-                <span className="font-bold text-xs text-gray-900 block truncate">{b.name}</span>
-                <span className="text-[10px] text-gray-400 truncate block">{b.specialty || 'Barbeiro'}</span>
+                <span 
+                  className="font-bold text-xs block truncate"
+                  style={{ color: tokens.textPrimary }}
+                >
+                  {b.name}
+                </span>
+                <span 
+                  className="text-[10px] truncate block font-medium"
+                  style={{ color: tokens.textSecondary }}
+                >
+                  {b.specialty || 'Barbeiro'}
+                </span>
               </div>
             </div>
           ))}
@@ -849,14 +960,27 @@ export default function CortesVitrine({
   const renderGallerySection = (isPreview = false) => {
     if (!gallery || gallery.length === 0) return null;
     return (
-      <div className={`border-b border-gray-100 ${isPreview ? 'py-3' : 'py-5'}`}>
-        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1">
-          <Camera className="w-3.5 h-3.5 text-brand-blue" />
+      <div 
+        className={`border-b ${isPreview ? 'py-3' : 'py-5'}`}
+        style={{ borderBottomColor: tokens.dividerColor }}
+      >
+        <h4 
+          className="text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1.5"
+          style={{ color: tokens.textMuted }}
+        >
+          <Camera className="w-3.5 h-3.5" style={{ color: tokens.primaryColor }} />
           <span>Nosso Portfólio</span>
         </h4>
         <div className="grid grid-cols-2 gap-2">
           {gallery.map((img, idx) => (
-            <div key={idx} className="aspect-square rounded-2xl overflow-hidden bg-gray-100 shadow-2xs border border-gray-100">
+            <div 
+              key={idx} 
+              className="aspect-square rounded-2xl overflow-hidden shadow-2xs border transition-transform hover:scale-[1.02]"
+              style={{
+                backgroundColor: tokens.cardInnerBg,
+                borderColor: tokens.cardBorder,
+              }}
+            >
               <img src={img} alt="Corte" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
             </div>
           ))}
@@ -869,26 +993,51 @@ export default function CortesVitrine({
     if (!merchant.vitrineAvaliacoes || merchant.vitrineAvaliacoes.length === 0) return null;
     const avg = (merchant.vitrineAvaliacoes.reduce((acc, r) => acc + (r.rating || 5), 0) / merchant.vitrineAvaliacoes.length).toFixed(1).replace('.', ',');
     return (
-      <div className={`border-b border-gray-100 space-y-2.5 text-left ${isPreview ? 'py-3' : 'py-5'}`}>
+      <div 
+        className={`border-b space-y-2.5 text-left ${isPreview ? 'py-3' : 'py-5'}`}
+        style={{ borderBottomColor: tokens.dividerColor }}
+      >
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full text-amber-900 text-[10px] font-extrabold shadow-2xs">
+          <div 
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold shadow-2xs border"
+            style={{
+              backgroundColor: tokens.accentBadgeBg,
+              color: tokens.accentBadgeText,
+              borderColor: tokens.accentBadgeBorder,
+            }}
+          >
             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
             <span>{avg} de 5 ({merchant.vitrineAvaliacoes.length} {merchant.vitrineAvaliacoes.length === 1 ? 'avaliação' : 'avaliações'})</span>
           </div>
         </div>
         <div className="space-y-2">
           {merchant.vitrineAvaliacoes.map((rev, idx) => (
-            <div key={rev.id || idx} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-2xs space-y-1">
+            <div 
+              key={rev.id || idx} 
+              className="p-3 rounded-2xl border shadow-2xs space-y-1"
+              style={{
+                backgroundColor: tokens.cardBg,
+                borderColor: tokens.cardBorder,
+              }}
+            >
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-0.5">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-3 h-3 ${i < (rev.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
+                    <Star key={i} className={`w-3 h-3 ${i < (rev.rating || 5) ? 'fill-amber-400 text-amber-400' : 'text-gray-400/40'}`} />
                   ))}
                 </div>
-                {rev.timeAgo && <span className="text-[9px] text-gray-400 font-medium">{rev.timeAgo}</span>}
+                {rev.timeAgo && (
+                  <span className="text-[9px] font-medium" style={{ color: tokens.textMuted }}>
+                    {rev.timeAgo}
+                  </span>
+                )}
               </div>
-              <p className="text-[11px] font-medium text-gray-800">"{rev.comment}"</p>
-              <span className="text-[9px] text-gray-500 font-bold block">— {rev.author}</span>
+              <p className="text-[11px] font-medium leading-relaxed" style={{ color: tokens.textPrimary }}>
+                "{rev.comment}"
+              </p>
+              <span className="text-[9px] font-bold block" style={{ color: tokens.textSecondary }}>
+                — {rev.author}
+              </span>
             </div>
           ))}
         </div>
@@ -898,33 +1047,66 @@ export default function CortesVitrine({
 
   const renderQueueSection = (isPreview = false) => {
     return (
-      <div className={`rounded-2xl border border-gray-100 bg-white space-y-3 shadow-2xs ${isPreview ? 'p-3 my-2' : 'p-4 my-3'}`}>
+      <div 
+        className={`rounded-2xl border space-y-3 shadow-2xs ${isPreview ? 'p-3 my-2' : 'p-4 my-3'}`}
+        style={{
+          backgroundColor: tokens.cardBg,
+          borderColor: tokens.cardBorder,
+        }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div 
+              className="w-7 h-7 rounded-xl flex items-center justify-center"
+              style={{
+                backgroundColor: tokens.statusOpenBg,
+                color: tokens.statusOpenText,
+              }}
+            >
               <Radio className="w-3.5 h-3.5 animate-pulse" />
             </div>
             <div>
-              <h4 className="text-xs font-black text-gray-900 flex items-center gap-1.5">
+              <h4 className="text-xs font-black flex items-center gap-1.5" style={{ color: tokens.textPrimary }}>
                 <span>✂️ Fila ao vivo</span>
                 {waitingQueue.length > 0 && (
-                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                  <span 
+                    className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.2 rounded-full border"
+                    style={{
+                      backgroundColor: tokens.statusOpenBg,
+                      color: tokens.statusOpenText,
+                      borderColor: tokens.statusOpenBorder,
+                    }}
+                  >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     Aberta
                   </span>
                 )}
               </h4>
-              <p className="text-[9px] text-gray-400">Atendimento por ordem de chegada</p>
+              <p className="text-[9px]" style={{ color: tokens.textMuted }}>Atendimento por ordem de chegada</p>
             </div>
           </div>
 
           {waitingQueue.length > 0 ? (
-            <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+            <span 
+              className="text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 border"
+              style={{
+                backgroundColor: tokens.statusOpenBg,
+                color: tokens.statusOpenText,
+                borderColor: tokens.statusOpenBorder,
+              }}
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
               {waitingQueue.length} {waitingQueue.length === 1 ? 'pessoa' : 'pessoas'} na fila
             </span>
           ) : (
-            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
+            <span 
+              className="text-[9px] font-bold px-2 py-0.5 rounded-lg border"
+              style={{
+                backgroundColor: tokens.cardInnerBg,
+                color: tokens.textMuted,
+                borderColor: tokens.cardBorder,
+              }}
+            >
               Fila livre
             </span>
           )}
@@ -932,24 +1114,39 @@ export default function CortesVitrine({
 
         {/* STATUS BANNER DO CLIENTE CASO ELE JÁ ESTEJA NA FILA */}
         {myQueueItem && myQueueItem.status === 'waiting' && (
-          <div className="bg-gradient-to-br from-emerald-50 to-blue-50 border-2 border-emerald-400/80 rounded-2xl p-3 space-y-2 shadow-xs">
+          <div 
+            className="border-2 rounded-2xl p-3 space-y-2 shadow-xs"
+            style={{
+              backgroundColor: tokens.cardInnerBg,
+              borderColor: tokens.primaryColor,
+            }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-md">
+              <span 
+                className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md"
+                style={{
+                  background: tokens.primaryGradient,
+                  color: tokens.primaryButtonText,
+                }}
+              >
                 Sua Posição
               </span>
-              <span className="text-xs text-gray-600 font-bold">
+              <span className="text-xs font-bold" style={{ color: tokens.textPrimary }}>
                 {myQueueItem.clientName}
               </span>
             </div>
 
             <div className="flex items-baseline justify-between pt-0.5">
               <div>
-                <span className="text-2xl font-black text-emerald-950 font-display">
+                <span 
+                  className="text-2xl font-black font-display"
+                  style={{ color: tokens.textPrimary }}
+                >
                   #{myQueuePosition}
                 </span>
-                <p className="text-[11px] font-semibold text-emerald-800 mt-0.5">
+                <p className="text-[11px] font-semibold mt-0.5" style={{ color: tokens.textSecondary }}>
                   {myQueuePosition === 1 ? (
-                    <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                    <span className="font-extrabold flex items-center gap-1" style={{ color: tokens.statusOpenText }}>
                       🎉 Você é o próximo!
                     </span>
                   ) : (
@@ -959,24 +1156,27 @@ export default function CortesVitrine({
               </div>
 
               <div className="text-right">
-                <div className="flex items-center justify-end gap-1 text-xs font-mono font-black text-brand-blue">
+                <div className="flex items-center justify-end gap-1 text-xs font-mono font-black" style={{ color: tokens.primaryColor }}>
                   <Clock className="w-3 h-3" />
                   <span>~{myQueueEstimatedMinutes} min</span>
                 </div>
-                <span className="text-[9px] text-gray-400 block mt-0.5">
+                <span className="text-[9px] block mt-0.5" style={{ color: tokens.textMuted }}>
                   Tempo estimado
                 </span>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[10px]">
-              <span className="text-gray-500 italic text-[9px]">
+            <div 
+              className="pt-2 border-t flex items-center justify-between text-[10px]"
+              style={{ borderTopColor: tokens.dividerColor }}
+            >
+              <span className="italic text-[9px]" style={{ color: tokens.textMuted }}>
                 Avisaremos você quando sua vez chegar!
               </span>
               <button
                 type="button"
                 onClick={handleLeaveQueue}
-                className="text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer"
+                className="text-red-500 hover:text-red-400 font-bold hover:underline cursor-pointer"
               >
                 Desistir / Sair
               </button>
@@ -985,12 +1185,18 @@ export default function CortesVitrine({
         )}
 
         {myQueueItem && myQueueItem.status === 'in_progress' && (
-          <div className="bg-blue-50 border-2 border-blue-400 rounded-2xl p-3 text-center space-y-1">
-            <span className="text-xs font-black text-blue-900 flex items-center justify-center gap-1.5">
-              <Scissors className="w-3.5 h-3.5 text-blue-600 animate-bounce" />
+          <div 
+            className="border-2 rounded-2xl p-3 text-center space-y-1"
+            style={{
+              backgroundColor: tokens.cardInnerBg,
+              borderColor: tokens.primaryColor,
+            }}
+          >
+            <span className="text-xs font-black flex items-center justify-center gap-1.5" style={{ color: tokens.textPrimary }}>
+              <Scissors className="w-3.5 h-3.5 animate-bounce" style={{ color: tokens.primaryColor }} />
               Sua vez chegou!
             </span>
-            <p className="text-[11px] text-blue-700">
+            <p className="text-[11px]" style={{ color: tokens.textSecondary }}>
               Você está sendo atendido na cadeira agora. Bom corte!
             </p>
           </div>
@@ -1000,24 +1206,36 @@ export default function CortesVitrine({
         {!myQueueItem && (
           <div className="space-y-2">
             {waitingQueue.length === 0 ? (
-              <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 text-center space-y-0.5">
-                <p className="text-xs text-gray-600 font-medium">
+              <div 
+                className="p-2.5 rounded-xl border text-center space-y-0.5"
+                style={{
+                  backgroundColor: tokens.cardInnerBg,
+                  borderColor: tokens.cardBorder,
+                }}
+              >
+                <p className="text-xs font-medium" style={{ color: tokens.textPrimary }}>
                   No momento não há clientes na fila.
                 </p>
-                <p className="text-[9px] text-gray-400">
+                <p className="text-[9px]" style={{ color: tokens.textMuted }}>
                   Entre na fila agora para ser o primeiro atendido!
                 </p>
               </div>
             ) : (
-              <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 space-y-1">
-                <div className="flex justify-between items-center text-xs text-gray-700">
-                  <span className="font-medium">Tempo médio de espera:</span>
-                  <span className="font-mono font-bold text-gray-900 flex items-center gap-1 text-[11px]">
-                    <Clock className="w-3 h-3 text-brand-blue" />
+              <div 
+                className="p-2.5 rounded-xl border space-y-1"
+                style={{
+                  backgroundColor: tokens.cardInnerBg,
+                  borderColor: tokens.cardBorder,
+                }}
+              >
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-medium" style={{ color: tokens.textSecondary }}>Tempo médio de espera:</span>
+                  <span className="font-mono font-bold flex items-center gap-1 text-[11px]" style={{ color: tokens.textPrimary }}>
+                    <Clock className="w-3 h-3" style={{ color: tokens.primaryColor }} />
                     ~{calculateEstimatedTimeForPosition(waitingQueue.length)} min
                   </span>
                 </div>
-                <p className="text-[9px] text-gray-400 leading-tight">
+                <p className="text-[9px] leading-tight" style={{ color: tokens.textMuted }}>
                   * O tempo é uma estimativa calculada pela duração dos serviços.
                 </p>
               </div>
@@ -1026,7 +1244,11 @@ export default function CortesVitrine({
             <button
               type="button"
               onClick={() => setShowJoinQueueModal(true)}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full active:scale-98 font-extrabold text-xs py-2.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              style={{
+                background: tokens.primaryGradient,
+                color: tokens.primaryButtonText,
+              }}
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Entrar na Fila ao Vivo</span>
@@ -1043,15 +1265,14 @@ export default function CortesVitrine({
         <div className={`w-full flex flex-col flex-1 ${isPreview ? 'p-0 text-left' : 'text-left'}`}>
           {/* TOP HERO CONTAINER (THEMED / GRADIENT) */}
           <div 
-            className={`relative overflow-hidden text-white transition-all ${
+            className={`relative overflow-hidden transition-all ${
               isPreview 
                 ? 'p-4 pt-6 pb-7 rounded-t-[24px] -mt-4 -mx-4' 
                 : 'p-6 pt-8 pb-10 sm:rounded-t-[36px]'
             }`}
             style={{
-              background: gradientEnabled
-                ? `linear-gradient(145deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                : primaryColor
+              background: tokens.primaryGradient,
+              color: '#ffffff'
             }}
           >
             {/* Ambient Glow */}
@@ -1070,7 +1291,10 @@ export default function CortesVitrine({
 
             {/* Logo Circle */}
             <div className="text-center relative z-10">
-              <div className={`${isPreview ? 'w-16 h-16 text-xl mb-2' : 'w-20 h-20 text-2xl mb-3'} rounded-full bg-white/10 backdrop-blur-md border-2 border-white/80 p-0.5 flex items-center justify-center font-sans font-black mx-auto shadow-xl overflow-hidden`}>
+              <div 
+                className={`${isPreview ? 'w-16 h-16 text-xl mb-2' : 'w-20 h-20 text-2xl mb-3'} rounded-full backdrop-blur-md border-2 border-white/80 p-0.5 flex items-center justify-center font-sans font-black mx-auto shadow-xl overflow-hidden`}
+                style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
+              >
                 {logoImage ? (
                   <img src={logoImage} alt={logoText} className="w-full h-full object-cover rounded-full" />
                 ) : (
@@ -1120,9 +1344,13 @@ export default function CortesVitrine({
                       if (onBookOnline) onBookOnline();
                       else setShowSiteBookingModal(true);
                     }}
-                    className={`flex-1 max-w-[200px] bg-white hover:bg-gray-100 active:scale-95 text-gray-950 font-black py-2.5 px-4 rounded-full transition-all shadow-lg cursor-pointer ${
+                    className={`flex-1 max-w-[200px] hover:opacity-90 active:scale-95 font-black py-2.5 px-4 rounded-full transition-all shadow-lg cursor-pointer ${
                       isPreview ? 'text-xs' : 'text-xs sm:text-sm py-3'
                     }`}
+                    style={{
+                      backgroundColor: tokens.isDark ? '#ffffff' : tokens.cardBg,
+                      color: tokens.isDark ? '#09090b' : tokens.textPrimary,
+                    }}
                   >
                     Agendar agora
                   </button>
@@ -1153,7 +1381,7 @@ export default function CortesVitrine({
                 )}
               </div>
 
-              {/* Horário de Hoje (Linha Única Compacta: Ícone + Atendendo hoje + Data + Horário + >) */}
+              {/* Horário de Hoje */}
               {horarioHoje.ativo && (
                 <button
                   type="button"
@@ -1226,36 +1454,57 @@ export default function CortesVitrine({
               {/* Client Area Quick Card */}
               <div 
                 onClick={() => setShowClientAreaModal(true)}
-                className={`mt-2 bg-white text-gray-900 rounded-2xl text-left flex items-center justify-between shadow-md hover:bg-gray-50 transition-all cursor-pointer ${
+                className={`mt-2 rounded-2xl text-left flex items-center justify-between shadow-md transition-all cursor-pointer border ${
                   isPreview ? 'p-2.5' : 'p-3'
                 }`}
+                style={{
+                  backgroundColor: tokens.cardBg,
+                  borderColor: tokens.cardBorder,
+                  color: tokens.textPrimary,
+                }}
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-700 shrink-0">
+                  <div 
+                    className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: tokens.accentBadgeBg, color: tokens.primaryColor }}
+                  >
                     <User className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <p className={`font-black text-gray-900 leading-tight ${isPreview ? 'text-[11px]' : 'text-xs'}`}>Já é cliente?</p>
-                    <p className="text-[9px] text-gray-500 font-medium">Acesse e gerencie seus agendamentos</p>
+                    <p className={`font-black leading-tight ${isPreview ? 'text-[11px]' : 'text-xs'}`} style={{ color: tokens.textPrimary }}>
+                      Já é cliente?
+                    </p>
+                    <p className="text-[9px] font-medium" style={{ color: tokens.textMuted }}>
+                      Acesse e gerencie seus agendamentos
+                    </p>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                <ChevronRight className="w-4 h-4 shrink-0" style={{ color: tokens.textMuted }} />
               </div>
             </div>
           </div>
 
-          {/* LOWER WHITE SHEET / SERVICES & QUEUE */}
-          <div className={`bg-[#faf9f6] rounded-t-[28px] relative z-10 space-y-4 text-left flex-1 flex flex-col ${
-            isPreview ? 'p-3.5 -mt-3.5' : 'p-5 -mt-4'
-          }`}>
+          {/* LOWER SHEET / SERVICES & QUEUE */}
+          <div 
+            className={`rounded-t-[28px] relative z-10 space-y-4 text-left flex-1 flex flex-col transition-colors ${
+              isPreview ? 'p-3.5 -mt-3.5' : 'p-5 -mt-4'
+            }`}
+            style={{
+              backgroundColor: tokens.bgMain,
+              color: tokens.textPrimary,
+            }}
+          >
             {/* Nossos Serviços */}
             <div>
-              <h3 className={`font-black text-gray-900 uppercase tracking-wider mb-2.5 ${isPreview ? 'text-[10px]' : 'text-xs'}`}>
+              <h3 
+                className={`font-black uppercase tracking-wider mb-2.5 ${isPreview ? 'text-[10px]' : 'text-xs'}`}
+                style={{ color: tokens.textMuted }}
+              >
                 Nossos serviços
               </h3>
               <div className="space-y-2">
                 {services.length === 0 ? (
-                  <p className="text-xs text-gray-400">Nenhum serviço cadastrado.</p>
+                  <p className="text-xs" style={{ color: tokens.textMuted }}>Nenhum serviço cadastrado.</p>
                 ) : (
                   services.map(s => (
                     <div
@@ -1268,33 +1517,61 @@ export default function CortesVitrine({
                           else setShowSiteBookingModal(true);
                         }
                       }}
-                      className={`bg-white hover:bg-gray-50 border border-gray-100 rounded-2xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group ${
+                      className={`rounded-2xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group border ${
                         isPreview ? 'p-2.5' : 'p-3.5'
                       }`}
+                      style={{
+                        backgroundColor: tokens.cardBg,
+                        borderColor: tokens.cardBorder,
+                      }}
                     >
                       <div className="min-w-0 pr-2">
-                        <span className={`font-extrabold text-gray-900 block truncate group-hover:text-brand-blue transition-colors ${
-                          isPreview ? 'text-xs' : 'text-sm'
-                        }`}>
+                        <span 
+                          className={`font-extrabold block truncate transition-colors ${
+                            isPreview ? 'text-xs' : 'text-sm'
+                          }`}
+                          style={{ color: tokens.textPrimary }}
+                        >
                           {s.name}
                         </span>
-                        <span className={`text-gray-500 font-medium flex items-center gap-1 mt-0.5 ${
-                          isPreview ? 'text-[10px]' : 'text-xs'
-                        }`}>
-                          <Clock className="w-3 h-3 text-gray-400" />
+                        <span 
+                          className={`font-medium flex items-center gap-1 mt-0.5 ${
+                            isPreview ? 'text-[10px]' : 'text-xs'
+                          }`}
+                          style={{ color: tokens.textSecondary }}
+                        >
+                          <Clock className="w-3 h-3" style={{ color: tokens.textMuted }} />
                           {s.durationMin} min
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={`font-mono font-black text-gray-900 bg-gray-50 px-2 py-0.5 rounded-xl border border-gray-100 ${
-                          isPreview ? 'text-xs' : 'text-sm px-2.5 py-1'
-                        }`}>
+                        <span 
+                          className={`font-mono font-black border ${
+                            isPreview ? 'text-xs px-2 py-0.5 rounded-xl' : 'text-sm px-2.5 py-1 rounded-xl'
+                          }`}
+                          style={{
+                            backgroundColor: tokens.cardInnerBg,
+                            borderColor: tokens.cardBorder,
+                            color: tokens.textPrimary,
+                          }}
+                        >
                           R$ {s.price.toFixed(2)}
                         </span>
-                        {modoAcao === 'whatsapp' && (
+                        {modoAcao === 'whatsapp' ? (
                           <span className="bg-emerald-500 hover:bg-emerald-600 text-white p-1.5 rounded-xl flex items-center justify-center transition-colors shadow-2xs" title="Agendar pelo WhatsApp">
                             <Phone className="w-3 h-3 fill-current" />
                           </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-[10px] font-black px-2.5 py-1 rounded-xl transition-all shadow-2xs cursor-pointer"
+                            style={{
+                              background: tokens.primaryGradient,
+                              color: tokens.primaryButtonText,
+                            }}
+                          >
+                            Agendar
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1324,8 +1601,11 @@ export default function CortesVitrine({
             )}
 
             {/* Footer Branding */}
-            <div className="text-center pt-4 pb-2 mt-auto text-[10px] text-gray-400 font-medium flex items-center justify-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />
+            <div 
+              className="text-center pt-4 pb-2 mt-auto text-[10px] font-medium flex items-center justify-center gap-1.5"
+              style={{ color: tokens.textMuted }}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" style={{ color: tokens.textMuted }} />
               <span>Tecnologia Cortestime</span>
             </div>
           </div>
@@ -1335,13 +1615,16 @@ export default function CortesVitrine({
 
     // MODELO 1 (CLÁSSICO COMPLETO)
     return (
-      <div className={`w-full flex flex-col flex-1 ${isPreview ? 'p-0 text-left' : 'text-left'}`}>
+      <div 
+        className={`w-full flex flex-col flex-1 ${isPreview ? 'p-0 text-left' : 'text-left'}`}
+        style={{ backgroundColor: tokens.bgMain, color: tokens.textPrimary }}
+      >
         {/* Cover banner with curved bottom arch */}
         <div className={`w-full relative overflow-hidden shrink-0 ${
           isPreview ? 'h-32 sm:h-36' : 'h-48 sm:h-56'
         }`}>
           <img src={capa} alt="Capa" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
           
           {!isPreview && onBack && (
             <button 
@@ -1353,9 +1636,9 @@ export default function CortesVitrine({
             </button>
           )}
 
-          {/* Smooth bottom curve transitioning into white body */}
+          {/* Smooth bottom curve transitioning into body */}
           <div className="absolute -bottom-1 left-0 right-0 overflow-hidden leading-none z-10 pointer-events-none">
-            <svg viewBox="0 0 500 60" preserveAspectRatio="none" className="w-full h-7 sm:h-10 fill-[#faf9f6]">
+            <svg viewBox="0 0 500 60" preserveAspectRatio="none" className="w-full h-7 sm:h-10" style={{ fill: tokens.bgMain }}>
               <path d="M0,60 C180,0 320,0 500,60 L500,60 L0,60 Z" />
             </svg>
           </div>
@@ -1370,11 +1653,11 @@ export default function CortesVitrine({
             <div 
               className={`${
                 isPreview ? 'w-16 h-16 text-xl' : 'w-20 h-20 text-2xl'
-              } rounded-full text-white border-4 border-white flex items-center justify-center font-sans font-black mx-auto shadow-xl mb-2 overflow-hidden bg-white`}
+              } rounded-full border-4 flex items-center justify-center font-sans font-black mx-auto shadow-xl mb-2 overflow-hidden`}
               style={{
-                background: logoImage ? '#ffffff' : (gradientEnabled
-                  ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                  : primaryColor)
+                borderColor: tokens.cardBorder,
+                background: logoImage ? tokens.cardBg : tokens.primaryGradient,
+                color: tokens.primaryButtonText,
               }}
             >
               {logoImage ? (
@@ -1384,28 +1667,44 @@ export default function CortesVitrine({
               )}
             </div>
 
-            <h2 className={`font-sans font-black tracking-tight text-gray-900 ${
-              isPreview ? 'text-lg' : 'text-2xl'
-            }`}>
+            <h2 
+              className={`font-sans font-black tracking-tight ${
+                isPreview ? 'text-lg' : 'text-2xl'
+              }`}
+              style={{ color: tokens.textPrimary }}
+            >
               {logoText || 'Barbearia'}
             </h2>
 
             {slogan ? (
-              <p className={`text-gray-500 italic mt-0.5 font-medium max-w-[280px] mx-auto leading-relaxed ${
-                isPreview ? 'text-[11px]' : 'text-xs'
-              }`}>
+              <p 
+                className={`italic mt-0.5 font-medium max-w-[280px] mx-auto leading-relaxed ${
+                  isPreview ? 'text-[11px]' : 'text-xs'
+                }`}
+                style={{ color: tokens.textSecondary }}
+              >
                 "{slogan}"
               </p>
             ) : (
-              <p className={`text-gray-500 italic mt-0.5 font-medium max-w-[280px] mx-auto leading-relaxed ${
-                isPreview ? 'text-[11px]' : 'text-xs'
-              }`}>
+              <p 
+                className={`italic mt-0.5 font-medium max-w-[280px] mx-auto leading-relaxed ${
+                  isPreview ? 'text-[11px]' : 'text-xs'
+                }`}
+                style={{ color: tokens.textMuted }}
+              >
                 "Corte, Barba & Estilo de Alto Padrão"
               </p>
             )}
 
             <div className="mt-2.5">
-              <span className="text-[10px] text-gray-600 font-extrabold uppercase tracking-widest bg-[#edf0f5] inline-block px-4 py-1 rounded-full shadow-2xs">
+              <span 
+                className="text-[10px] font-extrabold uppercase tracking-widest inline-block px-4 py-1 rounded-full shadow-2xs border"
+                style={{
+                  backgroundColor: tokens.accentBadgeBg,
+                  color: tokens.primaryColor,
+                  borderColor: tokens.cardBorder,
+                }}
+              >
                 Vitrine Digital Oficial
               </span>
             </div>
@@ -1417,8 +1716,8 @@ export default function CortesVitrine({
                 onClick={() => setShowHorarioHojeDetails(true)}
                 className={`w-full max-w-sm mx-auto mt-3 flex items-center justify-between gap-1.5 px-3.5 py-2.5 rounded-2xl transition-all text-left cursor-pointer border shadow-2xs group active:scale-98 ${
                   horarioHoje.status === 'atendendo'
-                    ? 'bg-[#f0faf4] hover:bg-[#e4f6eb] border-[#c2ebd1] text-emerald-950'
-                    : 'bg-[#f0f6ff] hover:bg-[#e4efff] border-[#bfdbfe] text-blue-950'
+                    ? 'bg-[#f0faf4] hover:bg-[#e4f6eb] border-[#c2ebd1] text-emerald-950 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:text-emerald-300'
+                    : 'bg-[#f0f6ff] hover:bg-[#e4efff] border-[#bfdbfe] text-blue-950 dark:bg-blue-950/40 dark:border-blue-500/30 dark:text-blue-300'
                 }`}
                 title="Toque para ver detalhes de atendimento e horários"
               >
@@ -1426,38 +1725,38 @@ export default function CortesVitrine({
                   {/* Left: Clock Icon + Status */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Clock className={`w-4 h-4 shrink-0 ${
-                      horarioHoje.status === 'atendendo' ? 'text-emerald-700' : 'text-blue-700'
+                      horarioHoje.status === 'atendendo' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'
                     }`} />
                     
                     {horarioHoje.status === 'atendendo' ? (
-                      <span className="font-extrabold text-emerald-800 flex items-center gap-1.5">
+                      <span className="font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
                         <span>Atendendo hoje</span>
                       </span>
                     ) : (
-                      <span className="font-extrabold text-blue-800 flex items-center gap-1.5">
+                      <span className="font-extrabold text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                         <span>Hoje não atendemos</span>
                       </span>
                     )}
                   </div>
 
-                  <span className="text-gray-300 font-light mx-1">|</span>
+                  <span className="text-gray-400/40 font-light mx-1">|</span>
 
                   {/* Middle: Current Date */}
-                  <span className="font-semibold text-gray-600 shrink-0 text-[11px]">
+                  <span className="font-semibold text-[11px] opacity-80">
                     {getHojeData().dataCurta}
                   </span>
 
-                  <span className="text-gray-300 font-light mx-1">|</span>
+                  <span className="text-gray-400/40 font-light mx-1">|</span>
 
                   {/* Right: Hours */}
                   {horarioHoje.status === 'atendendo' ? (
-                    <span className="font-bold text-gray-900 shrink-0 text-[11px] tracking-tight">
+                    <span className="font-bold shrink-0 text-[11px] tracking-tight">
                       {horarioHoje.inicio || '09:00'} – {horarioHoje.fim || '19:00'}
                     </span>
                   ) : (
-                    <span className="font-medium text-gray-700 shrink-0 text-[10px] truncate max-w-[90px]">
+                    <span className="font-medium shrink-0 text-[10px] truncate max-w-[90px]">
                       {horarioHoje.proximoAtendimento || 'Amanhã'}
                     </span>
                   )}
@@ -1471,16 +1770,23 @@ export default function CortesVitrine({
             {/* Endereço Card */}
             <div 
               onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(localizacao || 'Centro')}`, '_blank')}
-              className="bg-white rounded-2xl p-3.5 border border-gray-100/90 shadow-2xs flex items-center gap-3 hover:bg-gray-50/80 transition-colors cursor-pointer"
+              className="rounded-2xl p-3.5 border shadow-2xs flex items-center gap-3 transition-colors cursor-pointer"
+              style={{
+                backgroundColor: tokens.cardBg,
+                borderColor: tokens.cardBorder,
+              }}
             >
-              <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <div 
+                className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: tokens.accentBadgeBg, color: tokens.primaryColor }}
+              >
                 <MapPin className="w-4 h-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-black text-[9px] sm:text-[10px] text-gray-400 uppercase tracking-wider">
+                <p className="font-black text-[9px] sm:text-[10px] uppercase tracking-wider" style={{ color: tokens.textMuted }}>
                   ENDEREÇO
                 </p>
-                <p className="font-bold text-gray-800 text-xs mt-0.5 leading-snug truncate">
+                <p className="font-bold text-xs mt-0.5 leading-snug truncate" style={{ color: tokens.textPrimary }}>
                   {localizacao || 'Av. Principal, 123 - Centro'}
                 </p>
               </div>
@@ -1488,22 +1794,38 @@ export default function CortesVitrine({
           </div>
 
           {/* Services listing */}
-          <div className={`border-b border-gray-100 ${isPreview ? 'py-4' : 'py-6'}`}>
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3.5">
+          <div className={`border-b ${isPreview ? 'py-4' : 'py-6'}`} style={{ borderColor: tokens.cardBorder }}>
+            <h4 className="text-[10px] font-black uppercase tracking-widest mb-3.5" style={{ color: tokens.textMuted }}>
               Tabela de Serviços & Preços
             </h4>
             <div className="space-y-2.5">
               {services.length === 0 ? (
-                <p className="text-xs text-gray-400">Nenhum serviço cadastrado.</p>
+                <p className="text-xs" style={{ color: tokens.textMuted }}>Nenhum serviço cadastrado.</p>
               ) : (
                 services.map(s => (
-                  <div key={s.id} className="flex justify-between items-center text-xs p-2.5 rounded-2xl bg-gray-50/70 hover:bg-gray-100/70 transition-colors">
+                  <div 
+                    key={s.id} 
+                    className="flex justify-between items-center text-xs p-2.5 rounded-2xl border transition-colors"
+                    style={{
+                      backgroundColor: tokens.cardBg,
+                      borderColor: tokens.cardBorder,
+                    }}
+                  >
                     <div className="min-w-0 pr-2">
-                      <span className="font-bold text-gray-900 block truncate">{s.name}</span>
-                      <span className="text-[10px] text-gray-400 font-medium">{s.durationMin} min</span>
+                      <span className="font-bold block truncate" style={{ color: tokens.textPrimary }}>{s.name}</span>
+                      <span className="text-[10px] font-medium" style={{ color: tokens.textMuted }}>{s.durationMin} min</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono font-bold text-gray-900 bg-white px-2.5 py-1 rounded-xl border border-gray-100 shadow-2xs">R$ {s.price.toFixed(0)}</span>
+                      <span 
+                        className="font-mono font-bold px-2.5 py-1 rounded-xl border shadow-2xs"
+                        style={{
+                          backgroundColor: tokens.cardInnerBg,
+                          borderColor: tokens.cardBorder,
+                          color: tokens.textPrimary,
+                        }}
+                      >
+                        R$ {s.price.toFixed(0)}
+                      </span>
                       {modoAcao === 'whatsapp' ? (
                         <button
                           type="button"
@@ -1522,11 +1844,10 @@ export default function CortesVitrine({
                             if (onBookOnline) onBookOnline();
                             else setShowSiteBookingModal(true);
                           }}
-                          className="text-white text-[10px] font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs active:scale-95"
+                          className="text-[10px] font-extrabold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-2xs active:scale-95"
                           style={{
-                            background: gradientEnabled
-                              ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                              : primaryColor
+                            background: tokens.primaryGradient,
+                            color: tokens.primaryButtonText,
                           }}
                         >
                           Agendar
@@ -1551,17 +1872,24 @@ export default function CortesVitrine({
 
           {/* Products Showcase */}
           {products.length > 0 && (
-            <div className={`border-b border-gray-100 ${isPreview ? 'py-4' : 'py-6'}`}>
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3.5">
+            <div className={`border-b ${isPreview ? 'py-4' : 'py-6'}`} style={{ borderColor: tokens.cardBorder }}>
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-3.5" style={{ color: tokens.textMuted }}>
                 Produtos Recomendados
               </h4>
               <div className="grid grid-cols-2 gap-2.5">
                 {products.map(p => (
-                  <div key={p.id} className="bg-gray-50/70 p-2.5 rounded-2xl border border-gray-100 flex flex-col justify-between">
+                  <div 
+                    key={p.id} 
+                    className="p-2.5 rounded-2xl border flex flex-col justify-between"
+                    style={{
+                      backgroundColor: tokens.cardBg,
+                      borderColor: tokens.cardBorder,
+                    }}
+                  >
                     <div>
-                      <p className="text-[11px] font-bold text-gray-800 leading-snug line-clamp-2">{p.name}</p>
+                      <p className="text-[11px] font-bold leading-snug line-clamp-2" style={{ color: tokens.textPrimary }}>{p.name}</p>
                     </div>
-                    <p className="text-xs font-mono font-bold text-blue-600 mt-2">R$ {p.price.toFixed(2)}</p>
+                    <p className="text-xs font-mono font-bold mt-2" style={{ color: tokens.primaryColor }}>R$ {p.price.toFixed(2)}</p>
                   </div>
                 ))}
               </div>
@@ -1580,17 +1908,23 @@ export default function CortesVitrine({
 
           {/* Hero Booking / WhatsApp Card (Apenas se serviceMode for 'agendamento' (padrão) ou 'ambos') */}
           {(merchant?.serviceMode !== 'ordem_chegada') && (
-            <div className={`bg-white rounded-3xl shadow-sm border border-gray-100 text-center space-y-4 my-4 ${
-              isPreview ? 'p-4' : 'p-6 sm:p-8'
-            }`}>
+            <div 
+              className={`rounded-3xl shadow-sm border text-center space-y-4 my-4 ${
+                isPreview ? 'p-4' : 'p-6 sm:p-8'
+              }`}
+              style={{
+                backgroundColor: tokens.cardBg,
+                borderColor: tokens.cardBorder,
+              }}
+            >
               {modoAcao === 'whatsapp' ? (
                 <>
                   <div className="space-y-1">
-                    <h3 className={`font-light tracking-tight text-gray-900 leading-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`}>
+                    <h3 className={`font-light tracking-tight leading-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`} style={{ color: tokens.textPrimary }}>
                       Atendimento direto no
                     </h3>
                     <div className="flex items-center justify-center gap-2 flex-nowrap">
-                      <span className={`font-light tracking-tight text-gray-900 ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`}>
+                      <span className={`font-light tracking-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`} style={{ color: tokens.textPrimary }}>
                         seu
                       </span>
                       <div 
@@ -1604,7 +1938,7 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
-                  <p className="text-xs text-gray-500 font-normal max-w-xs mx-auto leading-relaxed">
+                  <p className="text-xs font-normal max-w-xs mx-auto leading-relaxed" style={{ color: tokens.textSecondary }}>
                     Fale com {getNomeBarbeiro()} e tire suas dúvidas ou combine seu horário na hora
                   </p>
 
@@ -1623,7 +1957,8 @@ export default function CortesVitrine({
                     <button
                       type="button"
                       onClick={() => setShowClientAreaModal(true)}
-                      className="text-xs font-semibold text-gray-700 hover:text-blue-600 transition-colors py-1 cursor-pointer block mx-auto"
+                      className="text-xs font-semibold hover:opacity-80 transition-colors py-1 cursor-pointer block mx-auto"
+                      style={{ color: tokens.primaryColor }}
                     >
                       Área do Cliente
                     </button>
@@ -1632,21 +1967,20 @@ export default function CortesVitrine({
               ) : (
                 <>
                   <div className="space-y-1">
-                    <h3 className={`font-light tracking-tight text-gray-900 leading-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`}>
+                    <h3 className={`font-light tracking-tight leading-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`} style={{ color: tokens.textPrimary }}>
                       Agende seu
                     </h3>
                     <div className="flex items-center justify-center gap-2 flex-nowrap">
-                      <span className={`font-light tracking-tight text-gray-900 ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`}>
+                      <span className={`font-light tracking-tight ${isPreview ? 'text-2xl' : 'text-3xl sm:text-4xl'}`} style={{ color: tokens.textPrimary }}>
                         horário
                       </span>
                       <div 
-                        className={`relative inline-flex items-center text-white font-extrabold rounded-2xl shadow-2xs transform -rotate-1 shrink-0 ${
+                        className={`relative inline-flex items-center font-extrabold rounded-2xl shadow-2xs transform -rotate-1 shrink-0 ${
                           isPreview ? 'text-base px-2.5 py-0.5' : 'text-xl sm:text-2xl px-4 py-1'
                         }`}
                         style={{
-                          background: gradientEnabled
-                            ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                            : primaryColor
+                          background: tokens.primaryGradient,
+                          color: tokens.primaryButtonText,
                         }}
                       >
                         online
@@ -1655,7 +1989,7 @@ export default function CortesVitrine({
                     </div>
                   </div>
 
-                  <p className="text-xs text-gray-400 font-normal max-w-xs mx-auto leading-relaxed">
+                  <p className="text-xs font-normal max-w-xs mx-auto leading-relaxed" style={{ color: tokens.textSecondary }}>
                     Escolha o serviço, dia e horário que deseja ser atendido
                   </p>
 
@@ -1666,11 +2000,10 @@ export default function CortesVitrine({
                         if (onBookOnline) onBookOnline();
                         else setShowSiteBookingModal(true);
                       }}
-                      className="w-full max-w-xs mx-auto text-white font-bold text-sm py-3 px-6 rounded-full transition-all shadow-md cursor-pointer block active:scale-95"
+                      className="w-full max-w-xs mx-auto font-bold text-sm py-3 px-6 rounded-full transition-all shadow-md cursor-pointer block active:scale-95"
                       style={{
-                        background: gradientEnabled
-                          ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                          : primaryColor
+                        background: tokens.primaryGradient,
+                        color: tokens.primaryButtonText,
                       }}
                     >
                       Agendar
@@ -1679,7 +2012,8 @@ export default function CortesVitrine({
                     <button
                       type="button"
                       onClick={() => setShowClientAreaModal(true)}
-                      className="text-xs font-semibold text-gray-700 hover:text-blue-600 transition-colors py-1 cursor-pointer block mx-auto"
+                      className="text-xs font-semibold hover:opacity-80 transition-colors py-1 cursor-pointer block mx-auto"
+                      style={{ color: tokens.primaryColor }}
                     >
                       Área do Cliente
                     </button>
@@ -1691,7 +2025,8 @@ export default function CortesVitrine({
                         href={formattedWhatsAppUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-emerald-600 transition-colors"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:text-emerald-600 transition-colors"
+                        style={{ color: tokens.textMuted }}
                         title="Agendar via WhatsApp"
                       >
                         <MessageSquare className="w-5 h-5 fill-current" />
@@ -1704,8 +2039,8 @@ export default function CortesVitrine({
           )}
 
           {/* Branding badge */}
-          <div className="text-center py-3 text-[10px] text-gray-400 font-medium">
-            Desenvolvido por <strong className="text-gray-700">Cortestime Vitrine</strong>
+          <div className="text-center py-3 text-[10px] font-medium" style={{ color: tokens.textMuted }}>
+            Desenvolvido por <strong style={{ color: tokens.textPrimary }}>Cortestime Vitrine</strong>
           </div>
         </div>
       </div>
@@ -1715,17 +2050,23 @@ export default function CortesVitrine({
   const renderHorarioHojeDetailsModal = () => (
     <AnimatePresence>
       {showHorarioHojeDetails && (
-        <div className="fixed inset-0 z-50 bg-[#051b42]/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 relative text-left"
+            className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 relative text-left border"
+            style={{
+              backgroundColor: tokens.cardBg,
+              borderColor: tokens.cardBorder,
+              color: tokens.textPrimary,
+            }}
           >
             <button
               type="button"
               onClick={() => setShowHorarioHojeDetails(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:opacity-75 transition-colors cursor-pointer"
+              style={{ color: tokens.textMuted }}
             >
               <X className="w-5 h-5" />
             </button>
@@ -1734,72 +2075,95 @@ export default function CortesVitrine({
               {/* Header & Status */}
               <div className="flex items-center gap-2.5">
                 <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                  horarioHoje.status === 'atendendo' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                  horarioHoje.status === 'atendendo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'
                 }`}>
                   <Clock className="w-4.5 h-4.5" />
                 </div>
                 <div>
                   <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
                     horarioHoje.status === 'atendendo'
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:text-emerald-300'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-500/30 dark:text-blue-300'
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${horarioHoje.status === 'atendendo' ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'}`} />
                     {horarioHoje.status === 'atendendo' ? 'Atendendo Hoje' : 'Hoje Não Atendemos'}
                   </span>
-                  <h3 className="text-sm font-black text-gray-900 mt-0.5">{getHojeData().dataExtenso}</h3>
+                  <h3 className="text-sm font-black mt-0.5" style={{ color: tokens.textPrimary }}>{getHojeData().dataExtenso}</h3>
                 </div>
               </div>
 
               {/* Informações Principais de Hoje */}
-              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100 space-y-2">
+              <div 
+                className="p-3.5 rounded-2xl border space-y-2"
+                style={{
+                  backgroundColor: tokens.cardInnerBg,
+                  borderColor: tokens.cardBorder,
+                }}
+              >
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Horário de Atendimento Hoje</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.textMuted }}>Horário de Atendimento Hoje</p>
                   {horarioHoje.status === 'atendendo' ? (
-                    <p className="text-lg font-mono font-black text-gray-900 mt-0.5">
-                      {horarioHoje.inicio || '09:00'} <span className="text-gray-400 text-xs font-normal">às</span> {horarioHoje.fim || '19:00'}
+                    <p className="text-lg font-mono font-black mt-0.5" style={{ color: tokens.textPrimary }}>
+                      {horarioHoje.inicio || '09:00'} <span className="text-xs font-normal opacity-60">às</span> {horarioHoje.fim || '19:00'}
                     </p>
                   ) : (
-                    <p className="text-xs font-bold text-gray-800 mt-0.5">
-                      Próximo atendimento: <span className="text-blue-700 font-extrabold">{horarioHoje.proximoAtendimento || 'Amanhã, das 09:00 às 18:00'}</span>
+                    <p className="text-xs font-bold mt-0.5" style={{ color: tokens.textPrimary }}>
+                      Próximo atendimento: <span className="font-extrabold" style={{ color: tokens.primaryColor }}>{horarioHoje.proximoAtendimento || 'Amanhã, das 09:00 às 18:00'}</span>
                     </p>
                   )}
                 </div>
 
                 {horarioHoje.status === 'atendendo' && horarioHoje.temIntervalo && horarioHoje.intervaloInicio && (
-                  <div className="pt-2 border-t border-gray-200/60 flex items-center gap-1.5 text-xs text-amber-900 font-medium">
+                  <div className="pt-2 border-t flex items-center gap-1.5 text-xs font-medium" style={{ borderColor: tokens.cardBorder, color: tokens.textSecondary }}>
                     <span>⏸️</span>
                     <span>Pausa / Intervalo: <strong>{horarioHoje.intervaloInicio} às {horarioHoje.intervaloFim}</strong></span>
                   </div>
                 )}
 
                 {horarioHoje.mensagem && (
-                  <div className="pt-2 border-t border-gray-200/60 text-xs text-gray-700 italic bg-white p-2.5 rounded-xl border border-gray-100">
+                  <div 
+                    className="pt-2 border-t text-xs italic p-2.5 rounded-xl border"
+                    style={{
+                      backgroundColor: tokens.cardBg,
+                      borderColor: tokens.cardBorder,
+                      color: tokens.textSecondary,
+                    }}
+                  >
                     "{horarioHoje.mensagem}"
                   </div>
                 )}
               </div>
 
               {/* Informações Gerais do Estabelecimento */}
-              <div className="space-y-2 text-xs text-gray-600 pt-0.5">
-                <div className="flex items-start gap-2 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
-                  <Calendar className="w-3.5 h-3.5 text-brand-blue shrink-0 mt-0.5" />
+              <div className="space-y-2 text-xs pt-0.5" style={{ color: tokens.textSecondary }}>
+                <div 
+                  className="flex items-start gap-2 p-2.5 rounded-xl border"
+                  style={{
+                    backgroundColor: tokens.cardInnerBg,
+                    borderColor: tokens.cardBorder,
+                  }}
+                >
+                  <Calendar className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tokens.primaryColor }} />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Horário Geral da Semana</p>
-                    <p className="font-semibold text-gray-800 mt-0.5 leading-snug">{horarios || 'Segunda a Sábado: 09:00 às 19:00'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.textMuted }}>Horário Geral da Semana</p>
+                    <p className="font-semibold mt-0.5 leading-snug" style={{ color: tokens.textPrimary }}>{horarios || 'Segunda a Sábado: 09:00 às 19:00'}</p>
                   </div>
                 </div>
 
                 <div 
                   onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(localizacao)}`, '_blank')}
-                  className="flex items-start gap-2 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100 hover:bg-gray-100/80 transition-colors cursor-pointer"
+                  className="flex items-start gap-2 p-2.5 rounded-xl border transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: tokens.cardInnerBg,
+                    borderColor: tokens.cardBorder,
+                  }}
                 >
-                  <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tokens.primaryColor }} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Localização (Abrir no Mapa)</p>
-                    <p className="font-semibold text-gray-800 mt-0.5 leading-snug">{localizacao || 'Centro da Cidade'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.textMuted }}>Localização (Abrir no Mapa)</p>
+                    <p className="font-semibold mt-0.5 leading-snug" style={{ color: tokens.textPrimary }}>{localizacao || 'Centro da Cidade'}</p>
                   </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-1" />
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 mt-1" style={{ color: tokens.textMuted }} />
                 </div>
               </div>
 
@@ -1825,7 +2189,11 @@ export default function CortesVitrine({
                       if (onBookOnline) onBookOnline();
                       else setShowSiteBookingModal(true);
                     }}
-                    className="w-full bg-brand-blue hover:bg-blue-600 text-white font-extrabold text-xs py-3 rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    className="w-full font-extrabold text-xs py-3 rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    style={{
+                      background: tokens.primaryGradient,
+                      color: tokens.primaryButtonText,
+                    }}
                   >
                     <Calendar className="w-3.5 h-3.5" />
                     <span>Agendar Horário Online</span>
@@ -1841,12 +2209,27 @@ export default function CortesVitrine({
 
   if (isPublicAccess) {
     return (
-      <div className="min-h-screen bg-[#faf9f6] text-brand-dark flex flex-col items-center py-0 sm:py-8 px-0 sm:px-4 relative z-10">
+      <div 
+        className="min-h-screen flex flex-col items-center py-0 sm:py-8 px-0 sm:px-4 relative z-10 transition-colors"
+        style={{ backgroundColor: tokens.bgSecondary, color: tokens.textPrimary }}
+      >
         {/* Background visual glows */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-brand-blue/5 rounded-full blur-3xl -z-10" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-blue/10 rounded-full blur-3xl -z-10" />
+        <div 
+          className="absolute top-0 right-0 w-96 h-96 rounded-full blur-3xl -z-10 opacity-20 pointer-events-none"
+          style={{ backgroundColor: tokens.primaryColor }}
+        />
+        <div 
+          className="absolute bottom-0 left-0 w-96 h-96 rounded-full blur-3xl -z-10 opacity-15 pointer-events-none"
+          style={{ backgroundColor: tokens.secondaryColor }}
+        />
 
-        <div className="w-full max-w-md bg-white sm:rounded-[40px] sm:shadow-2xl sm:border border-gray-100 flex flex-col min-h-screen sm:min-h-0 overflow-hidden relative">
+        <div 
+          className="w-full max-w-md sm:rounded-[40px] sm:shadow-2xl sm:border flex flex-col min-h-screen sm:min-h-0 overflow-hidden relative transition-colors"
+          style={{
+            backgroundColor: tokens.bgMain,
+            borderColor: tokens.cardBorder,
+          }}
+        >
           {renderVitrineContent(false)}
         </div>
 
@@ -1856,7 +2239,7 @@ export default function CortesVitrine({
         {/* CLIENT BOOKING MODAL FOR SITE BOOKING IN PUBLIC ACCESS */}
         <AnimatePresence>
           {showSiteBookingModal && (
-            <div className="fixed inset-0 z-50 bg-[#051b42]/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 15 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2537,7 +2920,7 @@ export default function CortesVitrine({
               </div>
 
               {/* MODO DE ATENDIMENTO DA VITRINE (AGENDAMENTO VS WHATSAPP DIRETO) */}
-              <div className="bg-[#051b42] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-5">
+              <div className="bg-[#051b42] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
                   <div>
                     <h4 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
@@ -2553,7 +2936,7 @@ export default function CortesVitrine({
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
                       : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                   }`}>
-                    {modoAcao === 'whatsapp' ? '💬 Direto pro WhatsApp' : '📅 Agenda no Sistema'}
+                    {modoAcao === 'whatsapp' ? '💬 Direto pro WhatsApp / Ordem de Chegada' : '📅 Agenda no Sistema'}
                   </span>
                 </div>
 
@@ -2608,8 +2991,8 @@ export default function CortesVitrine({
                           <Phone className="w-5 h-5 fill-current" />
                         </div>
                         <div>
-                          <p className="text-xs font-extrabold text-white">Direto para o WhatsApp</p>
-                          <p className="text-[10px] text-emerald-400 font-medium">Sem agendamento no site</p>
+                          <p className="text-xs font-extrabold text-white">Direto pro WhatsApp / Ordem de Chegada</p>
+                          <p className="text-[10px] text-emerald-400 font-medium">Atendimento rápido por mensagem</p>
                         </div>
                       </div>
                       <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -2619,218 +3002,426 @@ export default function CortesVitrine({
                       </div>
                     </div>
                     <p className="text-[11px] text-gray-300 leading-relaxed">
-                      Ao clicar em "Agendar" ou em qualquer serviço, o cliente é direcionado para o seu WhatsApp com uma mensagem pronta!
+                      Ao clicar nos botões ou serviços, o cliente abre o WhatsApp com mensagem pronta perguntando sobre horário, se está aberto ou confirmando o corte.
                     </p>
                   </div>
                 </div>
 
-                {/* PAINEL DE CONFIGURAÇÃO ESPECÍFICO QUANDO "DIRETO PRO WHATSAPP" ESTÁ SELECIONADO */}
-                {modoAcao === 'whatsapp' ? (
-                  <div className="bg-gradient-to-br from-[#06263b] to-[#041b2c] p-4 sm:p-5 rounded-2xl border border-emerald-500/30 space-y-4 animate-fade-in">
-                    
-                    {/* Saudação Inteligente por Horário */}
-                    <div className="bg-[#031522]/80 p-3.5 rounded-xl border border-emerald-500/20 space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-                          <div>
-                            <p className="text-xs font-bold text-white">Saudação Automática conforme o Horário</p>
-                            <p className="text-[10px] text-gray-300">
-                              Insere automaticamente <strong>Bom dia</strong>, <strong>Boa tarde</strong> ou <strong>Boa noite</strong> de acordo com a hora em que o cliente abre o WhatsApp.
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setUsarSaudacaoHorario(!usarSaudacaoHorario)}
-                          className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                            usarSaudacaoHorario ? 'bg-emerald-400' : 'bg-gray-700'
-                          }`}
-                        >
-                          <div
-                            className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                              usarSaudacaoHorario ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
+                {/* PAINEL COMPLETO DE PERSONALIZAÇÃO DA MENSAGEM AUTOMÁTICA DO WHATSAPP */}
+                <div className="bg-gradient-to-br from-[#062438] via-[#041d2f] to-[#031522] p-4 sm:p-5 rounded-2xl border border-emerald-500/30 space-y-5">
+                  
+                  {/* Cabeçalho do Personalizador */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <MessageSquare className="w-4 h-4" />
                       </div>
-
-                      {/* Horários e Saudação Ativa */}
-                      <div className="pt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px]">
-                        <div className="flex flex-wrap items-center gap-1.5 text-gray-400">
-                          <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌅 05h-12h: Bom dia</span>
-                          <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">☀️ 12h-18h: Boa tarde</span>
-                          <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌙 18h-05h: Boa noite</span>
-                        </div>
-                        <span className="font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                          Saudação agora: "{getSaudacaoHorario()}"
-                        </span>
+                      <div>
+                        <h5 className="text-xs font-black text-white uppercase tracking-wider">
+                          Personalização da Mensagem Automática (WhatsApp)
+                        </h5>
+                        <p className="text-[11px] text-emerald-300/80">
+                          Personalize o texto que o cliente envia no WhatsApp ao agendar ou consultar a barbearia.
+                        </p>
                       </div>
                     </div>
 
-                    {/* Mensagem Personalizada */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Mensagem Padrão do WhatsApp (Editável)</span>
-                        </label>
-                        {mensagemWhatsAppCustom && (
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppCustom('')}
-                            className="text-[10px] text-gray-400 hover:text-white transition-colors cursor-pointer"
-                          >
-                            Restaurar padrão
-                          </button>
-                        )}
-                      </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowVarsGuide(!showVarsGuide)}
+                      className="text-[10px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 self-start sm:self-auto"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span>{showVarsGuide ? 'Ocultar Guia de Variáveis' : 'Ver Guia de Variáveis'}</span>
+                    </button>
+                  </div>
 
-                      <textarea
-                        rows={3}
-                        value={mensagemWhatsAppCustom}
-                        onChange={e => setMensagemWhatsAppCustom(e.target.value)}
-                        placeholder={`Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. Vocês estão atendendo hoje? Gostaria de saber se tem horário disponível!`}
-                        className="w-full bg-[#031422] text-white border border-emerald-500/30 focus:border-emerald-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
-                      />
+                  {/* Abas / Switcher de Situação da Mensagem */}
+                  <div className="flex flex-wrap gap-2 p-1 bg-[#020e17]/80 rounded-xl border border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMsgTab('agendamento')}
+                      className={`flex-1 min-w-[200px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        activeMsgTab === 'agendamento'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>📅 Mensagem de Agendamento Confirmado</span>
+                    </button>
 
-                      {/* Tags Rápidas para Inserir */}
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                          Clique nas variáveis para inserir na sua mensagem:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppCustom((prev) => (prev ? `${prev} {saudacao}` : '{saudacao}'))}
-                            className="bg-white/5 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Insere Bom dia / Boa tarde / Boa noite automaticamente"
-                          >
-                            + {'{saudacao}'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppCustom((prev) => (prev ? `${prev} {barbeiro}` : '{barbeiro}'))}
-                            className="bg-white/5 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Insere o nome do barbeiro / proprietário"
-                          >
-                            + {'{barbeiro}'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppCustom((prev) => (prev ? `${prev} {barbearia}` : '{barbearia}'))}
-                            className="bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Insere o nome de exibição da barbearia"
-                          >
-                            + {'{barbearia}'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppCustom((prev) => (prev ? `${prev} {servico}` : '{servico}'))}
-                            className="bg-white/5 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            title="Insere o nome do serviço quando o cliente clica na tabela"
-                          >
-                            + {'{servico}'}
-                          </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMsgTab('ordem_chegada')}
+                      className={`flex-1 min-w-[200px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        activeMsgTab === 'ordem_chegada'
+                          ? 'bg-emerald-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>🟢 Ordem de Chegada & Está Aberto Hoje</span>
+                    </button>
+                  </div>
+
+                  {/* Saudação Inteligente por Horário */}
+                  <div className="bg-[#020e17]/90 p-3.5 rounded-xl border border-emerald-500/20 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-white">Saudação Automática conforme o Horário ({'{saudacao}'})</p>
+                          <p className="text-[10px] text-gray-300">
+                            Substitui automaticamente por <strong>Bom dia</strong>, <strong>Boa tarde</strong> ou <strong>Boa noite</strong> de acordo com a hora em que o cliente abre o WhatsApp.
+                          </p>
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setUsarSaudacaoHorario(!usarSaudacaoHorario)}
+                        className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                          usarSaudacaoHorario ? 'bg-emerald-400' : 'bg-gray-700'
+                        }`}
+                      >
+                        <div
+                          className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                            usarSaudacaoHorario ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
 
-                      {/* Sugestões de Mensagens Prontas */}
-                      <div className="pt-2 space-y-1.5 border-t border-white/5">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                          Ou escolha um modelo pronto:
+                    <div className="pt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-1.5 text-gray-400">
+                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌅 05h-12h: Bom dia</span>
+                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">☀️ 12h-18h: Boa tarde</span>
+                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌙 18h-05h: Boa noite</span>
+                      </div>
+                      <span className="font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                        Saudação agora: "{getSaudacaoHorario()}"
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* GUIA EXPLICATIVO DAS VARIÁVEIS DISPONÍVEIS */}
+                  {showVarsGuide && (
+                    <div className="bg-[#02101b] p-3.5 rounded-xl border border-blue-500/30 space-y-2 text-left animate-fade-in">
+                      <div className="flex items-center gap-2 text-blue-300 text-xs font-bold border-b border-blue-500/20 pb-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Variáveis Disponíveis para Usar na Mensagem</span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 leading-normal">
+                        Ao digitar ou clicar nos botões abaixo, as palavras entre chaves como <code className="text-blue-300 bg-blue-950/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{barbeiro}'}</code> serão trocadas automaticamente pelos dados reais do cliente e da barbearia!
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-amber-300 block mb-0.5">{'{saudacao}'}</span>
+                          <span className="text-gray-300">"Bom dia", "Boa tarde" ou "Boa noite" conforme o horário.</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-blue-300 block mb-0.5">{'{barbeiro}'}</span>
+                          <span className="text-gray-300">Nome do barbeiro ou responsável ({getNomeBarbeiro()}).</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-emerald-300 block mb-0.5">{'{barbearia}'}</span>
+                          <span className="text-gray-300">Nome da barbearia ({getNomeBarbearia()}).</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-purple-300 block mb-0.5">{'{servico}'}</span>
+                          <span className="text-gray-300">Nome do serviço escolhido (ex: Corte Degradê).</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-pink-300 block mb-0.5">{'{data}'}</span>
+                          <span className="text-gray-300">Data do agendamento escolhida pelo cliente (ex: 24/10).</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-cyan-300 block mb-0.5">{'{horario}'}</span>
+                          <span className="text-gray-300">Horário agendado (ex: 15:30).</span>
+                        </div>
+                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
+                          <span className="font-mono font-bold text-indigo-300 block mb-0.5">{'{cliente}'}</span>
+                          <span className="text-gray-300">Nome completo do cliente que está agendando.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAMPO DE EDIÇÃO DA MENSAGEM COM BOTÕES DE INSERÇÃO RÁPIDA */}
+                  <div className="space-y-2 text-left">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>
+                          {activeMsgTab === 'agendamento' 
+                            ? 'Texto da Mensagem de Agendamento' 
+                            : 'Texto da Mensagem de Ordem de Chegada & Aberto Hoje'}
                         </span>
+                      </label>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeMsgTab === 'agendamento') {
+                            setMensagemWhatsAppAgendamento('Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️');
+                          } else {
+                            setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.');
+                          }
+                        }}
+                        className="text-[10px] text-gray-400 hover:text-white transition-colors cursor-pointer underline"
+                      >
+                        Restaurar mensagem padrão
+                      </button>
+                    </div>
+
+                    {activeMsgTab === 'agendamento' ? (
+                      <textarea
+                        rows={3}
+                        value={mensagemWhatsAppAgendamento}
+                        onChange={e => setMensagemWhatsAppAgendamento(e.target.value)}
+                        placeholder="Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️"
+                        className="w-full bg-[#020e17] text-white border border-blue-500/30 focus:border-blue-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
+                      />
+                    ) : (
+                      <textarea
+                        rows={3}
+                        value={mensagemWhatsAppOrdemChegada}
+                        onChange={e => setMensagemWhatsAppOrdemChegada(e.target.value)}
+                        placeholder="Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}."
+                        className="w-full bg-[#020e17] text-white border border-emerald-500/30 focus:border-emerald-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
+                      />
+                    )}
+
+                    {/* Botões de Inserção Rápida de Variáveis */}
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                        Clique para inserir a variável no texto:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeMsgTab === 'agendamento') {
+                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {saudacao}` : '{saudacao}');
+                            } else {
+                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {saudacao}` : '{saudacao}');
+                            }
+                          }}
+                          className="bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                        >
+                          + {'{saudacao}'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeMsgTab === 'agendamento') {
+                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {barbeiro}` : '{barbeiro}');
+                            } else {
+                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {barbeiro}` : '{barbeiro}');
+                            }
+                          }}
+                          className="bg-white/5 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                        >
+                          + {'{barbeiro}'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeMsgTab === 'agendamento') {
+                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {barbearia}` : '{barbearia}');
+                            } else {
+                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {barbearia}` : '{barbearia}');
+                            }
+                          }}
+                          className="bg-white/5 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                        >
+                          + {'{barbearia}'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeMsgTab === 'agendamento') {
+                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {servico}` : '{servico}');
+                            } else {
+                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {servico}` : '{servico}');
+                            }
+                          }}
+                          className="bg-white/5 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                        >
+                          + {'{servico}'}
+                        </button>
+
+                        {activeMsgTab === 'agendamento' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {data}` : '{data}')}
+                              className="bg-white/5 hover:bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                            >
+                              + {'{data}'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {horario}` : '{horario}')}
+                              className="bg-white/5 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                            >
+                              + {'{horario}'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {cliente}` : '{cliente}')}
+                              className="bg-white/5 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                            >
+                              + {'{cliente}'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Modelos Prontos (Presets) */}
+                    <div className="pt-2 space-y-1.5 border-t border-white/5">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                        Ou escolha um modelo pronto para usar:
+                      </span>
+                      
+                      {activeMsgTab === 'agendamento' ? (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppCustom('Olá {barbeiro}, {saudacao}! Vi sua vitrine da {barbearia}. Vocês estão abertos hoje? Gostaria de saber os horários disponíveis!')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                            onClick={() => setMensagemWhatsAppAgendamento('Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
-                            <span className="font-bold text-white block mb-0.5">🟢 Perguntar se está aberto</span>
-                            "Vocês estão abertos hoje? Gostaria de saber os horários..."
+                            <span className="font-bold text-white block mb-0.5">✂️ Padrão Completo</span>
+                            "Meu agendamento de {'{servico}'} foi solicitado para {'{data}'} às {'{horario}'}..."
                           </button>
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppCustom('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia} e gostaria de agendar um horário com você hoje para {servico}. Como está a agenda?')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                            onClick={() => setMensagemWhatsAppAgendamento('{saudacao}, {barbeiro}! Quero confirmar meu horário de {servico} para {data} às {horario}. Até lá!')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
-                            <span className="font-bold text-white block mb-0.5">✂️ Agendamento de serviço</span>
-                            "Gostaria de agendar um horário com você hoje para..."
+                            <span className="font-bold text-white block mb-0.5">⚡ Direto & Rápido</span>
+                            "Quero confirmar meu horário de {'{servico}'} para {'{data}'} às {'{horario}'}..."
                           </button>
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppCustom('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia} e queria consultar se tem horário livre para agora ou mais tarde.')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                            onClick={() => setMensagemWhatsAppAgendamento('Fala {barbeiro}, {saudacao}! Agendei {servico} no dia {data} às {horario}. Valeu!')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
-                            <span className="font-bold text-white block mb-0.5">⚡ Horário livre</span>
-                            "Queria consultar se tem horário livre para agora..."
+                            <span className="font-bold text-white block mb-0.5">🤝 Descontraído</span>
+                            "Fala {'{barbeiro}'}, {'{saudacao}'}! Agendei {'{servico}'}..."
                           </button>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* PRÉVIA VISUAL DO WHATSAPP (SIMULAÇÃO REALISTA) */}
-                    <div className="bg-[#0b141a] p-3.5 rounded-2xl border border-white/10 space-y-2 text-left">
-                      <div className="flex items-center justify-between text-[10px] text-gray-400 border-b border-white/5 pb-1.5">
-                        <span className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
-                          <Phone className="w-3 h-3 fill-current" />
-                          <span>Como o cliente vai mandar para você no WhatsApp:</span>
-                        </span>
-                        <span className="text-[9px] text-gray-500">Prévia em tempo real</span>
-                      </div>
-
-                      {/* Balão do WhatsApp */}
-                      <div className="flex justify-end pt-1">
-                        <div className="max-w-[90%] bg-[#005c4b] text-white p-3 rounded-2xl rounded-tr-none shadow-md text-xs leading-relaxed relative">
-                          <p className="font-normal whitespace-pre-wrap">
-                            {getMensagemWhatsAppGerada('Degradê & Barba')}
-                          </p>
-                          <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-200 mt-1">
-                            <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                            <span>✓✓</span>
-                          </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está para fazer {servico}.')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                          >
+                            <span className="font-bold text-white block mb-0.5">🟢 Perguntar se está aberto hoje</span>
+                            "Sabe me dizer se a {'{barbearia}'} está aberta hoje? Gostaria de..."
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. O atendimento hoje é por ordem de chegada? Tem muita fila para {servico}?')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                          >
+                            <span className="font-bold text-white block mb-0.5">💈 Ordem de Chegada & Fila</span>
+                            "O atendimento hoje é por ordem de chegada? Tem muita fila..."
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! Vocês têm algum horário livre hoje na {barbearia} para {servico}?')}
+                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
+                          >
+                            <span className="font-bold text-white block mb-0.5">⏰ Horário Livre Hoje</span>
+                            "Vocês têm algum horário livre hoje na {'{barbearia}'} para..."
+                          </button>
                         </div>
-                      </div>
-
-                      {/* Botão de Testar Envio */}
-                      <div className="pt-2 flex justify-end">
-                        <a
-                          href={getWhatsAppLink()}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-4 rounded-xl transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Testar envio no WhatsApp agora</span>
-                        </a>
-                      </div>
+                      )}
                     </div>
-
                   </div>
-                ) : (
-                  /* OPÇÃO ADICIONAL QUANDO AGENDAMENTO NO SISTEMA ESTÁ SELECIONADO */
-                  <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold text-white">Permitir também botão do WhatsApp na vitrine</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        Exibe o ícone do WhatsApp para os clientes que preferirem mandar mensagem diretamente.
-                      </p>
+
+                  {/* PRÉVIA VISUAL DO WHATSAPP (SIMULAÇÃO REALISTA EM TEMPO REAL) */}
+                  <div className="bg-[#0b141a] p-4 rounded-2xl border border-white/10 space-y-2.5 text-left">
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 border-b border-white/10 pb-2">
+                      <span className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
+                        <Phone className="w-3.5 h-3.5 fill-current" />
+                        <span>Pré-visualização: como a mensagem chega para você no WhatsApp:</span>
+                      </span>
+                      <span className="text-[9px] text-gray-400 bg-white/5 px-2 py-0.5 rounded">
+                        Simulação com dados reais
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setPermitirWhatsApp(!permitirWhatsApp)}
-                      className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                        permitirWhatsApp ? 'bg-[#d4ff5e]' : 'bg-gray-700'
-                      }`}
-                    >
-                      <div
-                        className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          permitirWhatsApp ? 'translate-x-6' : 'translate-x-0'
+
+                    {/* Balão do WhatsApp */}
+                    <div className="flex justify-end pt-1">
+                      <div className="max-w-[92%] sm:max-w-[80%] bg-[#005c4b] text-white p-3.5 rounded-2xl rounded-tr-none shadow-lg text-xs leading-relaxed relative">
+                        <p className="font-normal whitespace-pre-wrap">
+                          {getMensagemWhatsAppGerada({
+                            servico: 'Degradê Navalhado & Barba',
+                            data: new Date().toLocaleDateString('pt-BR'),
+                            horario: '15:30',
+                            cliente: 'Lucas Silva',
+                            contexto: activeMsgTab
+                          })}
+                        </p>
+                        <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-200 mt-1.5">
+                          <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-cyan-300 font-bold">✓✓</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Botão de Testar Envio */}
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2">
+                      <span className="text-[10px] text-gray-400">
+                        Número destino: <strong className="text-white">{whatsapp || merchant.whatsapp || 'Não configurado'}</strong>
+                      </span>
+                      <a
+                        href={getWhatsAppLink(
+                          'Degradê Navalhado & Barba',
+                          activeMsgTab,
+                          { data: new Date().toLocaleDateString('pt-BR'), horario: '15:30', cliente: 'Cliente Teste' }
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-4 rounded-xl transition-all flex items-center gap-1.5 shadow-md cursor-pointer w-full sm:w-auto justify-center"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Testar envio no WhatsApp</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Switch para Permitir botão flutuante de WhatsApp na vitrine */}
+                  {modoAcao === 'agendamento' && (
+                    <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-bold text-white">Exibir também botão direto do WhatsApp na vitrine</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Permite que os clientes que preferirem mandar mensagem diretamente cliquem no botão flutuante do WhatsApp.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPermitirWhatsApp(!permitirWhatsApp)}
+                        className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                          permitirWhatsApp ? 'bg-[#d4ff5e]' : 'bg-gray-700'
                         }`}
-                      />
-                    </button>
-                  </div>
-                )}
+                      >
+                        <div
+                          className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                            permitirWhatsApp ? 'translate-x-6' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  )}
+
+                </div>
 
               </div>
 
@@ -3598,7 +4189,10 @@ export default function CortesVitrine({
                 </div>
 
                 {/* Inner screen content */}
-                <div className="flex-1 bg-[#faf9f6] rounded-[34px] overflow-y-auto text-brand-dark flex flex-col relative scrollbar-none">
+                <div 
+                  className="flex-1 rounded-[34px] overflow-y-auto flex flex-col relative scrollbar-none transition-colors"
+                  style={{ backgroundColor: tokens.bgMain, color: tokens.textPrimary }}
+                >
                   {renderVitrineContent(true)}
                 </div>
               </div>

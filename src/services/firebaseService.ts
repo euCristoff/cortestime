@@ -1079,6 +1079,29 @@ export const firebaseService = {
       JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
     );
 
+    // Sync immediately to LocalStorage so changes persist locally without waiting or failing
+    try {
+      const cached = localStorage.getItem('cortestime_merchant_session');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.uid === uid || !parsed.uid) {
+          const merged = { ...parsed, ...cleanData, uid };
+          localStorage.setItem('cortestime_merchant_session', JSON.stringify(merged));
+        }
+      }
+      const rawAll = localStorage.getItem('cortestime_merchants');
+      if (rawAll) {
+        const list: MerchantUser[] = JSON.parse(rawAll);
+        const idx = list.findIndex((x) => x.uid === uid);
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], ...cleanData };
+          localStorage.setItem('cortestime_merchants', JSON.stringify(list));
+        }
+      }
+    } catch (localErr) {
+      console.warn("Could not sync local cache in updateMerchantProfile:", localErr);
+    }
+
     try {
       await withTimeout(
         setDoc(docRef, cleanData, { merge: true }),

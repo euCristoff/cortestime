@@ -121,7 +121,10 @@ export interface MerchantUser {
   
   // Vitrine Action Mode & WhatsApp Direct Configuration
   vitrineModoAcao?: 'agendamento' | 'whatsapp';
+  vitrineMensagemWhatsApp?: string;
   vitrineMensagemWhatsAppPersonalizada?: string;
+  vitrineMensagemWhatsAppAgendamento?: string;
+  vitrineMensagemWhatsAppOrdemChegada?: string;
   vitrineUsarSaudacaoHorarioWhatsApp?: boolean;
 
   // Vitrine Template & Theme Styling

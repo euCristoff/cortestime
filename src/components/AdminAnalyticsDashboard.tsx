@@ -1079,7 +1079,7 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
                     sourceMetrics.map((src, i) => {
                       const badge = getSourceBadge(src.source);
                       return (
-                        <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                        <tr key={`src-metric-${src.source}-${i}`} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-3 font-medium text-slate-200 flex items-center gap-2">
                             <span className="text-sm">{badge.icon}</span>
                             <span className="capitalize">{badge.label}</span>
@@ -1128,7 +1128,7 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
                 <tbody className="divide-y divide-slate-800/60">
                   {campaignMetrics.length > 0 ? (
                     campaignMetrics.map((camp, i) => (
-                      <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                      <tr key={`camp-metric-${camp.campaign}-${camp.source}-${i}`} className="hover:bg-slate-800/40 transition-colors">
                         <td className="py-3 font-semibold text-purple-300 flex items-center gap-1.5">
                           <Tag className="w-3 h-3 text-purple-400" />
                           <span>{camp.campaign}</span>
@@ -1223,14 +1223,14 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {filteredTableMerchants.length > 0 ? (
-                  filteredTableMerchants.map((summary) => {
+                  filteredTableMerchants.map((summary, summaryIdx) => {
                     const m = summary.merchant;
                     const statusBadge = getStatusBadge(summary.status);
                     const sourceBadge = getSourceBadge(m.utmSource);
                     const StatusIcon = statusBadge.icon;
 
                     return (
-                      <tr key={m.uid} className="hover:bg-slate-800/40 transition-colors">
+                      <tr key={m.uid || m.email || `merchant-summary-${summaryIdx}`} className="hover:bg-slate-800/40 transition-colors">
                         
                         {/* Barbearia & Contato */}
                         <td className="py-3.5 px-4">
@@ -1431,8 +1431,8 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
                 
                 <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                   {selectedMerchantSummary.recentEvents && selectedMerchantSummary.recentEvents.length > 0 ? (
-                    selectedMerchantSummary.recentEvents.map((ev) => (
-                      <div key={ev.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+                    selectedMerchantSummary.recentEvents.map((ev, evIdx) => (
+                      <div key={ev.id || `recent-ev-${ev.eventType}-${evIdx}`} className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                           <span className="font-semibold text-slate-200">{ev.eventLabel}</span>
