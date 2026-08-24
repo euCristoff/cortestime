@@ -1080,6 +1080,7 @@ export default function App() {
       ) : publicVitrineMerchant ? (
         viewMode === 'clientBooking' ? (
           <ClientBooking 
+            singleBarberMode={publicVitrineMerchant.vitrineBarbeiroUnico ?? publicVitrineMerchant.barbeiroUnico ?? (barbers.length <= 1)}
             businessName={publicVitrineMerchant.nomeBarbearia}
             businessLogo={publicVitrineMerchant.vitrineLogoImage}
             services={publicVitrineServices}

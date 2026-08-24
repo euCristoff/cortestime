@@ -31,6 +31,7 @@ import {
   X,
   Calendar,
   User,
+  UserCheck,
   AlertTriangle,
   Ban,
   Search,
@@ -355,6 +356,7 @@ export default function CortesVitrine({
     merchant.vitrineGaleria || DEFAULT_HAIRCUTS
   );
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
 
   // Model & Theme Customization State
   const [template, setTemplate] = useState<'modelo1' | 'modelo2'>(merchant.vitrineTemplate || 'modelo1');
@@ -362,6 +364,7 @@ export default function CortesVitrine({
   const [primaryColor, setPrimaryColor] = useState<string>(merchant.vitrinePrimaryColor || '#051b42');
   const [secondaryColor, setSecondaryColor] = useState<string>(merchant.vitrineSecondaryColor || '#2563eb');
   const [gradientEnabled, setGradientEnabled] = useState<boolean>(merchant.vitrineGradientEnabled ?? true);
+  const [barbeiroUnico, setBarbeiroUnico] = useState<boolean>(merchant.vitrineBarbeiroUnico ?? merchant.barbeiroUnico ?? false);
   const [showTemplateModal, setShowTemplateModal] = useState<boolean>(false);
 
   // Dynamic Vitrine Design Tokens (applied across entire public page & live preview)
@@ -516,18 +519,51 @@ export default function CortesVitrine({
       if (merchant.vitrineTemplate) setTemplate(merchant.vitrineTemplate);
       if (merchant.vitrineHorarios) setHorarios(merchant.vitrineHorarios);
       if (merchant.vitrineLocalizacao) setLocalizacao(merchant.vitrineLocalizacao);
-      if (merchant.vitrineWhatsApp) setWhatsapp(merchant.vitrineWhatsApp);
+      if (merchant.vitrineWhatsApp || merchant.whatsapp) setWhatsapp(merchant.vitrineWhatsApp || merchant.whatsapp || '');
       if (merchant.vitrineModoAcao) setModoAcao(merchant.vitrineModoAcao);
-      if (merchant.vitrineLogo) setLogoText(merchant.vitrineLogo);
+      if (merchant.vitrineLogo || merchant.nomeBarbearia) setLogoText(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
       if (merchant.vitrineLogoImage !== undefined) setLogoImage(merchant.vitrineLogoImage);
       if (merchant.vitrineSlogan) setSlogan(merchant.vitrineSlogan);
       if (merchant.vitrineCapa) setCapa(merchant.vitrineCapa);
+      if (merchant.vitrineInstagram) setInstagram(merchant.vitrineInstagram);
+      if (merchant.vitrineLinkBio) setLinkBio(merchant.vitrineLinkBio);
       if (merchant.vitrineLinkPersonalizado) setLinkPersonalizado(merchant.vitrineLinkPersonalizado);
       if (merchant.vitrineProdutos) setProducts(merchant.vitrineProdutos);
       if (merchant.vitrineGaleria) setGallery(merchant.vitrineGaleria);
       if (merchant.vitrineHorarioHoje) setHorarioHoje(merchant.vitrineHorarioHoje);
+      if (merchant.vitrineMensagemWhatsAppAgendamento) setMensagemWhatsAppAgendamento(merchant.vitrineMensagemWhatsAppAgendamento);
+      if (merchant.vitrineMensagemWhatsAppOrdemChegada) setMensagemWhatsAppOrdemChegada(merchant.vitrineMensagemWhatsAppOrdemChegada);
+      if (merchant.vitrineMensagemWhatsAppPersonalizada) setMensagemWhatsAppCustom(merchant.vitrineMensagemWhatsAppPersonalizada);
+      if (merchant.vitrinePermitirAgendamentoWhatsApp !== undefined) setPermitirWhatsApp(merchant.vitrinePermitirAgendamentoWhatsApp);
+      if (merchant.vitrineUsarSaudacaoHorarioWhatsApp !== undefined) setUsarSaudacaoHorario(merchant.vitrineUsarSaudacaoHorarioWhatsApp);
+      if (merchant.vitrineBarbeiroUnico !== undefined || merchant.barbeiroUnico !== undefined) {
+        setBarbeiroUnico(merchant.vitrineBarbeiroUnico ?? merchant.barbeiroUnico ?? false);
+      }
     }
-  }, [merchant?.uid, merchant?.vitrinePrimaryColor, merchant?.vitrineSecondaryColor, merchant?.vitrineThemePreset, merchant?.vitrineTemplate]);
+  }, [
+    merchant?.uid,
+    merchant?.vitrinePrimaryColor,
+    merchant?.vitrineSecondaryColor,
+    merchant?.vitrineThemePreset,
+    merchant?.vitrineTemplate,
+    merchant?.vitrineBarbeiroUnico,
+    merchant?.barbeiroUnico,
+    merchant?.vitrineHorarios,
+    merchant?.vitrineLocalizacao,
+    merchant?.vitrineWhatsApp,
+    merchant?.vitrineModoAcao,
+    merchant?.vitrineLogo,
+    merchant?.vitrineLogoImage,
+    merchant?.vitrineSlogan,
+    merchant?.vitrineCapa,
+    merchant?.vitrineInstagram,
+    merchant?.vitrineLinkBio,
+    merchant?.vitrineLinkPersonalizado,
+    merchant?.vitrineProdutos,
+    merchant?.vitrineGaleria,
+    merchant?.vitrineHorarioHoje,
+    merchant?.vitrineGradientEnabled
+  ]);
 
   // Derived queue metrics
   const waitingQueue = liveQueue.filter(q => q.status === 'waiting');
@@ -757,6 +793,43 @@ export default function CortesVitrine({
     setNewGalleryUrl('');
   };
 
+  const handleGalleryFilesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingGallery(true);
+    try {
+      const fileList = Array.from(files);
+      const newImages: string[] = [];
+
+      for (const file of fileList) {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+
+        if (dataUrl) {
+          const compressed = await compressDataUrl(dataUrl, 800, 800, 0.75);
+          if (compressed) {
+            newImages.push(compressed);
+          }
+        }
+      }
+
+      if (newImages.length > 0) {
+        setGallery(prev => [...prev, ...newImages]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar fotos da galeria:", err);
+      alert("Houve um erro ao processar as fotos selecionadas.");
+    } finally {
+      setIsUploadingGallery(false);
+      e.target.value = '';
+    }
+  };
+
   const handleRemoveGalleryItem = (index: number) => {
     setGallery(prev => prev.filter((_, i) => i !== index));
   };
@@ -798,6 +871,8 @@ export default function CortesVitrine({
         vitrineGradientEnabled: gradientEnabled,
         vitrineThemePreset: themePreset,
         vitrineHorarioHoje: horarioHoje,
+        vitrineBarbeiroUnico: barbeiroUnico,
+        barbeiroUnico: barbeiroUnico,
       };
 
       await firebaseService.updateMerchantProfile(merchant.uid, dataToUpdate);
@@ -841,6 +916,8 @@ export default function CortesVitrine({
           vitrineGradientEnabled: gradientEnabled,
           vitrineThemePreset: themePreset,
           vitrineHorarioHoje: horarioHoje,
+          vitrineBarbeiroUnico: barbeiroUnico,
+          barbeiroUnico: barbeiroUnico,
         });
       }
 
@@ -895,6 +972,7 @@ export default function CortesVitrine({
   };
 
   const renderBarbersSection = (isPreview = false) => {
+    if (barbeiroUnico || merchant?.vitrineBarbeiroUnico || merchant?.barbeiroUnico) return null;
     if (!barbers || barbers.length === 0) return null;
     return (
       <div 
@@ -1698,11 +1776,11 @@ export default function CortesVitrine({
 
             <div className="mt-2.5">
               <span 
-                className="text-[10px] font-extrabold uppercase tracking-widest inline-block px-4 py-1 rounded-full shadow-2xs border"
+                className="text-[10px] font-extrabold uppercase tracking-widest inline-block px-4 py-1 rounded-full shadow-2xs border transition-all"
                 style={{
                   backgroundColor: tokens.accentBadgeBg,
-                  color: tokens.primaryColor,
-                  borderColor: tokens.cardBorder,
+                  color: tokens.accentBadgeText,
+                  borderColor: tokens.accentBadgeBorder,
                 }}
               >
                 Vitrine Digital Oficial
@@ -1778,7 +1856,7 @@ export default function CortesVitrine({
             >
               <div 
                 className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                style={{ backgroundColor: tokens.accentBadgeBg, color: tokens.primaryColor }}
+                style={{ backgroundColor: tokens.locationPinBg, color: tokens.locationPinColor }}
               >
                 <MapPin className="w-4 h-4" />
               </div>
@@ -2247,6 +2325,7 @@ export default function CortesVitrine({
                 className="w-full max-w-lg my-auto relative"
               >
                 <ClientBooking
+                  singleBarberMode={barbeiroUnico || merchant.vitrineBarbeiroUnico || merchant.barbeiroUnico || (barbers && barbers.length <= 1)}
                   businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
                   businessLogo={merchant.vitrineLogoImage || logoImage}
                   services={services}
@@ -3941,6 +4020,36 @@ export default function CortesVitrine({
                 </div>
               </div>
 
+              {/* OPÇÃO DE BARBEIRO ÚNICO (ATENDIMENTO INDIVIDUAL) */}
+              <div className="space-y-3 bg-[#051b42]/60 p-4 sm:p-5 rounded-2xl border border-white/10 text-left">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-brand-lime/10 text-brand-lime rounded-xl">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">Modo Barbeiro Único (Atendimento Próprio)</h4>
+                      <p className="text-[11px] text-gray-300 leading-relaxed mt-0.5">
+                        Oculte a seleção de profissionais no agendamento e a lista de equipe na vitrine (ideal para quem trabalha sozinho).
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBarbeiroUnico(!barbeiroUnico)}
+                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                      barbeiroUnico ? 'bg-brand-lime' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        barbeiroUnico ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
               {/* Foto de Capa / Banner da Vitrine */}
               <div className="space-y-3 bg-[#051b42]/60 p-4 rounded-2xl border border-white/10">
                 <div className="flex items-center justify-between">
@@ -4094,41 +4203,109 @@ export default function CortesVitrine({
               </div>
 
               {/* GALLERY MANAGEMENT */}
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime border-b border-white/10 pb-3 pt-4 flex items-center gap-2">
-                <Camera className="w-4 h-4" />
-                <span>Galeria de Fotos (Cortes & Estilo)</span>
-              </h3>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 pt-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime flex items-center gap-2">
+                  <Camera className="w-4 h-4" />
+                  <span>Galeria de Fotos (Portfólio de Cortes)</span>
+                </h3>
+                <span className="text-[11px] font-bold text-gray-300 bg-white/10 px-2.5 py-0.5 rounded-full">
+                  {gallery.length} {gallery.length === 1 ? 'foto' : 'fotos'}
+                </span>
+              </div>
 
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={newGalleryUrl}
-                    onChange={e => setNewGalleryUrl(e.target.value)}
-                    placeholder="Adicionar link de foto do portfólio (Unsplash, etc.)"
-                    className="flex-1 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
-                  />
-                  <button 
-                    onClick={handleAddGalleryUrl}
-                    className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark px-4 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer"
-                  >
-                    Adicionar
-                  </button>
+              <div className="space-y-4 bg-[#051b42]/60 p-4 sm:p-5 rounded-2xl border border-white/10 text-left">
+                <p className="text-xs text-gray-300">
+                  Adicione fotos dos seus melhores cortes e serviços para exibir no carrossel e portfólio da sua vitrine.
+                </p>
+
+                {/* Upload Buttons */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-3 px-5 rounded-2xl text-xs cursor-pointer inline-flex items-center gap-2 transition-all shadow-md active:scale-95">
+                    {isUploadingGallery ? (
+                      <div className="w-4 h-4 border-2 border-[#051b42] border-t-transparent animate-spin rounded-full" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    <span>{isUploadingGallery ? 'Processando Fotos...' : 'Adicionar Fotos da Galeria do Celular'}</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      disabled={isUploadingGallery}
+                      onChange={handleGalleryFilesUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                  
+                  {gallery.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setGallery([])}
+                      className="text-xs text-red-400 hover:text-red-300 font-bold px-3 py-2 rounded-xl hover:bg-red-500/10 transition-colors cursor-pointer"
+                    >
+                      Limpar todas
+                    </button>
+                  )}
+                </div>
+
+                {/* Direct Link Input */}
+                <div className="space-y-1.5 pt-2 border-t border-white/5">
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                    Ou adicione por link de imagem (URL):
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newGalleryUrl}
+                      onChange={e => setNewGalleryUrl(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddGalleryUrl();
+                        }
+                      }}
+                      placeholder="https://exemplo.com/foto.jpg"
+                      className="flex-1 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none focus:border-brand-lime"
+                    />
+                    <button 
+                      type="button"
+                      onClick={handleAddGalleryUrl}
+                      className="bg-white/10 hover:bg-white/20 text-white px-4 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer transition-colors border border-white/10"
+                    >
+                      Adicionar Link
+                    </button>
+                  </div>
                 </div>
 
                 {/* Previews of gallery */}
-                <div className="grid grid-cols-4 gap-3">
-                  {gallery.map((img, idx) => (
-                    <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/10 relative group">
-                      <img src={img} alt={`Portfólio ${idx}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                      <button 
-                        onClick={() => handleRemoveGalleryItem(idx)}
-                        className="absolute top-1 right-1 p-1 bg-red-600/80 hover:bg-red-600 rounded-md text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                    Fotos no Portfólio ({gallery.length}):
+                  </span>
+                  {gallery.length === 0 ? (
+                    <div className="p-6 border-2 border-dashed border-white/10 rounded-2xl text-center text-gray-400 text-xs">
+                      Nenhuma foto adicionada ainda. Clique em "Adicionar Fotos da Galeria do Celular" acima!
                     </div>
-                  ))}
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                      {gallery.map((img, idx) => (
+                        <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/15 relative group shadow-sm">
+                          <img src={img} alt={`Portfólio ${idx + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveGalleryItem(idx)}
+                            className="absolute top-1.5 right-1.5 p-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-md"
+                            title="Remover foto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-xs text-[9px] font-bold text-white px-1.5 py-0.5 rounded">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4582,6 +4759,7 @@ export default function CortesVitrine({
               className="w-full max-w-lg my-auto relative"
             >
               <ClientBooking
+                singleBarberMode={barbeiroUnico || merchant.vitrineBarbeiroUnico || merchant.barbeiroUnico || (barbers && barbers.length <= 1)}
                 businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
                 businessLogo={merchant.vitrineLogoImage || logoImage}
                 services={services}

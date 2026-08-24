@@ -27,12 +27,19 @@ import {
   ExternalLink,
   Tag,
   Eye,
-  BarChart3
+  BarChart3,
+  Edit3,
+  Palette,
+  Scissors,
+  Save,
+  Phone,
+  Globe
 } from 'lucide-react';
 import { MerchantUser, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import CortesVitrine from './CortesVitrine';
 import AdminAnalyticsDashboard from './AdminAnalyticsDashboard';
+import { THEME_PRESETS } from '../utils/vitrineTheme';
 
 interface AdminSubscriptionManagerProps {
   currentAdmin: MerchantUser;
@@ -65,11 +72,40 @@ export default function AdminSubscriptionManager({
   const [draftSlogan, setDraftSlogan] = useState('');
   const [draftHorarios, setDraftHorarios] = useState('Seg - Sáb: 08:00 às 20:00');
   const [draftCodigo, setDraftCodigo] = useState('');
+  const [draftBarbeiroUnico, setDraftBarbeiroUnico] = useState(false);
+  const [draftThemePreset, setDraftThemePreset] = useState('cortestime');
+  const [draftPrimaryColor, setDraftPrimaryColor] = useState('#051b42');
+  const [draftSecondaryColor, setDraftSecondaryColor] = useState('#2563eb');
+  const [draftGradientEnabled, setDraftGradientEnabled] = useState(true);
+  const [draftTemplate, setDraftTemplate] = useState<'modelo1' | 'modelo2'>('modelo1');
+  const [draftModoAcao, setDraftModoAcao] = useState<'agendamento' | 'whatsapp'>('agendamento');
   const [draftServicos, setDraftServicos] = useState<Array<{ name: string; price: number; durationMin: number }>>([
     { name: 'Corte de Cabelo', price: 40, durationMin: 30 },
     { name: 'Barba Alinhada', price: 30, durationMin: 25 },
     { name: 'Combo Cabelo + Barba', price: 60, durationMin: 45 }
   ]);
+
+  // Draft Editing Modal state
+  const [editingDraft, setEditingDraft] = useState<DraftVitrine | null>(null);
+  const [editNomeBarbearia, setEditNomeBarbearia] = useState('');
+  const [editNomeProprietario, setEditNomeProprietario] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
+  const [editInstagram, setEditInstagram] = useState('');
+  const [editEndereco, setEditEndereco] = useState('');
+  const [editSlogan, setEditSlogan] = useState('');
+  const [editHorarios, setEditHorarios] = useState('');
+  const [editBarbeiroUnico, setEditBarbeiroUnico] = useState(false);
+  const [editThemePreset, setEditThemePreset] = useState('cortestime');
+  const [editPrimaryColor, setEditPrimaryColor] = useState('#051b42');
+  const [editSecondaryColor, setEditSecondaryColor] = useState('#2563eb');
+  const [editGradientEnabled, setEditGradientEnabled] = useState(true);
+  const [editTemplate, setEditTemplate] = useState<'modelo1' | 'modelo2'>('modelo1');
+  const [editModoAcao, setEditModoAcao] = useState<'agendamento' | 'whatsapp'>('agendamento');
+  const [editServicos, setEditServicos] = useState<Array<{ name: string; price: number; durationMin: number }>>([]);
+  const [editNewSvcName, setEditNewSvcName] = useState('');
+  const [editNewSvcPrice, setEditNewSvcPrice] = useState('');
+  const [editNewSvcDuration, setEditNewSvcDuration] = useState('30');
+  const [isSavingEditDraft, setIsSavingEditDraft] = useState(false);
 
   // Temporary new service form for draft
   const [newSvcName, setNewSvcName] = useState('');
@@ -280,10 +316,17 @@ export default function AdminSubscriptionManager({
         slogan: draftSlogan,
         horarios: draftHorarios,
         servicos: draftServicos,
+        barbeiroUnico: draftBarbeiroUnico,
+        themePreset: draftThemePreset,
+        primaryColor: draftPrimaryColor,
+        secondaryColor: draftSecondaryColor,
+        gradientEnabled: draftGradientEnabled,
+        template: draftTemplate,
+        modoAcao: draftModoAcao,
         criadoPorAdmin: currentAdmin.email
       });
 
-      setDraftVitrines(prev => [newDraft, ...prev.filter(d => d.codigo !== newDraft.codigo)]);
+      setDraftVitrines(prev => [newDraft, ...prev.filter(d => d.id !== newDraft.id && d.codigo !== newDraft.codigo)]);
       setIsDraftModalOpen(false);
       setActionSuccess(`🎉 Vitrine Rascunho criada! Código gerado: ${newDraft.codigo}`);
       setTimeout(() => setActionSuccess(null), 4000);
@@ -296,8 +339,120 @@ export default function AdminSubscriptionManager({
       setDraftEndereco('');
       setDraftSlogan('');
       setDraftCodigo('');
+      setDraftBarbeiroUnico(false);
+      setDraftThemePreset('cortestime');
+      setDraftPrimaryColor('#051b42');
+      setDraftSecondaryColor('#2563eb');
+      setDraftGradientEnabled(true);
+      setDraftTemplate('modelo1');
+      setDraftModoAcao('agendamento');
     } catch (err: any) {
       alert(`Erro ao criar vitrine rascunho: ${err?.message || 'Tente novamente'}`);
+    }
+  };
+
+  // Open Edit Draft Modal
+  const handleOpenEditDraft = (draft: DraftVitrine) => {
+    setEditingDraft(draft);
+    setEditNomeBarbearia(draft.nomeBarbearia || '');
+    setEditNomeProprietario(draft.nomeProprietario || '');
+    setEditWhatsapp(draft.whatsapp || '');
+    setEditInstagram(draft.instagram || '');
+    setEditEndereco(draft.endereco || '');
+    setEditSlogan(draft.slogan || '');
+    setEditHorarios(draft.horarios || 'Seg - Sáb: 08:00 às 20:00');
+    setEditBarbeiroUnico(draft.barbeiroUnico ?? false);
+    setEditThemePreset(draft.themePreset || 'cortestime');
+    setEditPrimaryColor(draft.primaryColor || '#051b42');
+    setEditSecondaryColor(draft.secondaryColor || '#2563eb');
+    setEditGradientEnabled(draft.gradientEnabled ?? true);
+    setEditTemplate(draft.template || 'modelo1');
+    setEditModoAcao(draft.modoAcao || 'agendamento');
+    setEditServicos(draft.servicos ? [...draft.servicos] : []);
+    setEditNewSvcName('');
+    setEditNewSvcPrice('');
+    setEditNewSvcDuration('30');
+  };
+
+  // Edit Draft Service Handlers
+  const handleAddEditDraftService = () => {
+    if (!editNewSvcName.trim()) return;
+    setEditServicos(prev => [
+      ...prev,
+      {
+        name: editNewSvcName.trim(),
+        price: parseFloat(editNewSvcPrice) || 0,
+        durationMin: parseInt(editNewSvcDuration) || 30
+      }
+    ]);
+    setEditNewSvcName('');
+    setEditNewSvcPrice('');
+    setEditNewSvcDuration('30');
+  };
+
+  const handleRemoveEditDraftService = (index: number) => {
+    setEditServicos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateEditDraftService = (index: number, field: 'name' | 'price' | 'durationMin', value: any) => {
+    setEditServicos(prev => prev.map((s, i) => {
+      if (i !== index) return s;
+      return {
+        ...s,
+        [field]: field === 'price' ? (parseFloat(value) || 0) : field === 'durationMin' ? (parseInt(value) || 0) : value
+      };
+    }));
+  };
+
+  // Save Edited Draft to Firestore & Local state
+  const handleSaveEditDraftSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDraft) return;
+    if (!editNomeBarbearia.trim()) {
+      alert("Por favor, informe o Nome da Barbearia.");
+      return;
+    }
+
+    setIsSavingEditDraft(true);
+    try {
+      const updatedFields: Partial<DraftVitrine> = {
+        nomeBarbearia: editNomeBarbearia.trim(),
+        nomeProprietario: editNomeProprietario.trim(),
+        whatsapp: editWhatsapp.trim(),
+        instagram: editInstagram.trim(),
+        endereco: editEndereco.trim(),
+        slogan: editSlogan.trim(),
+        horarios: editHorarios.trim(),
+        barbeiroUnico: editBarbeiroUnico,
+        themePreset: editThemePreset,
+        primaryColor: editPrimaryColor,
+        secondaryColor: editSecondaryColor,
+        gradientEnabled: editGradientEnabled,
+        template: editTemplate,
+        modoAcao: editModoAcao,
+        servicos: editServicos
+      };
+
+      await firebaseService.updateDraftVitrine(editingDraft.id, updatedFields);
+
+      const mergedDraft: DraftVitrine = {
+        ...editingDraft,
+        ...updatedFields
+      };
+
+      setDraftVitrines(prev => prev.map(d => (d.id === editingDraft.id || d.codigo === editingDraft.codigo) ? mergedDraft : d));
+
+      if (previewDraft && (previewDraft.id === editingDraft.id || previewDraft.codigo === editingDraft.codigo)) {
+        setPreviewDraft(mergedDraft);
+      }
+
+      setEditingDraft(null);
+      setActionSuccess(`✅ Vitrine personalizada de "${mergedDraft.nomeBarbearia}" salva com sucesso!`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      alert(`Erro ao salvar alterações da vitrine: ${err?.message || 'Tente novamente'}`);
+    } finally {
+      setIsSavingEditDraft(false);
     }
   };
 
@@ -578,7 +733,7 @@ export default function AdminSubscriptionManager({
 
                     return (
                       <div 
-                        key={merchant.uid || merchant.email || `merchant-row-${merchantIdx}`} 
+                        key={`merchant-row-${merchant.uid || 'uid'}-${merchant.email || 'email'}-${merchantIdx}`} 
                         className={`p-4 bg-white rounded-2xl border transition-all flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-xs ${
                           isPendingPix 
                             ? 'border-amber-400 bg-amber-50/30 ring-1 ring-amber-400/40' 
@@ -836,7 +991,7 @@ export default function AdminSubscriptionManager({
 
                     return (
                       <div 
-                        key={draft.id || draft.codigo || `draft-row-${draftIdx}`} 
+                        key={`draft-row-${draft.id || 'id'}-${draft.codigo || 'code'}-${draftIdx}`} 
                         className="p-4 bg-white rounded-2xl border border-gray-200 hover:border-gray-300 transition-all flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-xs"
                       >
                         {/* CODE & BARBERSHOP DETAILS */}
@@ -856,6 +1011,24 @@ export default function AdminSubscriptionManager({
                                 <Sparkles className="w-3 h-3 text-emerald-600" /> Disponível para Resgate
                               </span>
                             )}
+                            {/* BADGES */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {draft.barbeiroUnico && (
+                                <span className="bg-purple-100 text-purple-800 border border-purple-300 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1">
+                                  <UserCheck className="w-3 h-3 text-purple-600" /> Barbeiro Único
+                                </span>
+                              )}
+                              {draft.template && (
+                                <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                  {draft.template === 'modelo2' ? 'Modelo 2' : 'Modelo 1'}
+                                </span>
+                              )}
+                              {draft.primaryColor && (
+                                <div className="flex items-center gap-1 text-[10px] text-gray-500 font-mono">
+                                  <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: draft.primaryColor }} />
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-1 text-xs">
@@ -895,6 +1068,16 @@ export default function AdminSubscriptionManager({
 
                         {/* ACTIONS */}
                         <div className="flex flex-wrap items-center gap-2 shrink-0 w-full lg:w-auto pt-3 lg:pt-0 border-t lg:border-t-0 border-gray-100">
+                          {/* EDIT VITRINE BUTTON */}
+                          <button
+                            onClick={() => handleOpenEditDraft(draft)}
+                            className="bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all border border-brand-blue/30 cursor-pointer"
+                            title="Personalizar serviços, cores e configurações da vitrine"
+                          >
+                            <Edit3 className="w-4 h-4 text-brand-blue" />
+                            <span>Editar Vitrine</span>
+                          </button>
+
                           {/* PREVIEW VITRINE BUTTON */}
                           <button
                             onClick={() => setPreviewDraft(draft)}
@@ -1024,6 +1207,107 @@ export default function AdminSubscriptionManager({
                     placeholder="Ex: Barbearia Premium Club"
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-brand-blue outline-none"
                   />
+                </div>
+
+                {/* SINGLE BARBER MODE TOGGLE */}
+                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-purple-950 text-xs block">Modo Barbeiro Único</span>
+                      <span className="text-[11px] text-purple-700 leading-tight block">
+                        Oculta o ícone/seleção de barbeiros (ideal para quem trabalha sozinho)
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDraftBarbeiroUnico(!draftBarbeiroUnico)}
+                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                      draftBarbeiroUnico ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        draftBarbeiroUnico ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* THEME PRESET, TEMPLATE & CUSTOM COLORS */}
+                <div className="space-y-3 p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700 flex items-center gap-1">
+                        <Palette className="w-3.5 h-3.5 text-brand-blue" />
+                        <span>Tema de Cores</span>
+                      </label>
+                      <select
+                        value={draftThemePreset}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDraftThemePreset(val);
+                          const matched = THEME_PRESETS.find(p => p.id === val);
+                          if (matched) {
+                            setDraftPrimaryColor(matched.primary);
+                            setDraftSecondaryColor(matched.secondary);
+                            setDraftGradientEnabled(matched.gradient);
+                          }
+                        }}
+                        className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-brand-blue outline-none"
+                      >
+                        {THEME_PRESETS.map(preset => (
+                          <option key={preset.id} value={preset.id}>{preset.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Modelo da Vitrine</label>
+                      <select
+                        value={draftTemplate}
+                        onChange={(e) => setDraftTemplate(e.target.value as 'modelo1' | 'modelo2')}
+                        className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-brand-blue outline-none"
+                      >
+                        <option value="modelo1">Modelo 1 (Clássico Clean)</option>
+                        <option value="modelo2">Modelo 2 (Moderno & Degradê)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Custom Colors & Degradê in Draft */}
+                  <div className="pt-2 border-t border-gray-200 flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <label className="font-bold text-gray-700 text-[11px]">Cor Principal:</label>
+                      <input 
+                        type="color" 
+                        value={draftPrimaryColor}
+                        onChange={e => setDraftPrimaryColor(e.target.value)}
+                        className="w-7 h-7 rounded-lg border border-gray-300 p-0.5 cursor-pointer"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <label className="font-bold text-gray-700 text-[11px]">Cor Secundária:</label>
+                      <input 
+                        type="color" 
+                        value={draftSecondaryColor}
+                        onChange={e => setDraftSecondaryColor(e.target.value)}
+                        className="w-7 h-7 rounded-lg border border-gray-300 p-0.5 cursor-pointer"
+                      />
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 font-bold text-[11px] ml-auto">
+                      <input 
+                        type="checkbox"
+                        checked={draftGradientEnabled}
+                        onChange={e => setDraftGradientEnabled(e.target.checked)}
+                        className="rounded text-brand-blue focus:ring-brand-blue"
+                      />
+                      <span>Degradê</span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* PROPRIETARIO & WHATSAPP */}
@@ -1176,13 +1460,27 @@ export default function AdminSubscriptionManager({
                     <p className="text-[11px] text-gray-400">Código de Convite: <span className="font-mono text-brand-lime font-bold">{previewDraft.codigo}</span></p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setPreviewDraft(null)}
-                  className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer"
-                  title="Fechar pré-visualização"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const d = previewDraft;
+                      setPreviewDraft(null);
+                      handleOpenEditDraft(d);
+                    }}
+                    className="bg-brand-lime hover:bg-lime-400 text-brand-dark font-extrabold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    title="Editar informações, cores, barbeiro único e serviços deste rascunho"
+                  >
+                    <Edit3 className="w-4 h-4 text-brand-dark" />
+                    <span>Editar Rascunho</span>
+                  </button>
+                  <button
+                    onClick={() => setPreviewDraft(null)}
+                    className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Fechar pré-visualização"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto bg-gray-900 p-2 md:p-4">
@@ -1200,6 +1498,14 @@ export default function AdminSubscriptionManager({
                     vitrineHorarios: previewDraft.horarios || 'Seg - Sáb: 08:00 às 20:00',
                     vitrineLogoImage: previewDraft.logoUrl,
                     vitrineCapa: previewDraft.capaUrl,
+                    vitrineThemePreset: previewDraft.themePreset || 'cortestime',
+                    vitrinePrimaryColor: previewDraft.primaryColor || '#051b42',
+                    vitrineSecondaryColor: previewDraft.secondaryColor || '#2563eb',
+                    vitrineGradientEnabled: previewDraft.gradientEnabled ?? true,
+                    vitrineTemplate: previewDraft.template || 'modelo1',
+                    vitrineModoAcao: previewDraft.modoAcao || 'agendamento',
+                    vitrineBarbeiroUnico: previewDraft.barbeiroUnico ?? false,
+                    barbeiroUnico: previewDraft.barbeiroUnico ?? false,
                     plano: 'pro',
                     trialInicio: '01/01/2026',
                     trialFim: '01/01/2030',
@@ -1226,6 +1532,365 @@ export default function AdminSubscriptionManager({
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* MODAL TO EDIT DRAFT VITRINE */}
+        {editingDraft && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 my-auto text-left border border-gray-100 max-h-[92vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-brand-lime/20 text-brand-dark rounded-xl">
+                    <Edit3 className="w-5 h-5 text-brand-blue" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-extrabold text-lg text-brand-dark flex items-center gap-2">
+                      <span>Personalizar Vitrine Rascunho</span>
+                      <span className="text-xs font-mono font-bold bg-brand-blue/10 text-brand-blue px-2.5 py-0.5 rounded-lg">
+                        {editingDraft.codigo}
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-gray-500">Configure serviços, tema, cores e modo barbeiro único antes de enviar o código</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEditingDraft(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 cursor-pointer"
+                  title="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditDraftSubmit} className="space-y-4 text-xs">
+                {/* 1. DADOS DE IDENTIDADE */}
+                <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                  <h4 className="font-bold text-gray-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <Store className="w-4 h-4 text-brand-blue" />
+                    <span>Dados Principais da Barbearia</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Nome da Barbearia *</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={editNomeBarbearia}
+                        onChange={e => setEditNomeBarbearia(e.target.value)}
+                        placeholder="Ex: Barbearia Imperial"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-semibold text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Nome do Proprietário</label>
+                      <input 
+                        type="text" 
+                        value={editNomeProprietario}
+                        onChange={e => setEditNomeProprietario(e.target.value)}
+                        placeholder="Ex: Carlos Silva"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">WhatsApp</label>
+                      <input 
+                        type="tel" 
+                        value={editWhatsapp}
+                        onChange={e => setEditWhatsapp(e.target.value)}
+                        placeholder="(11) 99999-8888"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Instagram</label>
+                      <input 
+                        type="text" 
+                        value={editInstagram}
+                        onChange={e => setEditInstagram(e.target.value)}
+                        placeholder="@barbeariaimperial"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="font-bold text-gray-700">Endereço Completo</label>
+                      <input 
+                        type="text" 
+                        value={editEndereco}
+                        onChange={e => setEditEndereco(e.target.value)}
+                        placeholder="Ex: Rua das Flores, 120 - Centro"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Slogan / Frase de Impacto</label>
+                      <input 
+                        type="text" 
+                        value={editSlogan}
+                        onChange={e => setEditSlogan(e.target.value)}
+                        placeholder="Ex: Corte, barba e estilo de alto padrão"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Horário Geral</label>
+                      <input 
+                        type="text" 
+                        value={editHorarios}
+                        onChange={e => setEditHorarios(e.target.value)}
+                        placeholder="Ex: Seg - Sáb: 09:00 às 19:00"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. ATENDIMENTO INDIVIDUAL / MODO BARBEIRO ÚNICO */}
+                <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-purple-100 text-purple-700 rounded-xl">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-purple-950 text-sm block">Opção de Barbeiro Único</span>
+                      <span className="text-xs text-purple-700 leading-tight block mt-0.5">
+                        Oculta a seleção de barbeiros no agendamento e a lista de equipe na vitrine (ideal para profissionais individuais).
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditBarbeiroUnico(!editBarbeiroUnico)}
+                    className={`w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                      editBarbeiroUnico ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform ${
+                        editBarbeiroUnico ? 'translate-x-7' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 3. TEMA, CORES & MODELO */}
+                <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                  <h4 className="font-bold text-gray-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <Palette className="w-4 h-4 text-brand-blue" />
+                    <span>Personalização Visual, Cores & Modelo</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {/* Theme Preset */}
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Paleta de Cores</label>
+                      <select
+                        value={editThemePreset}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditThemePreset(val);
+                          const matched = THEME_PRESETS.find(p => p.id === val);
+                          if (matched) {
+                            setEditPrimaryColor(matched.primary);
+                            setEditSecondaryColor(matched.secondary);
+                            setEditGradientEnabled(matched.gradient);
+                          }
+                        }}
+                        className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-brand-blue outline-none"
+                      >
+                        {THEME_PRESETS.map(preset => (
+                          <option key={preset.id} value={preset.id}>{preset.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Template */}
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Modelo da Vitrine</label>
+                      <select
+                        value={editTemplate}
+                        onChange={(e) => setEditTemplate(e.target.value as 'modelo1' | 'modelo2')}
+                        className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-brand-blue outline-none"
+                      >
+                        <option value="modelo1">Modelo 1 (Clássico Clean)</option>
+                        <option value="modelo2">Modelo 2 (Moderno & Degradê)</option>
+                      </select>
+                    </div>
+
+                    {/* Modo de Ação */}
+                    <div className="space-y-1">
+                      <label className="font-bold text-gray-700">Ação do Botão Principal</label>
+                      <select
+                        value={editModoAcao}
+                        onChange={(e) => setEditModoAcao(e.target.value as 'agendamento' | 'whatsapp')}
+                        className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:border-brand-blue outline-none"
+                      >
+                        <option value="agendamento">Agendamento Online no Site</option>
+                        <option value="whatsapp">Botão Direto para WhatsApp</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Colors Preview and Custom Pickers */}
+                  <div className="pt-2 border-t border-gray-200 flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="font-bold text-gray-700 text-[11px]">Cor Primária:</label>
+                      <input 
+                        type="color" 
+                        value={editPrimaryColor}
+                        onChange={e => setEditPrimaryColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-gray-300 p-0.5 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="font-bold text-gray-700 text-[11px]">Cor Secundária:</label>
+                      <input 
+                        type="color" 
+                        value={editSecondaryColor}
+                        onChange={e => setEditSecondaryColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-gray-300 p-0.5 cursor-pointer"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-700 font-bold text-[11px] ml-auto">
+                      <input 
+                        type="checkbox"
+                        checked={editGradientEnabled}
+                        onChange={e => setEditGradientEnabled(e.target.checked)}
+                        className="rounded text-brand-blue focus:ring-brand-blue"
+                      />
+                      <span>Ativar Degradê</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 4. TABELA COMPLETA DE SERVIÇOS */}
+                <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-gray-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Scissors className="w-4 h-4 text-brand-blue" />
+                      <span>Serviços da Barbearia ({editServicos.length})</span>
+                    </h4>
+                    <span className="text-[10px] text-gray-500 font-medium">Edite valores, duração e nomes diretamente</span>
+                  </div>
+
+                  {/* Services List Table */}
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    {editServicos.length === 0 ? (
+                      <p className="text-gray-400 text-center py-3 italic">Nenhum serviço adicionado. Adicione abaixo.</p>
+                    ) : (
+                      editServicos.map((svc, idx) => (
+                        <div key={`edit-svc-${idx}`} className="flex items-center gap-2 p-2.5 bg-white rounded-xl border border-gray-200 shadow-2xs">
+                          <input 
+                            type="text" 
+                            value={svc.name}
+                            onChange={e => handleUpdateEditDraftService(idx, 'name', e.target.value)}
+                            placeholder="Nome do serviço"
+                            className="flex-1 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 focus:bg-white focus:border-brand-blue outline-none"
+                          />
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-400 font-bold text-[11px]">R$</span>
+                            <input 
+                              type="number" 
+                              step="0.5"
+                              value={svc.price}
+                              onChange={e => handleUpdateEditDraftService(idx, 'price', e.target.value)}
+                              placeholder="Preço"
+                              className="w-20 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-emerald-700 text-right focus:bg-white focus:border-brand-blue outline-none"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <input 
+                              type="number" 
+                              step="5"
+                              value={svc.durationMin}
+                              onChange={e => handleUpdateEditDraftService(idx, 'durationMin', e.target.value)}
+                              placeholder="Min"
+                              className="w-16 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 text-right focus:bg-white focus:border-brand-blue outline-none"
+                            />
+                            <span className="text-gray-400 text-[10px]">min</span>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => handleRemoveEditDraftService(idx)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remover serviço"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Add New Service Inline */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                    <input 
+                      type="text" 
+                      placeholder="Novo serviço (Ex: Barboterapia)" 
+                      value={editNewSvcName}
+                      onChange={e => setEditNewSvcName(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
+                    />
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400 font-bold text-xs">R$</span>
+                      <input 
+                        type="number" 
+                        placeholder="0.00" 
+                        value={editNewSvcPrice}
+                        onChange={e => setEditNewSvcPrice(e.target.value)}
+                        className="w-20 px-2.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-emerald-700 outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input 
+                        type="number" 
+                        placeholder="30" 
+                        value={editNewSvcDuration}
+                        onChange={e => setEditNewSvcDuration(e.target.value)}
+                        className="w-16 px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs outline-none"
+                      />
+                      <span className="text-gray-400 text-[10px]">min</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddEditDraftService}
+                      className="px-3.5 py-2 bg-brand-blue hover:bg-brand-blue-light text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Actions & Submit */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setEditingDraft(null)}
+                    className="px-5 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSavingEditDraft}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold py-3 px-6 rounded-xl shadow-md shadow-emerald-600/20 transition-all text-xs flex items-center gap-2 cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingEditDraft ? 'Salvando Alterações...' : 'Salvar Alterações da Vitrine'}</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </div>
         )}
 

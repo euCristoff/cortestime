@@ -151,7 +151,15 @@ export const firebaseService = {
         vitrineInstagram: draft.instagram || '',
         codigoConviteResgatado: draft.codigo,
         vitrineDraftResgatada: true,
-        draftJustClaimed: true
+        draftJustClaimed: true,
+        barbeiroUnico: draft.barbeiroUnico !== undefined ? draft.barbeiroUnico : true,
+        vitrineBarbeiroUnico: draft.barbeiroUnico !== undefined ? draft.barbeiroUnico : true,
+        vitrineThemePreset: draft.themePreset,
+        vitrinePrimaryColor: draft.primaryColor,
+        vitrineSecondaryColor: draft.secondaryColor,
+        vitrineGradientEnabled: draft.gradientEnabled,
+        vitrineTemplate: draft.template,
+        vitrineModoAcao: draft.modoAcao
       } : {})
     };
 
@@ -440,11 +448,96 @@ export const firebaseService = {
 
   async saveMerchantProfile(merchant: MerchantUser): Promise<void> {
     const docRef = doc(db, "users", merchant.uid);
+    const cleanData = JSON.parse(JSON.stringify(merchant, (_k, v) => (v === undefined ? null : v)));
     await withTimeout(
-      setDoc(docRef, merchant, { merge: true }),
-      15000,
+      setDoc(docRef, cleanData, { merge: true }),
+      20000,
       "Tempo limite excedido ao salvar perfil da barbearia."
     );
+    try {
+      localStorage.setItem("cortestime_merchant_session", JSON.stringify(merchant));
+      localStorage.setItem("cortestime_merchant_profile", JSON.stringify(merchant));
+    } catch (_) {}
+  },
+
+  async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
+    if (!uid) return;
+    const docRef = doc(db, "users", uid);
+    
+    // Sanitize data: remove undefined values which cause Firestore updateDoc/setDoc to fail
+    const cleanData = JSON.parse(
+      JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
+    );
+
+    // Sync immediately to LocalStorage so changes persist locally without waiting or failing
+    try {
+      const cached = localStorage.getItem('cortestime_merchant_session');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.uid === uid || !parsed.uid) {
+          const merged = { ...parsed, ...cleanData, uid };
+          localStorage.setItem('cortestime_merchant_session', JSON.stringify(merged));
+        }
+      }
+      const cachedProfile = localStorage.getItem('cortestime_merchant_profile');
+      if (cachedProfile) {
+        const parsed = JSON.parse(cachedProfile);
+        if (parsed.uid === uid || !parsed.uid) {
+          const merged = { ...parsed, ...cleanData, uid };
+          localStorage.setItem('cortestime_merchant_profile', JSON.stringify(merged));
+        }
+      }
+      const rawAll = localStorage.getItem('cortestime_merchants');
+      if (rawAll) {
+        const list: MerchantUser[] = JSON.parse(rawAll);
+        const idx = list.findIndex((x) => x.uid === uid);
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], ...cleanData };
+          localStorage.setItem('cortestime_merchants', JSON.stringify(list));
+        }
+      }
+    } catch (localErr) {
+      console.warn("Could not sync local cache in updateMerchantProfile:", localErr);
+    }
+
+    try {
+      await withTimeout(
+        setDoc(docRef, cleanData, { merge: true }),
+        15000,
+        "Tempo limite esgotado ao atualizar perfil."
+      );
+    } catch (err) {
+      console.error("Erro ao atualizar perfil no Firestore:", err);
+      try {
+        await updateDoc(docRef, cleanData);
+      } catch (err2) {
+        console.error("Fallback updateDoc também falhou:", err2);
+      }
+    }
+
+    // Sync with Brevo asynchronously if key details or subscription plans are updated
+    if (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined) {
+      try {
+        getDoc(docRef).then((snap) => {
+          if (snap.exists()) {
+            const fullUser = snap.data() as MerchantUser;
+            fetch("/api/brevo/contact", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: fullUser.email,
+                nomeProprietario: fullUser.nomeProprietario,
+                nomeBarbearia: fullUser.nomeBarbearia,
+                whatsapp: fullUser.whatsapp,
+                plano: fullUser.plano
+              })
+            }).catch(err => console.error("Error triggering Brevo sync in update:", err));
+          }
+        }).catch(err => console.error("Error fetching updated user for Brevo sync:", err));
+      } catch (err) {
+        console.error("Failed to run Brevo fetch in update:", err);
+      }
+    }
   },
 
   async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {
@@ -562,7 +655,15 @@ export const firebaseService = {
         vitrineLogoImage: d.logoUrl,
         vitrineCapa: d.capaUrl,
         vitrineLinkPersonalizado: d.nomeBarbearia ? toKebab(d.nomeBarbearia) : d.codigo,
-        codigoConviteResgatado: d.codigo
+        codigoConviteResgatado: d.codigo,
+        barbeiroUnico: d.barbeiroUnico !== undefined ? d.barbeiroUnico : true,
+        vitrineBarbeiroUnico: d.barbeiroUnico !== undefined ? d.barbeiroUnico : true,
+        vitrineThemePreset: d.themePreset,
+        vitrinePrimaryColor: d.primaryColor,
+        vitrineSecondaryColor: d.secondaryColor,
+        vitrineGradientEnabled: d.gradientEnabled,
+        vitrineTemplate: d.template,
+        vitrineModoAcao: d.modoAcao
       };
     };
 
@@ -1071,79 +1172,6 @@ export const firebaseService = {
     }
   },
 
-  async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
-    const docRef = doc(db, "users", uid);
-    
-    // Sanitize data: remove undefined values which cause Firestore updateDoc/setDoc to fail
-    const cleanData = JSON.parse(
-      JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
-    );
-
-    // Sync immediately to LocalStorage so changes persist locally without waiting or failing
-    try {
-      const cached = localStorage.getItem('cortestime_merchant_session');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.uid === uid || !parsed.uid) {
-          const merged = { ...parsed, ...cleanData, uid };
-          localStorage.setItem('cortestime_merchant_session', JSON.stringify(merged));
-        }
-      }
-      const rawAll = localStorage.getItem('cortestime_merchants');
-      if (rawAll) {
-        const list: MerchantUser[] = JSON.parse(rawAll);
-        const idx = list.findIndex((x) => x.uid === uid);
-        if (idx >= 0) {
-          list[idx] = { ...list[idx], ...cleanData };
-          localStorage.setItem('cortestime_merchants', JSON.stringify(list));
-        }
-      }
-    } catch (localErr) {
-      console.warn("Could not sync local cache in updateMerchantProfile:", localErr);
-    }
-
-    try {
-      await withTimeout(
-        setDoc(docRef, cleanData, { merge: true }),
-        15000,
-        "Tempo limite esgotado ao atualizar perfil."
-      );
-    } catch (err) {
-      console.error("Erro ao atualizar perfil no Firestore:", err);
-      // Fallback: Tenta updateDoc se setDoc falhar por algum motivo específico de regra
-      try {
-        await updateDoc(docRef, cleanData);
-      } catch (err2) {
-        console.error("Fallback updateDoc também falhou:", err2);
-        throw err;
-      }
-    }
-
-    // Sync with Brevo asynchronously if key details or subscription plans are updated
-    if (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined) {
-      try {
-        getDoc(docRef).then((snap) => {
-          if (snap.exists()) {
-            const fullUser = snap.data() as MerchantUser;
-            fetch("/api/brevo/contact", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                email: fullUser.email,
-                nomeProprietario: fullUser.nomeProprietario,
-                nomeBarbearia: fullUser.nomeBarbearia,
-                whatsapp: fullUser.whatsapp,
-                plano: fullUser.plano
-              })
-            }).catch(err => console.error("Error triggering Brevo sync in update:", err));
-          }
-        }).catch(err => console.error("Error fetching updated user for Brevo sync:", err));
-      } catch (err) {
-        console.error("Failed to run Brevo fetch in update:", err);
-      }
-    }
-  },
-
   // Draft Vitrines / Invite Codes operations
   async getDraftVitrineByCode(codigo: string): Promise<DraftVitrine | null> {
     if (!codigo) return null;
@@ -1155,7 +1183,22 @@ export const firebaseService = {
       const snap = await getDocs(q);
       if (!snap.empty) {
         const docData = snap.docs[0].data() as DraftVitrine;
-        return { ...docData, id: snap.docs[0].id };
+        const item: DraftVitrine = { ...docData, id: snap.docs[0].id || docData.id };
+
+        // Keep LocalStorage updated
+        try {
+          const raw = localStorage.getItem("cortestime_draft_vitrines");
+          const list: DraftVitrine[] = raw ? JSON.parse(raw) : [];
+          const idx = list.findIndex(d => (d.codigo && d.codigo.trim().toUpperCase() === norm) || d.id === item.id);
+          if (idx >= 0) {
+            list[idx] = { ...list[idx], ...item };
+          } else {
+            list.unshift(item);
+          }
+          localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
+        } catch (_) {}
+
+        return item;
       }
     } catch (err) {
       console.warn("Firestore draft vitrine fetch error, checking LocalStorage:", err);
@@ -1186,13 +1229,14 @@ export const firebaseService = {
       const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", norm));
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const docRef = snap.docs[0].ref;
-        await updateDoc(docRef, {
-          usado: true,
-          resgatadoPorEmail: userEmail,
-          resgatadoPorUid: userUid,
-          dataResgate
-        });
+        for (const docSnap of snap.docs) {
+          await updateDoc(docSnap.ref, {
+            usado: true,
+            resgatadoPorEmail: userEmail,
+            resgatadoPorUid: userUid,
+            dataResgate
+          });
+        }
       }
     } catch (err) {
       console.warn("Firestore update draft vitrine error:", err);
@@ -1227,7 +1271,7 @@ export const firebaseService = {
       ? draftData.codigo.trim().toUpperCase() 
       : `BARBER-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
-    const id = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    const id = draftData.id || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
     const newDraft: DraftVitrine = {
       id,
       codigo: rawCode,
@@ -1239,12 +1283,19 @@ export const firebaseService = {
       slogan: draftData.slogan || '',
       logoUrl: draftData.logoUrl || '',
       capaUrl: draftData.capaUrl || '',
-      horarios: draftData.horarios || 'Seg-Sáb: 08:00 - 20:00',
+      horarios: draftData.horarios || 'Seg - Sáb: 08:00 às 20:00',
       servicos: draftData.servicos || [
         { name: 'Corte de Cabelo', price: 35, durationMin: 30 },
         { name: 'Barba Completa', price: 25, durationMin: 20 },
         { name: 'Combo Cabelo + Barba', price: 55, durationMin: 45 }
       ],
+      barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : true,
+      themePreset: draftData.themePreset || 'cortestime',
+      primaryColor: draftData.primaryColor || '#051b42',
+      secondaryColor: draftData.secondaryColor || '#2563eb',
+      gradientEnabled: draftData.gradientEnabled ?? true,
+      template: draftData.template || 'modelo1',
+      modoAcao: draftData.modoAcao || 'agendamento',
       usado: false,
       criadoEm: new Date().toISOString(),
       criadoPorAdmin: draftData.criadoPorAdmin || 'Admin'
@@ -1261,8 +1312,8 @@ export const firebaseService = {
     try {
       const raw = localStorage.getItem("cortestime_draft_vitrines");
       const list: DraftVitrine[] = raw ? JSON.parse(raw) : [];
-      list.unshift(newDraft);
-      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(list));
+      const updated = [newDraft, ...list.filter(d => d.id !== id && d.codigo !== rawCode)];
+      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(updated));
     } catch (e) {
       console.error("Error saving draft vitrine to LocalStorage:", e);
     }
@@ -1270,11 +1321,86 @@ export const firebaseService = {
     return newDraft;
   },
 
+  async updateDraftVitrine(draftId: string, draftData: Partial<DraftVitrine>): Promise<DraftVitrine> {
+    const raw = localStorage.getItem("cortestime_draft_vitrines");
+    let currentList: DraftVitrine[] = raw ? JSON.parse(raw) : [];
+    const targetCode = (draftData.codigo || '').trim().toUpperCase();
+    const existing = currentList.find(d => (draftId && d.id === draftId) || (targetCode && (d.codigo || '').trim().toUpperCase() === targetCode));
+
+    const finalId = draftId || existing?.id || `draft_${Date.now()}`;
+    const finalCode = draftData.codigo || existing?.codigo || `BARBER-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+    const merged: DraftVitrine = {
+      id: finalId,
+      codigo: finalCode,
+      nomeBarbearia: draftData.nomeBarbearia !== undefined ? draftData.nomeBarbearia : (existing?.nomeBarbearia ?? 'Barbearia'),
+      nomeProprietario: draftData.nomeProprietario !== undefined ? draftData.nomeProprietario : (existing?.nomeProprietario ?? ''),
+      whatsapp: draftData.whatsapp !== undefined ? draftData.whatsapp : (existing?.whatsapp ?? ''),
+      instagram: draftData.instagram !== undefined ? draftData.instagram : (existing?.instagram ?? ''),
+      endereco: draftData.endereco !== undefined ? draftData.endereco : (existing?.endereco ?? ''),
+      slogan: draftData.slogan !== undefined ? draftData.slogan : (existing?.slogan ?? ''),
+      logoUrl: draftData.logoUrl !== undefined ? draftData.logoUrl : (existing?.logoUrl ?? ''),
+      capaUrl: draftData.capaUrl !== undefined ? draftData.capaUrl : (existing?.capaUrl ?? ''),
+      horarios: draftData.horarios !== undefined ? draftData.horarios : (existing?.horarios ?? 'Seg - Sáb: 08:00 às 20:00'),
+      servicos: draftData.servicos !== undefined ? draftData.servicos : (existing?.servicos ?? []),
+      barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : (existing?.barbeiroUnico ?? true),
+      themePreset: draftData.themePreset !== undefined ? draftData.themePreset : (existing?.themePreset || 'cortestime'),
+      primaryColor: draftData.primaryColor !== undefined ? draftData.primaryColor : (existing?.primaryColor || '#051b42'),
+      secondaryColor: draftData.secondaryColor !== undefined ? draftData.secondaryColor : (existing?.secondaryColor || '#2563eb'),
+      gradientEnabled: draftData.gradientEnabled !== undefined ? draftData.gradientEnabled : (existing?.gradientEnabled ?? true),
+      template: draftData.template !== undefined ? draftData.template : (existing?.template || 'modelo1'),
+      modoAcao: draftData.modoAcao !== undefined ? draftData.modoAcao : (existing?.modoAcao || 'agendamento'),
+      usado: draftData.usado !== undefined ? draftData.usado : (existing?.usado ?? false),
+      resgatadoPorEmail: draftData.resgatadoPorEmail !== undefined ? draftData.resgatadoPorEmail : existing?.resgatadoPorEmail,
+      resgatadoPorUid: draftData.resgatadoPorUid !== undefined ? draftData.resgatadoPorUid : existing?.resgatadoPorUid,
+      dataResgate: draftData.dataResgate !== undefined ? draftData.dataResgate : existing?.dataResgate,
+      criadoEm: existing?.criadoEm || new Date().toISOString(),
+      criadoPorAdmin: existing?.criadoPorAdmin || 'Admin'
+    };
+
+    // Clean data for Firestore
+    const cleanData = JSON.parse(JSON.stringify(merged, (_k, v) => (v === undefined ? null : v)));
+
+    // Save in Firestore
+    try {
+      if (finalId) {
+        await setDoc(doc(db, COLL_DRAFT_VITRINES, finalId), cleanData, { merge: true });
+      }
+      // Also query by codigo in Firestore in case doc ID differs
+      if (finalCode) {
+        const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", finalCode));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          for (const d of snap.docs) {
+            await setDoc(d.ref, cleanData, { merge: true });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Firestore update draft vitrine error:", err);
+    }
+
+    // Save in LocalStorage
+    try {
+      const idx = currentList.findIndex(d => d.id === finalId || (finalCode && d.codigo === finalCode));
+      if (idx >= 0) {
+        currentList[idx] = merged;
+      } else {
+        currentList.unshift(merged);
+      }
+      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(currentList));
+    } catch (e) {
+      console.error("Error updating draft vitrine in LocalStorage:", e);
+    }
+
+    return merged;
+  },
+
   async getAllDraftVitrines(): Promise<DraftVitrine[]> {
     let firestoreList: DraftVitrine[] = [];
     try {
       const snap = await getDocs(collection(db, COLL_DRAFT_VITRINES));
-      firestoreList = snap.docs.map(docSnap => docSnap.data() as DraftVitrine);
+      firestoreList = snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DraftVitrine));
     } catch (err) {
       console.warn("Error fetching draft vitrines from Firestore:", err);
     }
@@ -1304,6 +1430,13 @@ export const firebaseService = {
               { name: 'Barba Alinhada na Toalha Quente', price: 30, durationMin: 25 },
               { name: 'Combo Executivo (Cabelo + Barba)', price: 65, durationMin: 50 }
             ],
+            barbeiroUnico: true,
+            themePreset: 'cortestime',
+            primaryColor: '#051b42',
+            secondaryColor: '#2563eb',
+            gradientEnabled: true,
+            template: 'modelo1',
+            modoAcao: 'agendamento',
             usado: false,
             criadoEm: new Date().toISOString(),
             criadoPorAdmin: 'Admin Cortestime'
@@ -1322,6 +1455,13 @@ export const firebaseService = {
               { name: 'Corte Masculino Moderno', price: 35, durationMin: 30 },
               { name: 'Barboterapia Especial', price: 35, durationMin: 30 }
             ],
+            barbeiroUnico: true,
+            themePreset: 'esmeralda',
+            primaryColor: '#064e3b',
+            secondaryColor: '#10b981',
+            gradientEnabled: true,
+            template: 'modelo2',
+            modoAcao: 'agendamento',
             usado: false,
             criadoEm: new Date().toISOString(),
             criadoPorAdmin: 'Admin Cortestime'
@@ -1329,7 +1469,7 @@ export const firebaseService = {
           {
             id: 'draft_sample_3',
             codigo: 'PREMIUM-019',
-            nomeBarbearia: 'Barberia Don Corleone',
+            nomeBarbearia: 'Barbearia Don Corleone',
             nomeProprietario: 'Gabriel Santos',
             whatsapp: '(31) 99555-4433',
             instagram: '@barberia.doncorleone',
@@ -1340,6 +1480,13 @@ export const firebaseService = {
               { name: 'Corte Tesoura e Máquina', price: 45, durationMin: 40 },
               { name: 'Sobrancelha Navalhada', price: 15, durationMin: 15 }
             ],
+            barbeiroUnico: false,
+            themePreset: 'dourado',
+            primaryColor: '#1a1408',
+            secondaryColor: '#d97706',
+            gradientEnabled: true,
+            template: 'modelo1',
+            modoAcao: 'agendamento',
             usado: false,
             criadoEm: new Date().toISOString(),
             criadoPorAdmin: 'Admin Cortestime'
@@ -1351,22 +1498,55 @@ export const firebaseService = {
       console.error("Error reading LocalStorage draft vitrines:", e);
     }
 
-    // Merge lists by id/codigo, preferring used status if any
-    const map = new Map<string, DraftVitrine>();
-    for (const item of [...localList, ...firestoreList]) {
-      const key = item.codigo ? item.codigo.trim().toUpperCase() : item.id;
-      const existing = map.get(key);
-      if (!existing || item.usado) {
-        map.set(key, item);
+    // Deduplicate and merge lists: match by id OR by normalized codigo
+    const mergedList: DraftVitrine[] = [];
+    const allCombined = [...firestoreList, ...localList];
+
+    for (const item of allCombined) {
+      if (!item) continue;
+      const itemId = item.id ? String(item.id).trim() : '';
+      const itemCode = item.codigo ? item.codigo.trim().toUpperCase() : '';
+
+      const existingIdx = mergedList.findIndex(existing => {
+        const existingId = existing.id ? String(existing.id).trim() : '';
+        const existingCode = existing.codigo ? existing.codigo.trim().toUpperCase() : '';
+        return (itemId && existingId && itemId === existingId) || (itemCode && existingCode && itemCode === existingCode);
+      });
+
+      if (existingIdx >= 0) {
+        // Merge with existing (prefer firestore data if available)
+        mergedList[existingIdx] = {
+          ...mergedList[existingIdx],
+          ...item,
+          // Ensure non-empty id and codigo
+          id: mergedList[existingIdx].id || item.id,
+          codigo: mergedList[existingIdx].codigo || item.codigo
+        };
+      } else {
+        mergedList.push({ ...item });
       }
     }
 
-    return Array.from(map.values());
+    // Update local storage with fresh merged list
+    try {
+      localStorage.setItem("cortestime_draft_vitrines", JSON.stringify(mergedList));
+    } catch (_) {}
+
+    return mergedList;
   },
 
   async deleteDraftVitrine(draftId: string, codigo: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, COLL_DRAFT_VITRINES, draftId));
+      if (draftId) {
+        await deleteDoc(doc(db, COLL_DRAFT_VITRINES, draftId));
+      }
+      if (codigo) {
+        const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", codigo.trim().toUpperCase()));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref);
+        }
+      }
     } catch (e) {
       console.warn("Firestore delete draft error:", e);
     }

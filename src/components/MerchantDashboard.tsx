@@ -71,6 +71,7 @@ import MercadoPagoCheckout from './MercadoPagoCheckout';
 import AdminSubscriptionManager from './AdminSubscriptionManager';
 import QueueManager from './QueueManager';
 import { firebaseService } from '../services/firebaseService';
+import { compressImageFile, compressDataUrl } from '../utils/vitrineTheme';
 
 export type DashboardTab = 'inicio' | 'agenda' | 'fila' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'ajuda' | 'assinatura' | 'menu';
 
@@ -135,7 +136,9 @@ export default function MerchantDashboard({
     nomeProprietario: merchant?.nomeProprietario || onboardingData.fullName || '',
     whatsapp: merchant?.whatsapp || onboardingData.cellphone || '',
     vitrineLogo: merchant?.vitrineLogo || '',
+    vitrineLogoImage: merchant?.vitrineLogoImage || '',
     vitrineCapa: merchant?.vitrineCapa || '',
+    barbeiroUnico: Boolean(merchant?.vitrineBarbeiroUnico ?? merchant?.barbeiroUnico ?? false),
     cep: addrObj?.cep || onboardingData.cep || '57000-000',
     rua: addrObj?.rua || onboardingData.street || 'Av. Principal',
     numero: addrObj?.numero || onboardingData.number || '100',
@@ -148,6 +151,33 @@ export default function MerchantDashboard({
   });
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccessMsg, setConfigSuccessMsg] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingCapa, setIsUploadingCapa] = useState(false);
+
+  // Synchronize configData whenever merchant changes (e.g. returning from Vitrine or update)
+  useEffect(() => {
+    if (merchant) {
+      const curAddr = typeof merchant.vitrineEndereco === 'object' && merchant.vitrineEndereco ? merchant.vitrineEndereco : null;
+      setConfigData({
+        nomeBarbearia: merchant.nomeBarbearia || onboardingData.businessName || '',
+        nomeProprietario: merchant.nomeProprietario || onboardingData.fullName || '',
+        whatsapp: merchant.whatsapp || onboardingData.cellphone || '',
+        vitrineLogo: merchant.vitrineLogo || '',
+        vitrineLogoImage: merchant.vitrineLogoImage || '',
+        vitrineCapa: merchant.vitrineCapa || '',
+        barbeiroUnico: Boolean(merchant.vitrineBarbeiroUnico ?? merchant.barbeiroUnico ?? false),
+        cep: curAddr?.cep || onboardingData.cep || '57000-000',
+        rua: curAddr?.rua || onboardingData.street || 'Av. Principal',
+        numero: curAddr?.numero || onboardingData.number || '100',
+        bairro: curAddr?.bairro || onboardingData.neighborhood || 'Centro',
+        cidade: curAddr?.cidade || onboardingData.city || 'Maceió',
+        estado: curAddr?.estado || onboardingData.state || 'AL',
+        instagram: merchant.vitrineInstagram || '@barbearia',
+        facebook: merchant.vitrineFacebook || '',
+        serviceMode: (merchant.serviceMode || 'agendamento') as ServiceMode
+      });
+    }
+  }, [merchant]);
 
   // Real-time Queue State
   const [merchantQueue, setMerchantQueue] = useState<QueueItem[]>([]);
@@ -1075,11 +1105,59 @@ export default function MerchantDashboard({
       <CortesVitrine 
         merchant={merchant}
         services={services}
+        barbers={barbers}
         onBack={() => setShowVitrinePage(false)}
         onUpdateMerchant={onUpdateMerchant}
       />
     );
   }
+
+  // Handler for uploading logo from device in dashboard
+  const handleUploadDashboardLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const compressed = await compressImageFile(file, 400, 400, 0.8);
+      if (compressed) {
+        setConfigData(prev => ({
+          ...prev,
+          vitrineLogoImage: compressed,
+          vitrineLogo: prev.vitrineLogo || prev.nomeBarbearia || 'Minha Barbearia'
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao comprimir logo:', err);
+      alert('Erro ao carregar imagem.');
+    } finally {
+      setIsUploadingLogo(false);
+      e.target.value = '';
+    }
+  };
+
+  // Handler for uploading cover from device in dashboard
+  const handleUploadDashboardCapa = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCapa(true);
+    try {
+      const compressed = await compressImageFile(file, 1000, 600, 0.75);
+      if (compressed) {
+        setConfigData(prev => ({
+          ...prev,
+          vitrineCapa: compressed
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao comprimir capa:', err);
+      alert('Erro ao carregar imagem de capa.');
+    } finally {
+      setIsUploadingCapa(false);
+      e.target.value = '';
+    }
+  };
 
   // Handler for saving Configurações
   const handleSaveConfig = async (e: React.FormEvent) => {
@@ -1087,12 +1165,18 @@ export default function MerchantDashboard({
     setIsSavingConfig(true);
     setConfigSuccessMsg(null);
     try {
+      const compressedLogo = await compressDataUrl(configData.vitrineLogoImage, 400, 400, 0.8);
+      const compressedCapa = await compressDataUrl(configData.vitrineCapa, 1000, 600, 0.75);
+
       const updatedProfile: Partial<MerchantUser> = {
         nomeBarbearia: configData.nomeBarbearia,
         nomeProprietario: configData.nomeProprietario,
         whatsapp: configData.whatsapp,
-        vitrineLogo: configData.vitrineLogo,
-        vitrineCapa: configData.vitrineCapa,
+        vitrineLogo: configData.vitrineLogo || configData.nomeBarbearia,
+        vitrineLogoImage: compressedLogo || '',
+        vitrineCapa: compressedCapa || '',
+        vitrineBarbeiroUnico: configData.barbeiroUnico,
+        barbeiroUnico: configData.barbeiroUnico,
         vitrineInstagram: configData.instagram,
         vitrineFacebook: configData.facebook,
         serviceMode: configData.serviceMode,
@@ -1117,6 +1201,22 @@ export default function MerchantDashboard({
       setTimeout(() => setConfigSuccessMsg(null), 4000);
     } catch (err) {
       console.error("Erro ao salvar perfil:", err);
+      if (onUpdateMerchant && merchant) {
+        onUpdateMerchant({
+          ...merchant,
+          nomeBarbearia: configData.nomeBarbearia,
+          nomeProprietario: configData.nomeProprietario,
+          whatsapp: configData.whatsapp,
+          vitrineLogo: configData.vitrineLogo,
+          vitrineLogoImage: configData.vitrineLogoImage,
+          vitrineCapa: configData.vitrineCapa,
+          vitrineBarbeiroUnico: configData.barbeiroUnico,
+          barbeiroUnico: configData.barbeiroUnico,
+          vitrineInstagram: configData.instagram,
+          vitrineFacebook: configData.facebook,
+          serviceMode: configData.serviceMode
+        });
+      }
       setConfigSuccessMsg('Informações atualizadas com sucesso no painel.');
       setTimeout(() => setConfigSuccessMsg(null), 4000);
     } finally {
@@ -3721,46 +3821,128 @@ export default function MerchantDashboard({
                 </div>
               </div>
 
-              {/* LOGO & FOTO DE CAPA */}
+              {/* MODO BARBEIRO ÚNICO (ATENDIMENTO INDIVIDUAL) */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-brand-blue/10 text-brand-blue rounded-2xl">
+                      <Scissors className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider">Modo Barbeiro Único (Studio Individual)</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Ative se você trabalha sozinho. O cliente não precisará escolher barbeiro ao agendar.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfigData(prev => ({ ...prev, barbeiroUnico: !prev.barbeiroUnico }))}
+                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
+                      configData.barbeiroUnico ? 'bg-brand-blue' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        configData.barbeiroUnico ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* LOGO & FOTO DE CAPA COM UPLOAD DO APARELHO */}
               <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                 <h3 className="font-bold text-sm text-brand-dark uppercase tracking-wider flex items-center gap-2">
                   <Upload className="w-4 h-4 text-brand-blue" />
-                  <span>Identidade Visual (Logo & Capa)</span>
+                  <span>Identidade Visual (Foto de Perfil / Logo & Capa)</span>
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">URL da Logo (ou imagem)</label>
-                    <input 
-                      type="text" 
-                      value={configData.vitrineLogo} 
-                      onChange={e => setConfigData({ ...configData, vitrineLogo: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
-                      placeholder="https://exemplo.com/minha-logo.png"
-                    />
-                    {configData.vitrineLogo && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <img src={configData.vitrineLogo} alt="Logo preview" className="w-12 h-12 rounded-xl object-cover border" />
-                        <span className="text-[10px] text-gray-400">Preview da Logo</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                  {/* FOTO DE PERFIL / LOGO */}
+                  <div className="space-y-3 bg-gray-50/80 p-4 rounded-2xl border border-gray-150">
+                    <label className="block font-bold text-gray-800 text-xs">Foto de Perfil / Logo da Barbearia</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-200 border-2 border-brand-blue/20 shrink-0 flex items-center justify-center">
+                        {configData.vitrineLogoImage || configData.vitrineLogo ? (
+                          <img 
+                            src={configData.vitrineLogoImage || configData.vitrineLogo} 
+                            alt="Logo preview" 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <Scissors className="w-6 h-6 text-gray-400" />
+                        )}
                       </div>
-                    )}
+                      <div className="flex-1 space-y-2">
+                        <label className="bg-brand-blue hover:bg-brand-blue/90 text-white font-extrabold py-2 px-3.5 rounded-xl text-[11px] cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-xs active:scale-95">
+                          {isUploadingLogo ? (
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isUploadingLogo ? 'Carregando...' : 'Carregar Foto do Aparelho'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            disabled={isUploadingLogo}
+                            onChange={handleUploadDashboardLogo} 
+                            className="hidden" 
+                          />
+                        </label>
+                        {(configData.vitrineLogoImage || configData.vitrineLogo) && (
+                          <button
+                            type="button"
+                            onClick={() => setConfigData(prev => ({ ...prev, vitrineLogoImage: '', vitrineLogo: '' }))}
+                            className="block text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                          >
+                            Remover foto
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">URL da Foto de Capa da Vitrine</label>
-                    <input 
-                      type="text" 
-                      value={configData.vitrineCapa} 
-                      onChange={e => setConfigData({ ...configData, vitrineCapa: e.target.value })}
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-brand-blue"
-                      placeholder="https://exemplo.com/capa-barbearia.jpg"
-                    />
-                    {configData.vitrineCapa && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <img src={configData.vitrineCapa} alt="Capa preview" className="w-20 h-10 rounded-xl object-cover border" />
-                        <span className="text-[10px] text-gray-400">Preview da Capa</span>
-                      </div>
-                    )}
+                  {/* FOTO DE CAPA / BANNER */}
+                  <div className="space-y-3 bg-gray-50/80 p-4 rounded-2xl border border-gray-150">
+                    <label className="block font-bold text-gray-800 text-xs">Foto de Capa / Banner da Vitrine</label>
+                    <div className="h-16 w-full rounded-2xl overflow-hidden bg-gray-200 border-2 border-brand-blue/20 relative flex items-center justify-center">
+                      {configData.vitrineCapa ? (
+                        <img 
+                          src={configData.vitrineCapa} 
+                          alt="Capa preview" 
+                          className="w-full h-full object-cover" 
+                        />
+                      ) : (
+                        <span className="text-gray-400 text-[11px] font-bold">Sem capa personalizada</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="bg-brand-blue hover:bg-brand-blue/90 text-white font-extrabold py-2 px-3.5 rounded-xl text-[11px] cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-xs active:scale-95">
+                        {isUploadingCapa ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isUploadingCapa ? 'Carregando...' : 'Carregar Capa do Aparelho'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          disabled={isUploadingCapa}
+                          onChange={handleUploadDashboardCapa} 
+                          className="hidden" 
+                        />
+                      </label>
+                      {configData.vitrineCapa && (
+                        <button
+                          type="button"
+                          onClick={() => setConfigData(prev => ({ ...prev, vitrineCapa: '' }))}
+                          className="text-[10px] text-red-500 hover:text-red-700 font-bold cursor-pointer px-2"
+                        >
+                          Remover capa
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

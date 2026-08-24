@@ -137,6 +137,10 @@ export interface MerchantUser {
   // Horário & Atendimento de Hoje (Recurso Dinâmico)
   vitrineHorarioHoje?: VitrineHorarioHoje;
 
+  // Single Barber Mode (Oculta seleção/ícone de barbeiro no agendamento e equipe na vitrine)
+  barbeiroUnico?: boolean;
+  vitrineBarbeiroUnico?: boolean;
+
   // Invite code / Draft vitrine redemption fields
   codigoConviteResgatado?: string;
   vitrineDraftResgatada?: boolean;
@@ -293,7 +297,14 @@ export interface DraftVitrine {
   logoUrl?: string;
   capaUrl?: string;
   horarios?: string;
-  servicos?: { name: string; price: number; durationMin: number }[];
+  servicos?: { id?: string; name: string; price: number; durationMin: number; description?: string }[];
+  barbeiroUnico?: boolean; // Se ativo, oculta seleção/ícones de barbeiro no agendamento e vitrine
+  themePreset?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  gradientEnabled?: boolean;
+  template?: 'modelo1' | 'modelo2';
+  modoAcao?: 'agendamento' | 'whatsapp';
   usado: boolean;
   resgatadoPorEmail?: string;
   resgatadoPorUid?: string;

@@ -28,6 +28,7 @@ interface ClientBookingProps {
   merchantWhatsApp?: string;
   customWhatsAppMessage?: string;
   barberName?: string;
+  singleBarberMode?: boolean;
 }
 
 export default function ClientBooking({ 
@@ -40,7 +41,8 @@ export default function ClientBooking({
   merchantUid,
   merchantWhatsApp,
   customWhatsAppMessage,
-  barberName
+  barberName,
+  singleBarberMode = false
 }: ClientBookingProps) {
   // Step 1: Service, 2: Professional, 3: Date & Time, 4: Client Info, 5: Confirmation, 6: Meus Agendamentos
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
@@ -418,7 +420,18 @@ export default function ClientBooking({
                   type="button"
                   onClick={() => {
                     setSelectedService(s);
-                    setStep(2);
+                    if (singleBarberMode || availableBarbers.length === 1) {
+                      setSelectedBarber(availableBarbers[0] || {
+                        id: 'b-default',
+                        name: barberName || businessName || 'Barbeiro',
+                        avatar: businessLogo || '',
+                        rating: 5.0,
+                        specialty: 'Atendimento Especializado'
+                      });
+                      setStep(3);
+                    } else {
+                      setStep(2);
+                    }
                   }}
                   className={`w-full text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                     selectedService?.id === s.id
@@ -553,7 +566,13 @@ export default function ClientBooking({
           <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
             <button
               type="button"
-              onClick={() => setStep(2)}
+              onClick={() => {
+                if (singleBarberMode || availableBarbers.length === 1) {
+                  setStep(1);
+                } else {
+                  setStep(2);
+                }
+              }}
               className="px-6 py-2.5 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
             >
               ← Voltar
