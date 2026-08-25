@@ -193,12 +193,14 @@ export default function CortesVitrine({
   );
   const [mensagemWhatsAppOrdemChegada, setMensagemWhatsAppOrdemChegada] = useState<string>(
     merchant.vitrineMensagemWhatsAppOrdemChegada || 
-    'Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.'
+    'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈'
   );
   const [mensagemWhatsAppCustom, setMensagemWhatsAppCustom] = useState<string>(
     merchant.vitrineMensagemWhatsAppPersonalizada || ''
   );
-  const [activeMsgTab, setActiveMsgTab] = useState<'agendamento' | 'ordem_chegada'>('agendamento');
+  const [activeMsgTab, setActiveMsgTab] = useState<'agendamento' | 'ordem_chegada'>(
+    (merchant.vitrineModoAcao === 'whatsapp' || (merchant as any).modoAcao === 'whatsapp') ? 'ordem_chegada' : 'agendamento'
+  );
   const [showVarsGuide, setShowVarsGuide] = useState<boolean>(true);
 
   // Usar saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite)
@@ -214,8 +216,8 @@ export default function CortesVitrine({
   const [instagram, setInstagram] = useState(merchant.vitrineInstagram || '@cortestime_barber');
   const [linkBio, setLinkBio] = useState(merchant.vitrineLinkBio || 'instagram.com/cortestime_barber');
   const [logoText, setLogoText] = useState(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
-  const [logoImage, setLogoImage] = useState(merchant.vitrineLogoImage || '');
-  const [slogan, setSlogan] = useState(merchant.vitrineSlogan || 'Corte, Barba & Estilo de Alto Padrão');
+  const [logoImage, setLogoImage] = useState(merchant.vitrineLogoImage || (merchant as any).logoUrl || '');
+  const [slogan, setSlogan] = useState(merchant.vitrineSlogan || (merchant as any).slogan || 'Corte, Barba & Estilo de Alto Padrão');
 
   // Helpers de Saudação e Mensagem Dinâmica do WhatsApp
   const getSaudacaoHorario = () => {
@@ -268,12 +270,12 @@ export default function CortesVitrine({
     if (contexto === 'agendamento') {
       template = mensagemWhatsAppAgendamento || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️';
     } else if (contexto === 'ordem_chegada') {
-      template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.';
+      template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈';
     } else {
       if (modoAcao === 'whatsapp') {
-        template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. Vocês estão atendendo hoje? Gostaria de saber se tem horário disponível para {servico}!';
+        template = mensagemWhatsAppOrdemChegada || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈';
       } else {
-        template = mensagemWhatsAppAgendamento || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia} e gostaria de agendar o serviço: *{servico}*. Vocês estão abertos hoje e têm horário disponível?';
+        template = mensagemWhatsAppAgendamento || mensagemWhatsAppCustom || 'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️';
       }
     }
 
@@ -335,7 +337,7 @@ export default function CortesVitrine({
     }
   };
 
-  const [capa, setCapa] = useState(merchant?.vitrineCapa || DEFAULT_COVER_URL);
+  const [capa, setCapa] = useState(merchant?.vitrineCapa || (merchant as any)?.capaUrl || DEFAULT_COVER_URL);
   const [linkPersonalizado, setLinkPersonalizado] = useState(
     merchant?.vitrineLinkPersonalizado || 
     (merchant?.nomeBarbearia || 'barbearia').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
@@ -343,17 +345,20 @@ export default function CortesVitrine({
   
   // Local state for products
   const [products, setProducts] = useState<{ id: string; name: string; price: number }[]>(
-    merchant.vitrineProdutos || [
-      { id: 'p1', name: 'Pomada Efeito Matte Premium', price: 45.00 },
-      { id: 'p2', name: 'Óleo Hidratante para Barba', price: 35.00 }
-    ]
+    merchant.vitrineProdutos || 
+    (services && services.length > 0 
+      ? services.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price })) 
+      : [
+          { id: 'p1', name: 'Pomada Efeito Matte Premium', price: 45.00 },
+          { id: 'p2', name: 'Óleo Hidratante para Barba', price: 35.00 }
+        ])
   );
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
 
   // Local state for gallery
   const [gallery, setGallery] = useState<string[]>(
-    merchant.vitrineGaleria || DEFAULT_HAIRCUTS
+    merchant.vitrineGaleria || []
   );
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
@@ -520,11 +525,16 @@ export default function CortesVitrine({
       if (merchant.vitrineHorarios) setHorarios(merchant.vitrineHorarios);
       if (merchant.vitrineLocalizacao || merchant.vitrineEndereco) setLocalizacao(merchant.vitrineLocalizacao || (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : ''));
       if (merchant.vitrineWhatsApp || merchant.whatsapp) setWhatsapp(merchant.vitrineWhatsApp || merchant.whatsapp || '');
-      if (merchant.vitrineModoAcao) setModoAcao(merchant.vitrineModoAcao);
+      if (merchant.vitrineModoAcao) {
+        setModoAcao(merchant.vitrineModoAcao);
+        setActiveMsgTab(merchant.vitrineModoAcao === 'whatsapp' ? 'ordem_chegada' : 'agendamento');
+      }
       if (merchant.vitrineLogo || merchant.nomeBarbearia) setLogoText(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
-      if (merchant.vitrineLogoImage !== undefined) setLogoImage(merchant.vitrineLogoImage);
+      const incomingLogo = merchant.vitrineLogoImage !== undefined ? merchant.vitrineLogoImage : (merchant as any).logoUrl;
+      if (incomingLogo !== undefined && incomingLogo !== '') setLogoImage(incomingLogo);
       if (merchant.vitrineSlogan) setSlogan(merchant.vitrineSlogan);
-      if (merchant.vitrineCapa) setCapa(merchant.vitrineCapa);
+      const incomingCapa = merchant.vitrineCapa !== undefined ? merchant.vitrineCapa : (merchant as any).capaUrl;
+      if (incomingCapa !== undefined && incomingCapa !== '') setCapa(incomingCapa);
       if (merchant.vitrineInstagram) setInstagram(merchant.vitrineInstagram);
       if (merchant.vitrineLinkBio) setLinkBio(merchant.vitrineLinkBio);
       if (merchant.vitrineLinkPersonalizado) setLinkPersonalizado(merchant.vitrineLinkPersonalizado);
@@ -904,7 +914,11 @@ export default function CortesVitrine({
           slogan: slogan || '',
           horarios: horarios || 'Seg - Sáb: 08:00 às 20:00',
           logoUrl: finalLogoImage,
+          vitrineLogoImage: finalLogoImage,
           capaUrl: finalCapa,
+          vitrineCapa: finalCapa,
+          galeria: finalGallery || [],
+          vitrineGaleria: finalGallery || [],
           themePreset: themePreset,
           primaryColor: primaryColor,
           secondaryColor: secondaryColor,
@@ -912,7 +926,7 @@ export default function CortesVitrine({
           template: template,
           modoAcao: modoAcao,
           barbeiroUnico: barbeiroUnico,
-          servicos: (products && products.length > 0 ? products : services).map((p: any, idx: number) => ({
+          servicos: (products && products.length > 0 ? products : (services && services.length > 0 ? services : [])).map((p: any, idx: number) => ({
             id: p.id || `s-${idx}`,
             name: p.name || 'Serviço',
             price: typeof p.price === 'number' ? p.price : (parseFloat(p.price) || 0),
@@ -3100,7 +3114,10 @@ export default function CortesVitrine({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Card 1: Agendamento no Sistema */}
                   <div
-                    onClick={() => setModoAcao('agendamento')}
+                    onClick={() => {
+                      setModoAcao('agendamento');
+                      setActiveMsgTab('agendamento');
+                    }}
                     className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 relative ${
                       modoAcao === 'agendamento'
                         ? 'bg-[#092861] border-blue-400 ring-2 ring-blue-400/20 shadow-lg'
@@ -3132,7 +3149,10 @@ export default function CortesVitrine({
 
                   {/* Card 2: Direto para o WhatsApp */}
                   <div
-                    onClick={() => setModoAcao('whatsapp')}
+                    onClick={() => {
+                      setModoAcao('whatsapp');
+                      setActiveMsgTab('ordem_chegada');
+                    }}
                     className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 relative ${
                       modoAcao === 'whatsapp'
                         ? 'bg-emerald-950/40 border-emerald-400 ring-2 ring-emerald-400/20 shadow-lg shadow-emerald-950/50'
@@ -3322,7 +3342,7 @@ export default function CortesVitrine({
                           if (activeMsgTab === 'agendamento') {
                             setMensagemWhatsAppAgendamento('Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️');
                           } else {
-                            setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}.');
+                            setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈');
                           }
                         }}
                         className="text-[10px] text-gray-400 hover:text-white transition-colors cursor-pointer underline"
@@ -3344,7 +3364,7 @@ export default function CortesVitrine({
                         rows={3}
                         value={mensagemWhatsAppOrdemChegada}
                         onChange={e => setMensagemWhatsAppOrdemChegada(e.target.value)}
-                        placeholder="Olá {barbeiro}, {saudacao}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está a ordem de chegada e a fila para {servico}."
+                        placeholder="Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈"
                         className="w-full bg-[#020e17] text-white border border-emerald-500/30 focus:border-emerald-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
                       />
                     )}
@@ -3473,27 +3493,27 @@ export default function CortesVitrine({
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! Sabe me dizer se a {barbearia} está aberta hoje? Gostaria de saber como está para fazer {servico}.')}
+                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈')}
                             className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
-                            <span className="font-bold text-white block mb-0.5">🟢 Perguntar se está aberto hoje</span>
-                            "Sabe me dizer se a {'{barbearia}'} está aberta hoje? Gostaria de..."
+                            <span className="font-bold text-white block mb-0.5">🟢 Aberto Hoje? + Corte</span>
+                            "A {'{barbearia}'} está aberta hoje? Gostaria de saber se posso ir cortar {'{servico}'}..."
                           </button>
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. O atendimento hoje é por ordem de chegada? Tem muita fila para {servico}?')}
+                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. Vocês estão atendendo por ordem de chegada agora? Tem muita fila para {servico}? 💈')}
                             className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
                             <span className="font-bold text-white block mb-0.5">💈 Ordem de Chegada & Fila</span>
-                            "O atendimento hoje é por ordem de chegada? Tem muita fila..."
+                            "O atendimento hoje é por ordem de chegada? Tem muita fila para {'{servico}'}..."
                           </button>
                           <button
                             type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! Vocês têm algum horário livre hoje na {barbearia} para {servico}?')}
+                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! A {barbearia} está aberta agora? Tem vaga livre hoje para fazer {servico}? ⏰')}
                             className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
                           >
-                            <span className="font-bold text-white block mb-0.5">⏰ Horário Livre Hoje</span>
-                            "Vocês têm algum horário livre hoje na {'{barbearia}'} para..."
+                            <span className="font-bold text-white block mb-0.5">⏰ Aberto Agora & Vaga</span>
+                            "A {'{barbearia}'} está aberta agora? Tem vaga livre hoje para fazer {'{servico}'}?..."
                           </button>
                         </div>
                       )}

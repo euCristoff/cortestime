@@ -142,7 +142,8 @@ export const firebaseService = {
       codigoConviteResgatado: normCode || undefined,
 
       ...(draft ? {
-        vitrineLogo: draft.logoUrl || '',
+        vitrineLogo: draft.nomeBarbearia || '',
+        vitrineLogoImage: draft.logoUrl || '',
         vitrineCapa: draft.capaUrl || '',
         vitrineSlogan: draft.slogan || '',
         vitrineHorarios: draft.horarios || '',
@@ -159,7 +160,8 @@ export const firebaseService = {
         vitrineSecondaryColor: draft.secondaryColor,
         vitrineGradientEnabled: draft.gradientEnabled,
         vitrineTemplate: draft.template,
-        vitrineModoAcao: draft.modoAcao
+        vitrineModoAcao: draft.modoAcao,
+        vitrineGaleria: draft.galeria || []
       } : {})
     };
 
@@ -666,7 +668,8 @@ export const firebaseService = {
         vitrineSecondaryColor: d.secondaryColor,
         vitrineGradientEnabled: d.gradientEnabled,
         vitrineTemplate: d.template,
-        vitrineModoAcao: d.modoAcao
+        vitrineModoAcao: d.modoAcao,
+        vitrineGaleria: d.galeria || []
       };
     };
 
@@ -1275,6 +1278,9 @@ export const firebaseService = {
       : `BARBER-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
     const id = draftData.id || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+    const logo = draftData.logoUrl || (draftData as any)?.vitrineLogoImage || '';
+    const capa = draftData.capaUrl || (draftData as any)?.vitrineCapa || '';
+    const gal = draftData.galeria || (draftData as any)?.vitrineGaleria || [];
     const newDraft: DraftVitrine = {
       id,
       codigo: rawCode,
@@ -1284,8 +1290,12 @@ export const firebaseService = {
       instagram: draftData.instagram || '',
       endereco: draftData.endereco || '',
       slogan: draftData.slogan || '',
-      logoUrl: draftData.logoUrl || '',
-      capaUrl: draftData.capaUrl || '',
+      logoUrl: logo,
+      vitrineLogoImage: logo,
+      capaUrl: capa,
+      vitrineCapa: capa,
+      galeria: gal,
+      vitrineGaleria: gal,
       horarios: draftData.horarios || 'Seg - Sáb: 08:00 às 20:00',
       servicos: draftData.servicos || [
         { name: 'Corte de Cabelo', price: 35, durationMin: 30 },
@@ -1333,6 +1343,24 @@ export const firebaseService = {
     const finalId = draftId || existing?.id || `draft_${Date.now()}`;
     const finalCode = draftData.codigo || existing?.codigo || `BARBER-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
+    const incomingLogo = draftData.logoUrl !== undefined 
+      ? draftData.logoUrl 
+      : (draftData as any)?.vitrineLogoImage !== undefined 
+      ? (draftData as any).vitrineLogoImage 
+      : (existing?.logoUrl ?? (existing as any)?.vitrineLogoImage ?? '');
+
+    const incomingCapa = draftData.capaUrl !== undefined 
+      ? draftData.capaUrl 
+      : (draftData as any)?.vitrineCapa !== undefined 
+      ? (draftData as any).vitrineCapa 
+      : (existing?.capaUrl ?? (existing as any)?.vitrineCapa ?? '');
+
+    const incomingGaleria = draftData.galeria !== undefined
+      ? draftData.galeria
+      : (draftData as any)?.vitrineGaleria !== undefined
+      ? (draftData as any).vitrineGaleria
+      : (existing?.galeria ?? (existing as any)?.vitrineGaleria ?? []);
+
     const merged: DraftVitrine = {
       id: finalId,
       codigo: finalCode,
@@ -1342,8 +1370,12 @@ export const firebaseService = {
       instagram: draftData.instagram !== undefined ? draftData.instagram : (existing?.instagram ?? ''),
       endereco: draftData.endereco !== undefined ? draftData.endereco : (existing?.endereco ?? ''),
       slogan: draftData.slogan !== undefined ? draftData.slogan : (existing?.slogan ?? ''),
-      logoUrl: draftData.logoUrl !== undefined ? draftData.logoUrl : (existing?.logoUrl ?? ''),
-      capaUrl: draftData.capaUrl !== undefined ? draftData.capaUrl : (existing?.capaUrl ?? ''),
+      logoUrl: incomingLogo,
+      vitrineLogoImage: incomingLogo,
+      capaUrl: incomingCapa,
+      vitrineCapa: incomingCapa,
+      galeria: incomingGaleria,
+      vitrineGaleria: incomingGaleria,
       horarios: draftData.horarios !== undefined ? draftData.horarios : (existing?.horarios ?? 'Seg - Sáb: 08:00 às 20:00'),
       servicos: draftData.servicos !== undefined ? draftData.servicos : (existing?.servicos ?? []),
       barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : (existing?.barbeiroUnico ?? true),
@@ -1427,7 +1459,9 @@ export const firebaseService = {
             slogan: 'Estilo e tradição para o homem moderno',
             horarios: 'Seg - Sáb: 09:00 às 20:00',
             logoUrl: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&q=80',
+            vitrineLogoImage: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&q=80',
             capaUrl: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=1200&q=80',
+            vitrineCapa: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=1200&q=80',
             servicos: [
               { name: 'Corte Social / Fade', price: 40, durationMin: 35 },
               { name: 'Barba Alinhada na Toalha Quente', price: 30, durationMin: 25 },
@@ -1501,14 +1535,31 @@ export const firebaseService = {
       console.error("Error reading LocalStorage draft vitrines:", e);
     }
 
-    // Deduplicate and merge lists: match by id OR by normalized codigo
+    // Deduplicate and merge lists: Firestore is the primary source of truth
     const mergedList: DraftVitrine[] = [];
-    const allCombined = [...firestoreList, ...localList];
 
-    for (const item of allCombined) {
-      if (!item) continue;
-      const itemId = item.id ? String(item.id).trim() : '';
-      const itemCode = item.codigo ? item.codigo.trim().toUpperCase() : '';
+    // 1. Add all Firestore items
+    for (const fItem of firestoreList) {
+      if (!fItem) continue;
+      const logo = fItem.logoUrl || (fItem as any).vitrineLogoImage || '';
+      const capa = fItem.capaUrl || (fItem as any).vitrineCapa || '';
+      const gal = fItem.galeria || (fItem as any).vitrineGaleria || [];
+      mergedList.push({
+        ...fItem,
+        logoUrl: logo,
+        vitrineLogoImage: logo,
+        capaUrl: capa,
+        vitrineCapa: capa,
+        galeria: gal,
+        vitrineGaleria: gal
+      });
+    }
+
+    // 2. Merge local items if not in Firestore, or backfill any missing data
+    for (const lItem of localList) {
+      if (!lItem) continue;
+      const itemId = lItem.id ? String(lItem.id).trim() : '';
+      const itemCode = lItem.codigo ? lItem.codigo.trim().toUpperCase() : '';
 
       const existingIdx = mergedList.findIndex(existing => {
         const existingId = existing.id ? String(existing.id).trim() : '';
@@ -1516,17 +1567,34 @@ export const firebaseService = {
         return (itemId && existingId && itemId === existingId) || (itemCode && existingCode && itemCode === existingCode);
       });
 
+      const lLogo = lItem.logoUrl || (lItem as any).vitrineLogoImage || '';
+      const lCapa = lItem.capaUrl || (lItem as any).vitrineCapa || '';
+      const lGal = lItem.galeria || (lItem as any).vitrineGaleria || [];
+
       if (existingIdx >= 0) {
-        // Merge with existing (prefer firestore data if available)
+        const current = mergedList[existingIdx];
         mergedList[existingIdx] = {
-          ...mergedList[existingIdx],
-          ...item,
-          // Ensure non-empty id and codigo
-          id: mergedList[existingIdx].id || item.id,
-          codigo: mergedList[existingIdx].codigo || item.codigo
+          ...lItem,
+          ...current,
+          logoUrl: current.logoUrl || lLogo,
+          vitrineLogoImage: current.vitrineLogoImage || current.logoUrl || lLogo,
+          capaUrl: current.capaUrl || lCapa,
+          vitrineCapa: current.vitrineCapa || current.capaUrl || lCapa,
+          galeria: (current.galeria && current.galeria.length > 0) ? current.galeria : lGal,
+          servicos: (current.servicos && current.servicos.length > 0) ? current.servicos : (lItem.servicos || []),
+          id: current.id || lItem.id,
+          codigo: current.codigo || lItem.codigo
         };
       } else {
-        mergedList.push({ ...item });
+        mergedList.push({
+          ...lItem,
+          logoUrl: lLogo,
+          vitrineLogoImage: lLogo,
+          capaUrl: lCapa,
+          vitrineCapa: lCapa,
+          galeria: lGal,
+          vitrineGaleria: lGal
+        });
       }
     }
 

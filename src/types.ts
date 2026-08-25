@@ -298,7 +298,11 @@ export interface DraftVitrine {
   endereco?: string;
   slogan?: string;
   logoUrl?: string;
+  vitrineLogoImage?: string;
   capaUrl?: string;
+  vitrineCapa?: string;
+  galeria?: string[]; // Portfólio de fotos dos cortes e trabalhos
+  vitrineGaleria?: string[];
   horarios?: string;
   servicos?: { id?: string; name: string; price: number; durationMin: number; description?: string }[];
   barbeiroUnico?: boolean; // Se ativo, oculta seleção/ícones de barbeiro no agendamento e vitrine

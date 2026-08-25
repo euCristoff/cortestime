@@ -33,13 +33,53 @@ import {
   Scissors,
   Save,
   Phone,
-  Globe
+  Globe,
+  Camera,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { MerchantUser, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import CortesVitrine from './CortesVitrine';
 import AdminAnalyticsDashboard from './AdminAnalyticsDashboard';
 import { THEME_PRESETS } from '../utils/vitrineTheme';
+
+function compressImageFile(file: File, maxWidth = 500, maxHeight = 500, quality = 0.8): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve('');
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => resolve((e.target?.result as string) || '');
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve((e.target?.result as string) || '');
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = (e.target?.result as string) || '';
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 interface AdminSubscriptionManagerProps {
   currentAdmin: MerchantUser;
@@ -70,6 +110,8 @@ export default function AdminSubscriptionManager({
   const [draftInstagram, setDraftInstagram] = useState('');
   const [draftEndereco, setDraftEndereco] = useState('');
   const [draftSlogan, setDraftSlogan] = useState('');
+  const [draftLogoUrl, setDraftLogoUrl] = useState('');
+  const [draftCapaUrl, setDraftCapaUrl] = useState('');
   const [draftHorarios, setDraftHorarios] = useState('Seg - Sáb: 08:00 às 20:00');
   const [draftCodigo, setDraftCodigo] = useState('');
   const [draftBarbeiroUnico, setDraftBarbeiroUnico] = useState(false);
@@ -79,6 +121,8 @@ export default function AdminSubscriptionManager({
   const [draftGradientEnabled, setDraftGradientEnabled] = useState(true);
   const [draftTemplate, setDraftTemplate] = useState<'modelo1' | 'modelo2'>('modelo1');
   const [draftModoAcao, setDraftModoAcao] = useState<'agendamento' | 'whatsapp'>('agendamento');
+  const [draftGaleria, setDraftGaleria] = useState<string[]>([]);
+  const [draftNewGalleryUrl, setDraftNewGalleryUrl] = useState('');
   const [draftServicos, setDraftServicos] = useState<Array<{ name: string; price: number; durationMin: number }>>([
     { name: 'Corte de Cabelo', price: 40, durationMin: 30 },
     { name: 'Barba Alinhada', price: 30, durationMin: 25 },
@@ -93,6 +137,10 @@ export default function AdminSubscriptionManager({
   const [editInstagram, setEditInstagram] = useState('');
   const [editEndereco, setEditEndereco] = useState('');
   const [editSlogan, setEditSlogan] = useState('');
+  const [editLogoUrl, setEditLogoUrl] = useState('');
+  const [editCapaUrl, setEditCapaUrl] = useState('');
+  const [editGaleria, setEditGaleria] = useState<string[]>([]);
+  const [editNewGalleryUrl, setEditNewGalleryUrl] = useState('');
   const [editHorarios, setEditHorarios] = useState('');
   const [editBarbeiroUnico, setEditBarbeiroUnico] = useState(false);
   const [editThemePreset, setEditThemePreset] = useState('cortestime');
@@ -314,6 +362,12 @@ export default function AdminSubscriptionManager({
         instagram: draftInstagram,
         endereco: draftEndereco,
         slogan: draftSlogan,
+        logoUrl: draftLogoUrl,
+        vitrineLogoImage: draftLogoUrl,
+        capaUrl: draftCapaUrl,
+        vitrineCapa: draftCapaUrl,
+        galeria: draftGaleria,
+        vitrineGaleria: draftGaleria,
         horarios: draftHorarios,
         servicos: draftServicos,
         barbeiroUnico: draftBarbeiroUnico,
@@ -338,6 +392,10 @@ export default function AdminSubscriptionManager({
       setDraftInstagram('');
       setDraftEndereco('');
       setDraftSlogan('');
+      setDraftLogoUrl('');
+      setDraftCapaUrl('');
+      setDraftGaleria([]);
+      setDraftNewGalleryUrl('');
       setDraftCodigo('');
       setDraftBarbeiroUnico(false);
       setDraftThemePreset('cortestime');
@@ -360,6 +418,17 @@ export default function AdminSubscriptionManager({
     setEditInstagram(draft.instagram || '');
     setEditEndereco(draft.endereco || '');
     setEditSlogan(draft.slogan || '');
+    const initialLogo = draft.logoUrl || (draft as any).vitrineLogoImage || '';
+    const initialCapa = draft.capaUrl || (draft as any).vitrineCapa || '';
+    const initialGaleria = draft.galeria && draft.galeria.length > 0 
+      ? [...draft.galeria] 
+      : (draft as any).vitrineGaleria && (draft as any).vitrineGaleria.length > 0 
+      ? [...(draft as any).vitrineGaleria] 
+      : [];
+    setEditLogoUrl(initialLogo);
+    setEditCapaUrl(initialCapa);
+    setEditGaleria(initialGaleria);
+    setEditNewGalleryUrl('');
     setEditHorarios(draft.horarios || 'Seg - Sáb: 08:00 às 20:00');
     setEditBarbeiroUnico(draft.barbeiroUnico ?? false);
     setEditThemePreset(draft.themePreset || 'cortestime');
@@ -422,6 +491,12 @@ export default function AdminSubscriptionManager({
         instagram: editInstagram.trim(),
         endereco: editEndereco.trim(),
         slogan: editSlogan.trim(),
+        logoUrl: editLogoUrl,
+        vitrineLogoImage: editLogoUrl,
+        capaUrl: editCapaUrl,
+        vitrineCapa: editCapaUrl,
+        galeria: editGaleria,
+        vitrineGaleria: editGaleria,
         horarios: editHorarios.trim(),
         barbeiroUnico: editBarbeiroUnico,
         themePreset: editThemePreset,
@@ -1031,10 +1106,30 @@ export default function AdminSubscriptionManager({
                             </div>
                           </div>
 
+                          <div className="flex items-center gap-3">
+                            {(draft.logoUrl || (draft as any).vitrineLogoImage) ? (
+                              <img 
+                                src={draft.logoUrl || (draft as any).vitrineLogoImage} 
+                                alt={draft.nomeBarbearia} 
+                                className="w-11 h-11 rounded-2xl object-cover border border-gray-200 shadow-2xs shrink-0 bg-white"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-2xl bg-brand-blue/10 border border-brand-blue/20 text-brand-blue font-black flex items-center justify-center text-sm shrink-0">
+                                {draft.nomeBarbearia ? draft.nomeBarbearia.substring(0, 2).toUpperCase() : 'CV'}
+                              </div>
+                            )}
+
+                            <div className="space-y-1 text-xs flex-1">
+                              <h4 className="font-extrabold text-brand-dark text-sm">
+                                {draft.nomeBarbearia}
+                              </h4>
+                              {draft.slogan && (
+                                <p className="text-[11px] text-gray-500 italic truncate max-w-md">{draft.slogan}</p>
+                              )}
+                            </div>
+                          </div>
+
                           <div className="space-y-1 text-xs">
-                            <h4 className="font-extrabold text-brand-dark text-sm">
-                              {draft.nomeBarbearia}
-                            </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-[11px] text-gray-600">
                               {draft.nomeProprietario && (
                                 <p><strong className="text-gray-700">Proprietário:</strong> {draft.nomeProprietario}</p>
@@ -1207,6 +1302,191 @@ export default function AdminSubscriptionManager({
                     placeholder="Ex: Barbearia Premium Club"
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:border-brand-blue outline-none"
                   />
+                </div>
+
+                {/* LOGO & CAPA DA VITRINE */}
+                <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                  <h4 className="font-bold text-gray-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-brand-blue" />
+                    <span>Logo e Capa da Vitrine</span>
+                  </h4>
+
+                  {/* Logo Section */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      {draftLogoUrl ? (
+                        <img 
+                          src={draftLogoUrl} 
+                          alt="Logo Preview" 
+                          className="w-14 h-14 rounded-2xl object-cover border-2 border-brand-blue shadow-sm bg-white" 
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-brand-blue/10 border-2 border-dashed border-brand-blue/30 text-brand-blue flex flex-col items-center justify-center text-[10px] font-bold">
+                          <Camera className="w-4 h-4 mb-0.5" />
+                          <span>Logo</span>
+                        </div>
+                      )}
+                      {draftLogoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setDraftLogoUrl('')}
+                          className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600 transition-colors"
+                          title="Remover logo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <label className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 shadow-xs transition-all">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Carregar Logo</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const comp = await compressImageFile(file, 400, 400, 0.85);
+                                  if (comp) setDraftLogoUrl(comp);
+                                } catch (err) {
+                                  console.error("Erro ao carregar logo:", err);
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <span className="text-[10px] text-gray-400">ou cole o link abaixo</span>
+                      </div>
+                      <input 
+                        type="url" 
+                        placeholder="https://... (URL da Logo)" 
+                        value={draftLogoUrl.startsWith('data:') ? '' : draftLogoUrl}
+                        onChange={e => setDraftLogoUrl(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Capa Section */}
+                  <div className="pt-2 border-t border-gray-200 space-y-1.5">
+                    <label className="font-bold text-gray-700 text-[11px] flex items-center justify-between">
+                      <span>Foto de Capa (Banner superior)</span>
+                      {draftCapaUrl && (
+                        <button 
+                          type="button" 
+                          onClick={() => setDraftCapaUrl('')}
+                          className="text-red-500 hover:text-red-700 text-[10px]"
+                        >
+                          Limpar Capa
+                        </button>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 border border-gray-300 transition-all shrink-0">
+                        <Upload className="w-3.5 h-3.5 text-gray-600" />
+                        <span>Foto de Capa</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const comp = await compressImageFile(file, 1000, 600, 0.75);
+                                if (comp) setDraftCapaUrl(comp);
+                              } catch (err) {
+                                console.error("Erro ao carregar capa:", err);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                      <input 
+                        type="url" 
+                        placeholder="https://... (URL da Capa)" 
+                        value={draftCapaUrl.startsWith('data:') ? '' : draftCapaUrl}
+                        onChange={e => setDraftCapaUrl(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Galeria de Fotos / Portfólio */}
+                  <div className="pt-2 border-t border-gray-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-gray-700 text-[11px] flex items-center gap-1">
+                        <Camera className="w-3.5 h-3.5 text-brand-blue" />
+                        <span>Fotos do Portfólio ({draftGaleria.length})</span>
+                      </label>
+                      <span className="text-[10px] text-gray-400">Carrossel de cortes</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 shadow-xs transition-all shrink-0">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Foto</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const comp = await compressImageFile(file, 800, 800, 0.8);
+                                if (comp) setDraftGaleria(prev => [...prev, comp]);
+                              } catch (err) {
+                                console.error("Erro ao carregar foto da galeria:", err);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                      <input 
+                        type="url" 
+                        placeholder="ou cole o link da foto https://..." 
+                        value={draftNewGalleryUrl}
+                        onChange={e => setDraftNewGalleryUrl(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (draftNewGalleryUrl.trim()) {
+                            setDraftGaleria(prev => [...prev, draftNewGalleryUrl.trim()]);
+                            setDraftNewGalleryUrl('');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-[11px]"
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    {draftGaleria.length > 0 && (
+                      <div className="flex items-center gap-2 overflow-x-auto py-1">
+                        {draftGaleria.map((img, idx) => (
+                          <div key={`draft-gal-${idx}`} className="relative w-14 h-14 rounded-xl overflow-hidden border border-gray-300 shrink-0 group bg-gray-100">
+                            <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setDraftGaleria(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 shadow-sm opacity-90 hover:opacity-100 transition-opacity"
+                              title="Remover foto"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* SINGLE BARBER MODE TOGGLE */}
@@ -1504,6 +1784,7 @@ export default function AdminSubscriptionManager({
                     vitrineLogoImage: previewDraft.logoUrl,
                     vitrineLogo: previewDraft.nomeBarbearia,
                     vitrineCapa: previewDraft.capaUrl,
+                    vitrineGaleria: previewDraft.galeria || [],
                     vitrineThemePreset: previewDraft.themePreset || 'cortestime',
                     vitrinePrimaryColor: previewDraft.primaryColor || '#051b42',
                     vitrineSecondaryColor: previewDraft.secondaryColor || '#2563eb',
@@ -1551,6 +1832,7 @@ export default function AdminSubscriptionManager({
                       horarios: updatedMerchant.vitrineHorarios ?? previewDraft.horarios,
                       logoUrl: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
                       capaUrl: updatedMerchant.vitrineCapa ?? previewDraft.capaUrl,
+                      galeria: updatedMerchant.vitrineGaleria !== undefined ? updatedMerchant.vitrineGaleria : (previewDraft.galeria || []),
                       themePreset: updatedMerchant.vitrineThemePreset ?? previewDraft.themePreset,
                       primaryColor: updatedMerchant.vitrinePrimaryColor ?? previewDraft.primaryColor,
                       secondaryColor: updatedMerchant.vitrineSecondaryColor ?? previewDraft.secondaryColor,
@@ -1558,14 +1840,14 @@ export default function AdminSubscriptionManager({
                       template: updatedMerchant.vitrineTemplate ?? previewDraft.template,
                       modoAcao: updatedMerchant.vitrineModoAcao ?? previewDraft.modoAcao,
                       barbeiroUnico: updatedMerchant.vitrineBarbeiroUnico ?? updatedMerchant.barbeiroUnico ?? previewDraft.barbeiroUnico,
-                      servicos: (updatedMerchant.vitrineProdutos && updatedMerchant.vitrineProdutos.length > 0
+                      servicos: (updatedMerchant.vitrineProdutos !== undefined
                         ? updatedMerchant.vitrineProdutos.map((p, idx) => ({
                             id: p.id || `s-${idx}`,
                             name: p.name,
-                            price: p.price,
+                            price: typeof p.price === 'number' ? p.price : (parseFloat(p.price) || 0),
                             durationMin: 30
                           }))
-                        : previewDraft.servicos)
+                        : (previewDraft.servicos || []))
                     };
 
                     setPreviewDraft(updatedDraft);
@@ -1695,6 +1977,193 @@ export default function AdminSubscriptionManager({
                         placeholder="Ex: Seg - Sáb: 09:00 às 19:00"
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:border-brand-blue outline-none"
                       />
+                    </div>
+                  </div>
+
+                  {/* Logo & Capa Section */}
+                  <div className="pt-3 border-t border-gray-200 space-y-3">
+                    <h5 className="font-bold text-gray-800 text-[11px] flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-brand-blue" />
+                      <span>Identidade Visual: Logo e Capa da Vitrine</span>
+                    </h5>
+
+                    {/* Logo Section */}
+                    <div className="flex items-center gap-3">
+                      <div className="relative shrink-0">
+                        {editLogoUrl ? (
+                          <img 
+                            src={editLogoUrl} 
+                            alt="Logo Preview" 
+                            className="w-16 h-16 rounded-2xl object-cover border-2 border-brand-blue shadow-sm bg-white" 
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-2xl bg-brand-blue/10 border-2 border-dashed border-brand-blue/30 text-brand-blue flex flex-col items-center justify-center text-[10px] font-bold">
+                            <Camera className="w-5 h-5 mb-0.5" />
+                            <span>Sem Logo</span>
+                          </div>
+                        )}
+                        {editLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setEditLogoUrl('')}
+                            className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600 transition-colors"
+                            title="Remover logo"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2">
+                          <label className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 shadow-xs transition-all">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Trocar Foto da Logo</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const comp = await compressImageFile(file, 400, 400, 0.85);
+                                    if (comp) setEditLogoUrl(comp);
+                                  } catch (err) {
+                                    console.error("Erro ao carregar logo:", err);
+                                  }
+                                }
+                              }}
+                            />
+                          </label>
+                          <span className="text-[10px] text-gray-400">ou cole o link da imagem</span>
+                        </div>
+                        <input 
+                          type="url" 
+                          placeholder="https://... (URL da Logo)" 
+                          value={editLogoUrl.startsWith('data:') ? '' : editLogoUrl}
+                          onChange={e => setEditLogoUrl(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Capa Section */}
+                    <div className="pt-2 border-t border-gray-200/80 space-y-1.5">
+                      <label className="font-bold text-gray-700 text-[11px] flex items-center justify-between">
+                        <span>Foto de Capa (Banner superior da vitrine)</span>
+                        {editCapaUrl && (
+                          <button 
+                            type="button" 
+                            onClick={() => setEditCapaUrl('')}
+                            className="text-red-500 hover:text-red-700 text-[10px]"
+                          >
+                            Limpar Capa
+                          </button>
+                        )}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 border border-gray-300 transition-all shrink-0">
+                          <Upload className="w-3.5 h-3.5 text-gray-600" />
+                          <span>Foto de Capa</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const comp = await compressImageFile(file, 1000, 600, 0.75);
+                                  if (comp) setEditCapaUrl(comp);
+                                } catch (err) {
+                                  console.error("Erro ao carregar capa:", err);
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <input 
+                          type="url" 
+                          placeholder="https://... (URL da Foto de Capa)" 
+                          value={editCapaUrl.startsWith('data:') ? '' : editCapaUrl}
+                          onChange={e => setEditCapaUrl(e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Galeria de Fotos / Portfólio */}
+                    <div className="pt-2 border-t border-gray-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-gray-700 text-[11px] flex items-center gap-1">
+                          <Camera className="w-3.5 h-3.5 text-brand-blue" />
+                          <span>Fotos do Portfólio / Galeria ({editGaleria.length})</span>
+                        </label>
+                        <span className="text-[10px] text-gray-400">Carrossel de cortes na vitrine</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer text-[11px] flex items-center gap-1.5 shadow-xs transition-all shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Adicionar Foto</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const comp = await compressImageFile(file, 800, 800, 0.8);
+                                  if (comp) setEditGaleria(prev => [...prev, comp]);
+                                } catch (err) {
+                                  console.error("Erro ao carregar foto da galeria:", err);
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <input 
+                          type="url" 
+                          placeholder="ou cole o link da imagem https://..." 
+                          value={editNewGalleryUrl}
+                          onChange={e => setEditNewGalleryUrl(e.target.value)}
+                          className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none focus:border-brand-blue"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editNewGalleryUrl.trim()) {
+                              setEditGaleria(prev => [...prev, editNewGalleryUrl.trim()]);
+                              setEditNewGalleryUrl('');
+                            }
+                          }}
+                          className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-[11px]"
+                        >
+                          + Add
+                        </button>
+                      </div>
+
+                      {editGaleria.length > 0 ? (
+                        <div className="flex items-center gap-2 overflow-x-auto py-1">
+                          {editGaleria.map((img, idx) => (
+                            <div key={`edit-gal-${idx}`} className="relative w-14 h-14 rounded-xl overflow-hidden border border-gray-300 shrink-0 group bg-gray-100">
+                              <img src={img} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => setEditGaleria(prev => prev.filter((_, i) => i !== idx))}
+                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 shadow-sm opacity-90 hover:opacity-100 transition-opacity"
+                                title="Remover foto"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-gray-400 italic">Nenhuma foto no portfólio. Adicione fotos para exibir na vitrine.</p>
+                      )}
                     </div>
                   </div>
                 </div>
