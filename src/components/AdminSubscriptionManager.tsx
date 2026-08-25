@@ -1487,6 +1487,10 @@ export default function AdminSubscriptionManager({
                 <CortesVitrine
                   merchant={{
                     uid: previewDraft.id || 'draft-preview',
+                    id: previewDraft.id,
+                    isDraftVitrine: true,
+                    codigo: previewDraft.codigo,
+                    codigoConviteResgatado: previewDraft.codigo,
                     email: previewDraft.resgatadoPorEmail || 'rascunho@cortestime.com',
                     nomeBarbearia: previewDraft.nomeBarbearia,
                     nomeProprietario: previewDraft.nomeProprietario || 'Proprietário',
@@ -1494,9 +1498,11 @@ export default function AdminSubscriptionManager({
                     vitrineWhatsApp: previewDraft.whatsapp,
                     vitrineInstagram: previewDraft.instagram,
                     vitrineEndereco: previewDraft.endereco,
+                    vitrineLocalizacao: previewDraft.endereco,
                     vitrineSlogan: previewDraft.slogan || 'Sua Barbearia de Confiança',
                     vitrineHorarios: previewDraft.horarios || 'Seg - Sáb: 08:00 às 20:00',
                     vitrineLogoImage: previewDraft.logoUrl,
+                    vitrineLogo: previewDraft.nomeBarbearia,
                     vitrineCapa: previewDraft.capaUrl,
                     vitrineThemePreset: previewDraft.themePreset || 'cortestime',
                     vitrinePrimaryColor: previewDraft.primaryColor || '#051b42',
@@ -1506,6 +1512,11 @@ export default function AdminSubscriptionManager({
                     vitrineModoAcao: previewDraft.modoAcao || 'agendamento',
                     vitrineBarbeiroUnico: previewDraft.barbeiroUnico ?? false,
                     barbeiroUnico: previewDraft.barbeiroUnico ?? false,
+                    vitrineProdutos: (previewDraft.servicos || []).map((s, idx) => ({
+                      id: s.id || `p-${idx}`,
+                      name: s.name,
+                      price: s.price
+                    })),
                     plano: 'pro',
                     trialInicio: '01/01/2026',
                     trialFim: '01/01/2030',
@@ -1513,7 +1524,7 @@ export default function AdminSubscriptionManager({
                     criadoEm: '01/01/2026'
                   }}
                   services={(previewDraft.servicos || []).map((s, idx) => ({
-                    id: `s-${idx}`,
+                    id: s.id || `s-${idx}`,
                     name: s.name,
                     price: s.price,
                     durationMin: s.durationMin || 30,
@@ -1528,7 +1539,43 @@ export default function AdminSubscriptionManager({
                       specialty: 'Barbeiro Master'
                     }
                   ]}
-                  isOnlyView={true}
+                  isOnlyView={false}
+                  onUpdateMerchant={async (updatedMerchant) => {
+                    const updatedDraft: DraftVitrine = {
+                      ...previewDraft,
+                      nomeBarbearia: updatedMerchant.nomeBarbearia || updatedMerchant.vitrineLogo || previewDraft.nomeBarbearia,
+                      slogan: updatedMerchant.vitrineSlogan ?? previewDraft.slogan,
+                      whatsapp: updatedMerchant.vitrineWhatsApp || updatedMerchant.whatsapp || previewDraft.whatsapp,
+                      instagram: updatedMerchant.vitrineInstagram ?? previewDraft.instagram,
+                      endereco: typeof updatedMerchant.vitrineEndereco === 'string' ? updatedMerchant.vitrineEndereco : (updatedMerchant.vitrineLocalizacao ?? previewDraft.endereco),
+                      horarios: updatedMerchant.vitrineHorarios ?? previewDraft.horarios,
+                      logoUrl: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
+                      capaUrl: updatedMerchant.vitrineCapa ?? previewDraft.capaUrl,
+                      themePreset: updatedMerchant.vitrineThemePreset ?? previewDraft.themePreset,
+                      primaryColor: updatedMerchant.vitrinePrimaryColor ?? previewDraft.primaryColor,
+                      secondaryColor: updatedMerchant.vitrineSecondaryColor ?? previewDraft.secondaryColor,
+                      gradientEnabled: updatedMerchant.vitrineGradientEnabled ?? previewDraft.gradientEnabled,
+                      template: updatedMerchant.vitrineTemplate ?? previewDraft.template,
+                      modoAcao: updatedMerchant.vitrineModoAcao ?? previewDraft.modoAcao,
+                      barbeiroUnico: updatedMerchant.vitrineBarbeiroUnico ?? updatedMerchant.barbeiroUnico ?? previewDraft.barbeiroUnico,
+                      servicos: (updatedMerchant.vitrineProdutos && updatedMerchant.vitrineProdutos.length > 0
+                        ? updatedMerchant.vitrineProdutos.map((p, idx) => ({
+                            id: p.id || `s-${idx}`,
+                            name: p.name,
+                            price: p.price,
+                            durationMin: 30
+                          }))
+                        : previewDraft.servicos)
+                    };
+
+                    setPreviewDraft(updatedDraft);
+                    setDraftVitrines(prev => prev.map(d => (d.id === updatedDraft.id || d.codigo === updatedDraft.codigo) ? updatedDraft : d));
+                    try {
+                      await firebaseService.updateDraftVitrine(updatedDraft.id || updatedDraft.codigo, updatedDraft);
+                    } catch (e) {
+                      console.error("Error saving draft vitrine in preview:", e);
+                    }
+                  }}
                 />
               </div>
             </div>

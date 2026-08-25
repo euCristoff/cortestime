@@ -82,6 +82,9 @@ export interface OnboardingData {
 
 export interface MerchantUser {
   uid: string;
+  id?: string;
+  isDraftVitrine?: boolean;
+  codigo?: string;
   nomeBarbearia: string;
   nomeProprietario: string;
   email: string;

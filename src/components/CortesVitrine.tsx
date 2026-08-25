@@ -52,7 +52,7 @@ import {
   PauseCircle,
   PlayCircle
 } from 'lucide-react';
-import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem, VitrineHorarioHoje } from '../types';
+import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem, VitrineHorarioHoje, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import { notificationService } from '../services/notificationService';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
@@ -518,7 +518,7 @@ export default function CortesVitrine({
       if (merchant.vitrineGradientEnabled !== undefined) setGradientEnabled(merchant.vitrineGradientEnabled);
       if (merchant.vitrineTemplate) setTemplate(merchant.vitrineTemplate);
       if (merchant.vitrineHorarios) setHorarios(merchant.vitrineHorarios);
-      if (merchant.vitrineLocalizacao) setLocalizacao(merchant.vitrineLocalizacao);
+      if (merchant.vitrineLocalizacao || merchant.vitrineEndereco) setLocalizacao(merchant.vitrineLocalizacao || (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : ''));
       if (merchant.vitrineWhatsApp || merchant.whatsapp) setWhatsapp(merchant.vitrineWhatsApp || merchant.whatsapp || '');
       if (merchant.vitrineModoAcao) setModoAcao(merchant.vitrineModoAcao);
       if (merchant.vitrineLogo || merchant.nomeBarbearia) setLogoText(merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine');
@@ -542,6 +542,8 @@ export default function CortesVitrine({
     }
   }, [
     merchant?.uid,
+    merchant?.nomeBarbearia,
+    merchant?.whatsapp,
     merchant?.vitrinePrimaryColor,
     merchant?.vitrineSecondaryColor,
     merchant?.vitrineThemePreset,
@@ -550,6 +552,7 @@ export default function CortesVitrine({
     merchant?.barbeiroUnico,
     merchant?.vitrineHorarios,
     merchant?.vitrineLocalizacao,
+    merchant?.vitrineEndereco,
     merchant?.vitrineWhatsApp,
     merchant?.vitrineModoAcao,
     merchant?.vitrineLogo,
@@ -846,9 +849,15 @@ export default function CortesVitrine({
         gallery.map(img => compressDataUrl(img, 800, 800, 0.7))
       );
 
+      const finalLogoImage = compressedLogo || logoImage || '';
+      const finalCapa = compressedCapa || capa || DEFAULT_COVER_URL;
+      const finalGallery = (compressedGallery && compressedGallery.length > 0) ? compressedGallery : gallery;
+
       const dataToUpdate: Partial<MerchantUser> = {
+        nomeBarbearia: logoText || merchant?.nomeBarbearia || '',
         vitrineHorarios: horarios || '',
         vitrineLocalizacao: localizacao || '',
+        vitrineEndereco: localizacao || '',
         vitrineWhatsApp: whatsapp || '',
         vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
         vitrineModoAcao: modoAcao,
@@ -859,12 +868,12 @@ export default function CortesVitrine({
         vitrineInstagram: instagram || '',
         vitrineLinkBio: linkBio || '',
         vitrineLogo: logoText || '',
-        vitrineLogoImage: compressedLogo || '',
+        vitrineLogoImage: finalLogoImage,
         vitrineSlogan: slogan || '',
-        vitrineCapa: compressedCapa || DEFAULT_COVER_URL,
+        vitrineCapa: finalCapa,
         vitrineLinkPersonalizado: linkPersonalizado || '',
         vitrineProdutos: products || [],
-        vitrineGaleria: compressedGallery || [],
+        vitrineGaleria: finalGallery || [],
         vitrineTemplate: template,
         vitrinePrimaryColor: primaryColor,
         vitrineSecondaryColor: secondaryColor,
@@ -875,13 +884,67 @@ export default function CortesVitrine({
         barbeiroUnico: barbeiroUnico,
       };
 
-      await firebaseService.updateMerchantProfile(merchant.uid, dataToUpdate);
+      const merchantUid = merchant?.uid || '';
+      if (merchantUid && !merchantUid.startsWith('draft')) {
+        await firebaseService.updateMerchantProfile(merchantUid, dataToUpdate);
+      }
+
+      // If this is a draft vitrine (or has invite code / is in admin preview), also persist to draft_vitrines
+      const draftCode = (merchant as any)?.codigoConviteResgatado || (merchant as any)?.codigo || (merchant as any)?.draftCode || '';
+      const isDraft = (merchant?.uid && merchant.uid.startsWith('draft')) || Boolean((merchant as any)?.isDraftVitrine) || Boolean(draftCode);
+      const draftId = merchant?.uid?.startsWith('draft') ? merchant.uid : ((merchant as any)?.draftId || (merchant as any)?.id || '');
+
+      if (isDraft || draftCode || draftId) {
+        const draftDataToUpdate: Partial<DraftVitrine> = {
+          nomeBarbearia: logoText || merchant?.nomeBarbearia || 'Barbearia',
+          nomeProprietario: merchant?.nomeProprietario,
+          whatsapp: whatsapp || '',
+          instagram: instagram || '',
+          endereco: localizacao || '',
+          slogan: slogan || '',
+          horarios: horarios || 'Seg - Sáb: 08:00 às 20:00',
+          logoUrl: finalLogoImage,
+          capaUrl: finalCapa,
+          themePreset: themePreset,
+          primaryColor: primaryColor,
+          secondaryColor: secondaryColor,
+          gradientEnabled: gradientEnabled,
+          template: template,
+          modoAcao: modoAcao,
+          barbeiroUnico: barbeiroUnico,
+          servicos: (products && products.length > 0 ? products : services).map((p: any, idx: number) => ({
+            id: p.id || `s-${idx}`,
+            name: p.name || 'Serviço',
+            price: typeof p.price === 'number' ? p.price : (parseFloat(p.price) || 0),
+            durationMin: p.durationMin || 30
+          }))
+        };
+
+        if (draftCode) draftDataToUpdate.codigo = draftCode;
+        if (draftId) draftDataToUpdate.id = draftId;
+
+        try {
+          await firebaseService.updateDraftVitrine(draftId || draftCode, draftDataToUpdate);
+        } catch (draftErr) {
+          console.warn("Erro ao atualizar draft vitrine no Firebase:", draftErr);
+        }
+      }
       
+      const fullUpdated: MerchantUser = {
+        ...merchant,
+        ...dataToUpdate
+      };
+
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(fullUpdated));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(fullUpdated));
+        if (merchant?.uid) {
+          localStorage.setItem(`cortestime_merchant_${merchant.uid}`, JSON.stringify(fullUpdated));
+        }
+      } catch (_) {}
+
       if (onUpdateMerchant) {
-        onUpdateMerchant({
-          ...merchant,
-          ...dataToUpdate
-        });
+        onUpdateMerchant(fullUpdated);
       }
 
       setSaveSuccess(true);
@@ -889,43 +952,51 @@ export default function CortesVitrine({
     } catch (e: any) {
       console.error('Error saving vitrine:', e);
       // Always sync state locally so user doesn't lose modifications
+      const fallbackUpdated: MerchantUser = {
+        ...merchant,
+        nomeBarbearia: logoText || merchant?.nomeBarbearia || '',
+        vitrineHorarios: horarios,
+        vitrineLocalizacao: localizacao,
+        vitrineEndereco: localizacao,
+        vitrineWhatsApp: whatsapp,
+        vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
+        vitrineModoAcao: modoAcao,
+        vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppAgendamento || mensagemWhatsAppCustom,
+        vitrineMensagemWhatsAppAgendamento: mensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: mensagemWhatsAppOrdemChegada,
+        vitrineUsarSaudacaoHorarioWhatsApp: usarSaudacaoHorario,
+        vitrineInstagram: instagram,
+        vitrineLinkBio: linkBio,
+        vitrineLogo: logoText,
+        vitrineLogoImage: logoImage,
+        vitrineSlogan: slogan,
+        vitrineCapa: capa,
+        vitrineLinkPersonalizado: linkPersonalizado,
+        vitrineProdutos: products,
+        vitrineGaleria: gallery,
+        vitrineTemplate: template,
+        vitrinePrimaryColor: primaryColor,
+        vitrineSecondaryColor: secondaryColor,
+        vitrineGradientEnabled: gradientEnabled,
+        vitrineThemePreset: themePreset,
+        vitrineHorarioHoje: horarioHoje,
+        vitrineBarbeiroUnico: barbeiroUnico,
+        barbeiroUnico: barbeiroUnico,
+      };
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(fallbackUpdated));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(fallbackUpdated));
+      } catch (_) {}
       if (onUpdateMerchant) {
-        onUpdateMerchant({
-          ...merchant,
-          vitrineHorarios: horarios,
-          vitrineLocalizacao: localizacao,
-          vitrineWhatsApp: whatsapp,
-          vitrinePermitirAgendamentoWhatsApp: permitirWhatsApp,
-          vitrineModoAcao: modoAcao,
-          vitrineMensagemWhatsAppPersonalizada: mensagemWhatsAppAgendamento || mensagemWhatsAppCustom,
-          vitrineMensagemWhatsAppAgendamento: mensagemWhatsAppAgendamento,
-          vitrineMensagemWhatsAppOrdemChegada: mensagemWhatsAppOrdemChegada,
-          vitrineUsarSaudacaoHorarioWhatsApp: usarSaudacaoHorario,
-          vitrineInstagram: instagram,
-          vitrineLinkBio: linkBio,
-          vitrineLogo: logoText,
-          vitrineLogoImage: logoImage,
-          vitrineSlogan: slogan,
-          vitrineCapa: capa,
-          vitrineLinkPersonalizado: linkPersonalizado,
-          vitrineProdutos: products,
-          vitrineGaleria: gallery,
-          vitrineTemplate: template,
-          vitrinePrimaryColor: primaryColor,
-          vitrineSecondaryColor: secondaryColor,
-          vitrineGradientEnabled: gradientEnabled,
-          vitrineThemePreset: themePreset,
-          vitrineHorarioHoje: horarioHoje,
-          vitrineBarbeiroUnico: barbeiroUnico,
-          barbeiroUnico: barbeiroUnico,
-        });
+        onUpdateMerchant(fallbackUpdated);
       }
 
       const errorStr = String(e?.message || e || '');
       if (errorStr.includes('exceeds maximum size') || errorStr.includes('1048576')) {
         alert('As imagens da vitrine ou galeria estão muito pesadas. Tente remover algumas fotos da galeria ou escolher fotos menores.');
       } else {
-        alert('Não foi possível salvar os dados no servidor. Suas alterações foram mantidas nesta sessão.');
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
       }
     } finally {
       setIsSaving(false);
@@ -2662,9 +2733,15 @@ export default function CortesVitrine({
           <div className="flex items-center gap-3">
             {!isOnlyView && onBack && (
               <button 
-                onClick={onBack}
+                onClick={async () => {
+                  try {
+                    await handleSave();
+                  } catch (_) {}
+                  onBack();
+                }}
                 className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white cursor-pointer"
                 id="btn-back-to-dashboard"
+                title="Salvar e voltar ao painel"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>

@@ -461,9 +461,17 @@ export const firebaseService = {
   },
 
   async updateMerchantProfile(uid: string, data: Partial<MerchantUser>): Promise<void> {
-    if (!uid) return;
-    const docRef = doc(db, "users", uid);
-    
+    let targetUid = uid;
+    if (!targetUid) {
+      try {
+        const cached = localStorage.getItem('cortestime_merchant_session');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.uid) targetUid = parsed.uid;
+        }
+      } catch (_) {}
+    }
+
     // Sanitize data: remove undefined values which cause Firestore updateDoc/setDoc to fail
     const cleanData = JSON.parse(
       JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
@@ -472,25 +480,18 @@ export const firebaseService = {
     // Sync immediately to LocalStorage so changes persist locally without waiting or failing
     try {
       const cached = localStorage.getItem('cortestime_merchant_session');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.uid === uid || !parsed.uid) {
-          const merged = { ...parsed, ...cleanData, uid };
-          localStorage.setItem('cortestime_merchant_session', JSON.stringify(merged));
-        }
+      const base = cached ? JSON.parse(cached) : {};
+      const merged = { ...base, ...cleanData, ...(targetUid ? { uid: targetUid } : {}) };
+      localStorage.setItem('cortestime_merchant_session', JSON.stringify(merged));
+      localStorage.setItem('cortestime_merchant_profile', JSON.stringify(merged));
+      if (targetUid) {
+        localStorage.setItem(`cortestime_merchant_${targetUid}`, JSON.stringify(merged));
       }
-      const cachedProfile = localStorage.getItem('cortestime_merchant_profile');
-      if (cachedProfile) {
-        const parsed = JSON.parse(cachedProfile);
-        if (parsed.uid === uid || !parsed.uid) {
-          const merged = { ...parsed, ...cleanData, uid };
-          localStorage.setItem('cortestime_merchant_profile', JSON.stringify(merged));
-        }
-      }
+
       const rawAll = localStorage.getItem('cortestime_merchants');
       if (rawAll) {
         const list: MerchantUser[] = JSON.parse(rawAll);
-        const idx = list.findIndex((x) => x.uid === uid);
+        const idx = list.findIndex((x) => x.uid === targetUid);
         if (idx >= 0) {
           list[idx] = { ...list[idx], ...cleanData };
           localStorage.setItem('cortestime_merchants', JSON.stringify(list));
@@ -500,24 +501,28 @@ export const firebaseService = {
       console.warn("Could not sync local cache in updateMerchantProfile:", localErr);
     }
 
-    try {
-      await withTimeout(
-        setDoc(docRef, cleanData, { merge: true }),
-        15000,
-        "Tempo limite esgotado ao atualizar perfil."
-      );
-    } catch (err) {
-      console.error("Erro ao atualizar perfil no Firestore:", err);
+    if (targetUid) {
+      const docRef = doc(db, "users", targetUid);
       try {
-        await updateDoc(docRef, cleanData);
-      } catch (err2) {
-        console.error("Fallback updateDoc também falhou:", err2);
+        await withTimeout(
+          setDoc(docRef, cleanData, { merge: true }),
+          15000,
+          "Tempo limite esgotado ao atualizar perfil."
+        );
+      } catch (err) {
+        console.error("Erro ao atualizar perfil no Firestore:", err);
+        try {
+          await updateDoc(docRef, cleanData);
+        } catch (err2) {
+          console.error("Fallback updateDoc também falhou:", err2);
+        }
       }
     }
 
     // Sync with Brevo asynchronously if key details or subscription plans are updated
-    if (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined) {
+    if (targetUid && (data.plano !== undefined || data.nomeProprietario !== undefined || data.nomeBarbearia !== undefined || data.whatsapp !== undefined)) {
       try {
+        const docRef = doc(db, "users", targetUid);
         getDoc(docRef).then((snap) => {
           if (snap.exists()) {
             const fullUser = snap.data() as MerchantUser;
@@ -531,12 +536,10 @@ export const firebaseService = {
                 whatsapp: fullUser.whatsapp,
                 plano: fullUser.plano
               })
-            }).catch(err => console.error("Error triggering Brevo sync in update:", err));
+            }).catch(() => {});
           }
-        }).catch(err => console.error("Error fetching updated user for Brevo sync:", err));
-      } catch (err) {
-        console.error("Failed to run Brevo fetch in update:", err);
-      }
+        }).catch(() => {});
+      } catch (_) {}
     }
   },
 

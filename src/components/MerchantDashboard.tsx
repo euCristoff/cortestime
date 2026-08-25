@@ -1168,13 +1168,16 @@ export default function MerchantDashboard({
       const compressedLogo = await compressDataUrl(configData.vitrineLogoImage, 400, 400, 0.8);
       const compressedCapa = await compressDataUrl(configData.vitrineCapa, 1000, 600, 0.75);
 
+      const finalLogo = compressedLogo || configData.vitrineLogoImage || merchant?.vitrineLogoImage || '';
+      const finalCapa = compressedCapa || configData.vitrineCapa || merchant?.vitrineCapa || '';
+
       const updatedProfile: Partial<MerchantUser> = {
         nomeBarbearia: configData.nomeBarbearia,
         nomeProprietario: configData.nomeProprietario,
         whatsapp: configData.whatsapp,
-        vitrineLogo: configData.vitrineLogo || configData.nomeBarbearia,
-        vitrineLogoImage: compressedLogo || '',
-        vitrineCapa: compressedCapa || '',
+        vitrineLogo: configData.vitrineLogo || configData.nomeBarbearia || merchant?.vitrineLogo || '',
+        vitrineLogoImage: finalLogo,
+        vitrineCapa: finalCapa,
         vitrineBarbeiroUnico: configData.barbeiroUnico,
         barbeiroUnico: configData.barbeiroUnico,
         vitrineInstagram: configData.instagram,
