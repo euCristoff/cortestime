@@ -665,6 +665,7 @@ export const firebaseService = {
         vitrineWhatsApp: d.whatsapp,
         vitrineInstagram: d.instagram,
         vitrineEndereco: d.endereco,
+        vitrineLocalizacao: d.endereco,
         vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
         vitrineHorarios: d.horarios || 'Seg - Sáb: 08:00 às 20:00',
         vitrineLogoImage: logo,

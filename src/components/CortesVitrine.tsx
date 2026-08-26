@@ -50,7 +50,10 @@ import {
   Sun,
   Send,
   PauseCircle,
-  PlayCircle
+  PlayCircle,
+  Gift,
+  Ticket,
+  Building2
 } from 'lucide-react';
 import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem, VitrineHorarioHoje, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
@@ -197,8 +200,11 @@ export default function CortesVitrine({
   const [activeSubTab, setActiveSubTab] = useState<'editor' | 'preview'>('editor');
   
   // Local state for Vitrine inputs
-  const [horarios, setHorarios] = useState(merchant.vitrineHorarios || 'Segunda a Sábado: 09:00 às 19:00');
-  const [localizacao, setLocalizacao] = useState(merchant.vitrineLocalizacao || 'Av. Principal, 123 - Centro');
+  const rawEndereco = merchant.vitrineLocalizacao || 
+    (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : '') || 
+    (merchant as any).endereco || '';
+  const [horarios, setHorarios] = useState(merchant.vitrineHorarios || (merchant as any).horarios || 'Segunda a Sábado: 09:00 às 19:00');
+  const [localizacao, setLocalizacao] = useState(rawEndereco || 'Av. Principal, 123 - Centro');
   const [whatsapp, setWhatsapp] = useState(merchant.vitrineWhatsApp || merchant.whatsapp || '');
   const [permitirWhatsApp, setPermitirWhatsApp] = useState<boolean>(merchant.vitrinePermitirAgendamentoWhatsApp ?? true);
   
@@ -514,6 +520,166 @@ export default function CortesVitrine({
     return localStorage.getItem('cortestime_downgrade_notice');
   });
 
+  // Draft Vitrine / Invite Code Redemption State (Lá em baixo em Editar Vitrine)
+  const [codigoResgate, setCodigoResgate] = useState<string>('');
+  const [isSearchingDraft, setIsSearchingDraft] = useState<boolean>(false);
+  const [foundDraft, setFoundDraft] = useState<DraftVitrine | null>(null);
+  const [draftSearchError, setDraftSearchError] = useState<string | null>(null);
+  const [draftSuccessMsg, setDraftSuccessMsg] = useState<string | null>(null);
+  const [isApplyingDraft, setIsApplyingDraft] = useState<boolean>(false);
+
+  const handleSearchDraftCode = async (customCode?: string) => {
+    const target = (customCode || codigoResgate).trim().toUpperCase();
+    if (!target) {
+      setDraftSearchError('Por favor, digite o código de vitrine ou convite (ex: BARBER-7XK29).');
+      return;
+    }
+    setIsSearchingDraft(true);
+    setDraftSearchError(null);
+    setDraftSuccessMsg(null);
+    setFoundDraft(null);
+
+    try {
+      const draft = await firebaseService.getDraftVitrineByCode(target);
+      if (draft) {
+        setFoundDraft(draft);
+      } else {
+        setDraftSearchError(`Nenhuma vitrine encontrada para o código "${target}". Verifique a digitação ou se o código está ativo.`);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar vitrine por código:', err);
+      setDraftSearchError('Erro de conexão ao buscar vitrine. Tente novamente.');
+    } finally {
+      setIsSearchingDraft(false);
+    }
+  };
+
+  const handleApplyFoundDraft = async () => {
+    if (!foundDraft) return;
+    setIsApplyingDraft(true);
+    setDraftSearchError(null);
+    try {
+      // 1. Preencher estados locais da tela de edição
+      if (foundDraft.nomeBarbearia) setLogoText(foundDraft.nomeBarbearia);
+      if (foundDraft.slogan) setSlogan(foundDraft.slogan);
+      if (foundDraft.whatsapp) setWhatsapp(foundDraft.whatsapp);
+      if (foundDraft.instagram) setInstagram(foundDraft.instagram);
+      if (foundDraft.endereco) setLocalizacao(foundDraft.endereco);
+      if (foundDraft.horarios) setHorarios(foundDraft.horarios);
+      if (foundDraft.logoUrl || foundDraft.vitrineLogoImage) {
+        setLogoImage(foundDraft.logoUrl || foundDraft.vitrineLogoImage || '');
+      }
+      if (foundDraft.capaUrl || foundDraft.vitrineCapa) {
+        setCapa(foundDraft.capaUrl || foundDraft.vitrineCapa || DEFAULT_COVER_URL);
+      }
+      if (foundDraft.themePreset) setThemePreset(foundDraft.themePreset);
+      if (foundDraft.primaryColor) setPrimaryColor(foundDraft.primaryColor);
+      if (foundDraft.secondaryColor) setSecondaryColor(foundDraft.secondaryColor);
+      if (typeof foundDraft.gradientEnabled === 'boolean') setGradientEnabled(foundDraft.gradientEnabled);
+      if (foundDraft.template) setTemplate(foundDraft.template);
+      if (foundDraft.modoAcao) setModoAcao(foundDraft.modoAcao);
+      if (typeof foundDraft.barbeiroUnico === 'boolean') setBarbeiroUnico(foundDraft.barbeiroUnico);
+      if (foundDraft.vitrinePermitirAgendamentoWhatsApp !== undefined) {
+        setPermitirWhatsApp(foundDraft.vitrinePermitirAgendamentoWhatsApp);
+      }
+      if (foundDraft.vitrineMensagemWhatsAppAgendamento || foundDraft.mensagemWhatsAppAgendamento) {
+        setMensagemWhatsAppAgendamento(foundDraft.vitrineMensagemWhatsAppAgendamento || foundDraft.mensagemWhatsAppAgendamento || '');
+      }
+      if (foundDraft.vitrineMensagemWhatsAppOrdemChegada || foundDraft.mensagemWhatsAppOrdemChegada) {
+        setMensagemWhatsAppOrdemChegada(foundDraft.vitrineMensagemWhatsAppOrdemChegada || foundDraft.mensagemWhatsAppOrdemChegada || '');
+      }
+
+      // Serviços / Produtos
+      let loadedServices: any[] = [];
+      if (foundDraft.servicos && foundDraft.servicos.length > 0) {
+        loadedServices = foundDraft.servicos.map((s, idx) => ({
+          id: s.id || `p-${idx}`,
+          name: s.name,
+          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+          durationMin: s.durationMin || 30
+        }));
+        setProducts(loadedServices);
+      } else if (foundDraft.vitrineProdutos && foundDraft.vitrineProdutos.length > 0) {
+        loadedServices = foundDraft.vitrineProdutos.map((p, idx) => ({
+          id: p.id || `p-${idx}`,
+          name: p.name,
+          price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+          durationMin: p.durationMin || 30
+        }));
+        setProducts(loadedServices);
+      }
+
+      // Galeria
+      const draftGallery = foundDraft.galeria || foundDraft.vitrineGaleria || [];
+      if (draftGallery.length > 0) {
+        setGallery(draftGallery);
+      }
+
+      // 2. Resgatar código no Firebase se o usuário possuir conta
+      if (merchant?.uid && merchant?.email) {
+        await firebaseService.claimDraftVitrine(foundDraft.codigo, merchant.uid, merchant.email);
+      }
+
+      // 3. Atualizar e sincronizar perfil completo no Firebase
+      const updatedFields: Partial<MerchantUser> = {
+        nomeBarbearia: foundDraft.nomeBarbearia || logoText,
+        vitrineLogo: foundDraft.nomeBarbearia || logoText,
+        vitrineSlogan: foundDraft.slogan || slogan,
+        vitrineWhatsApp: foundDraft.whatsapp || whatsapp,
+        whatsapp: foundDraft.whatsapp || whatsapp,
+        vitrineInstagram: foundDraft.instagram || instagram,
+        vitrineEndereco: foundDraft.endereco || localizacao,
+        vitrineLocalizacao: foundDraft.endereco || localizacao,
+        vitrineHorarios: foundDraft.horarios || horarios,
+        vitrineLogoImage: foundDraft.logoUrl || foundDraft.vitrineLogoImage || logoImage,
+        vitrineCapa: foundDraft.capaUrl || foundDraft.vitrineCapa || capa,
+        vitrineThemePreset: foundDraft.themePreset || themePreset,
+        vitrinePrimaryColor: foundDraft.primaryColor || primaryColor,
+        vitrineSecondaryColor: foundDraft.secondaryColor || secondaryColor,
+        vitrineGradientEnabled: foundDraft.gradientEnabled ?? gradientEnabled,
+        vitrineTemplate: foundDraft.template || template,
+        vitrineModoAcao: foundDraft.modoAcao || modoAcao,
+        vitrineBarbeiroUnico: foundDraft.barbeiroUnico ?? barbeiroUnico,
+        barbeiroUnico: foundDraft.barbeiroUnico ?? barbeiroUnico,
+        codigoConviteResgatado: foundDraft.codigo,
+        vitrineProdutos: (loadedServices.length > 0 ? loadedServices : products),
+        servicos: (loadedServices.length > 0 ? loadedServices : products),
+        vitrineGaleria: draftGallery.length > 0 ? draftGallery : gallery
+      };
+
+      const merchantUid = merchant?.uid || '';
+      if (merchantUid && !merchantUid.startsWith('draft')) {
+        await firebaseService.updateMerchantProfile(merchantUid, updatedFields);
+      }
+
+      const mergedMerchant: MerchantUser = {
+        ...merchant,
+        ...updatedFields
+      };
+
+      if (onUpdateMerchant) {
+        onUpdateMerchant(mergedMerchant);
+      }
+
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(mergedMerchant));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(mergedMerchant));
+        if (merchant?.uid) {
+          localStorage.setItem(`cortestime_merchant_${merchant.uid}`, JSON.stringify(mergedMerchant));
+        }
+      } catch (_) {}
+
+      setDraftSuccessMsg(`✨ Vitrine "${foundDraft.nomeBarbearia}" (Código: ${foundDraft.codigo}) aplicada com sucesso!`);
+      setFoundDraft(null);
+      setCodigoResgate('');
+    } catch (err) {
+      console.error('Erro ao aplicar vitrine por código:', err);
+      setDraftSearchError('Erro ao aplicar vitrine selecionada. Tente novamente.');
+    } finally {
+      setIsApplyingDraft(false);
+    }
+  };
+
   // Client Area State
   const [isClientLoggedIn, setIsClientLoggedIn] = useState<boolean>(false);
   const [clientAppointments, setClientAppointments] = useState<Appointment[]>([]);
@@ -573,8 +739,9 @@ export default function CortesVitrine({
       if (merchant.vitrineSecondaryColor) setSecondaryColor(merchant.vitrineSecondaryColor);
       if (merchant.vitrineGradientEnabled !== undefined) setGradientEnabled(merchant.vitrineGradientEnabled);
       if (merchant.vitrineTemplate) setTemplate(merchant.vitrineTemplate);
-      if (merchant.vitrineHorarios) setHorarios(merchant.vitrineHorarios);
-      if (merchant.vitrineLocalizacao || merchant.vitrineEndereco) setLocalizacao(merchant.vitrineLocalizacao || (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : ''));
+      if (merchant.vitrineHorarios || (merchant as any).horarios) setHorarios(merchant.vitrineHorarios || (merchant as any).horarios);
+      const incomingEnd = merchant.vitrineLocalizacao || (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : '') || (merchant as any).endereco;
+      if (incomingEnd) setLocalizacao(incomingEnd);
       if (merchant.vitrineWhatsApp || merchant.whatsapp) setWhatsapp(merchant.vitrineWhatsApp || merchant.whatsapp || '');
       if (merchant.vitrineModoAcao) {
         setModoAcao(merchant.vitrineModoAcao);
@@ -4458,6 +4625,160 @@ export default function CortesVitrine({
                           </span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* RESGATAR / IMPORTAR VITRINE POR CÓDIGO (CÓDIGO DE VITRINE / CONVITE) */}
+              <div className="border-t border-white/10 pt-6 space-y-4 text-left">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime flex items-center gap-2">
+                    <Gift className="w-4 h-4 text-brand-lime" />
+                    <span>Resgatar Vitrine Pronta por Código</span>
+                  </h3>
+                  {merchant.codigoConviteResgatado && (
+                    <span className="text-[10px] font-mono font-bold bg-brand-lime/10 text-brand-lime border border-brand-lime/30 px-2.5 py-0.5 rounded-full">
+                      Código Ativo: {merchant.codigoConviteResgatado}
+                    </span>
+                  )}
+                </div>
+
+                <div className="bg-[#051b42]/80 border border-white/15 rounded-2xl p-4 sm:p-5 space-y-4">
+                  <p className="text-xs text-gray-300 leading-relaxed">
+                    Recebeu um <strong>Código de Vitrine ou Convite Especial</strong> (ex: <span className="font-mono text-brand-lime font-bold">BARBER-7XK29</span>) criado pela nossa equipe? Digite-o abaixo para importar e aplicar automaticamente todo o design, serviços, fotos, capa e configurações na sua vitrine.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <div className="relative flex-1">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
+                        <Ticket className="w-4 h-4 text-brand-lime" />
+                      </span>
+                      <input 
+                        type="text" 
+                        value={codigoResgate}
+                        onChange={e => {
+                          setCodigoResgate(e.target.value.toUpperCase());
+                          setDraftSearchError(null);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSearchDraftCode();
+                          }
+                        }}
+                        placeholder="Ex: BARBER-7XK29"
+                        className="w-full bg-[#020b18] text-white border border-white/20 rounded-xl pl-10 pr-4 py-3 text-xs font-mono font-bold uppercase tracking-wider focus:outline-none focus:border-brand-lime transition-all"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSearchDraftCode()}
+                      disabled={isSearchingDraft || !codigoResgate.trim()}
+                      className="bg-brand-blue hover:bg-brand-blue-light text-white font-extrabold text-xs px-5 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md shrink-0"
+                    >
+                      {isSearchingDraft ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                      <span>{isSearchingDraft ? 'Buscando...' : 'Buscar Código'}</span>
+                    </button>
+                  </div>
+
+                  {/* Search Error */}
+                  {draftSearchError && (
+                    <div className="p-3 bg-red-500/15 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-start gap-2 animate-fade-in">
+                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{draftSearchError}</span>
+                    </div>
+                  )}
+
+                  {/* Success Message */}
+                  {draftSuccessMsg && (
+                    <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-fade-in font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{draftSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {/* Found Draft Card Preview */}
+                  {foundDraft && (
+                    <div className="p-4 bg-[#020b18] border border-brand-lime/40 rounded-2xl space-y-3.5 animate-fade-in shadow-xl">
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#09224f] border border-white/20 shrink-0 flex items-center justify-center">
+                          {(foundDraft.logoUrl || foundDraft.vitrineLogoImage) ? (
+                            <img 
+                              src={foundDraft.logoUrl || foundDraft.vitrineLogoImage} 
+                              alt="Logo draft" 
+                              className="w-full h-full object-cover" 
+                            />
+                          ) : (
+                            <Scissors className="w-6 h-6 text-brand-lime" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-extrabold text-sm text-white truncate">
+                              {foundDraft.nomeBarbearia}
+                            </h4>
+                            <span className="bg-brand-lime/20 text-brand-lime border border-brand-lime/40 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md">
+                              {foundDraft.codigo}
+                            </span>
+                          </div>
+                          {foundDraft.slogan && (
+                            <p className="text-[11px] text-gray-300 truncate mt-0.5 italic">
+                              "{foundDraft.slogan}"
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-gray-400">
+                            {foundDraft.endereco && (
+                              <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded">
+                                <MapPin className="w-3 h-3 text-brand-lime" /> {foundDraft.endereco}
+                              </span>
+                            )}
+                            {foundDraft.whatsapp && (
+                              <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded">
+                                <MessageSquare className="w-3 h-3 text-emerald-400" /> {foundDraft.whatsapp}
+                              </span>
+                            )}
+                            <span className="bg-brand-blue/30 text-blue-200 px-2 py-0.5 rounded font-bold">
+                              {(foundDraft.servicos?.length || foundDraft.vitrineProdutos?.length || 0)} serviços
+                            </span>
+                            {foundDraft.themePreset && (
+                              <span className="bg-purple-500/20 text-purple-200 px-2 py-0.5 rounded capitalize">
+                                Tema: {foundDraft.themePreset}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-end gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFoundDraft(null);
+                            setCodigoResgate('');
+                          }}
+                          className="px-3.5 py-2 text-xs font-bold text-gray-400 hover:text-white rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleApplyFoundDraft}
+                          disabled={isApplyingDraft}
+                          className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                        >
+                          {isApplyingDraft ? (
+                            <div className="w-3.5 h-3.5 border-2 border-brand-dark border-t-transparent animate-spin rounded-full" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isApplyingDraft ? 'Aplicando Vitrine...' : 'Importar e Aplicar na Minha Vitrine'}</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
