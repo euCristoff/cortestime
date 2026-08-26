@@ -72,6 +72,7 @@ import AdminSubscriptionManager from './AdminSubscriptionManager';
 import QueueManager from './QueueManager';
 import { firebaseService } from '../services/firebaseService';
 import { compressImageFile, compressDataUrl } from '../utils/vitrineTheme';
+import { parseAddressComponents, extractAddressString } from '../utils/addressUtils';
 
 export type DashboardTab = 'inicio' | 'agenda' | 'fila' | 'servicos' | 'profissionais' | 'clientes' | 'notificacoes' | 'configuracoes' | 'horarios' | 'ajuda' | 'assinatura' | 'menu';
 
@@ -133,7 +134,7 @@ export default function MerchantDashboard({
   const [installReminderDismissed, setInstallReminderDismissed] = useState(false);
 
   // Configurações Form state
-  const addrObj = typeof merchant?.vitrineEndereco === 'object' && merchant?.vitrineEndereco ? merchant.vitrineEndereco : null;
+  const initialAddr = parseAddressComponents(merchant, onboardingData);
 
   const [configData, setConfigData] = useState({
     nomeBarbearia: merchant?.nomeBarbearia || onboardingData.businessName || '',
@@ -143,12 +144,12 @@ export default function MerchantDashboard({
     vitrineLogoImage: merchant?.vitrineLogoImage || '',
     vitrineCapa: merchant?.vitrineCapa || '',
     barbeiroUnico: Boolean(merchant?.vitrineBarbeiroUnico ?? merchant?.barbeiroUnico ?? false),
-    cep: addrObj?.cep || onboardingData.cep || '57000-000',
-    rua: addrObj?.rua || onboardingData.street || 'Av. Principal',
-    numero: addrObj?.numero || onboardingData.number || '100',
-    bairro: addrObj?.bairro || onboardingData.neighborhood || 'Centro',
-    cidade: addrObj?.cidade || onboardingData.city || 'Maceió',
-    estado: addrObj?.estado || onboardingData.state || 'AL',
+    cep: initialAddr.cep || '57000-000',
+    rua: initialAddr.rua || 'Av. Principal',
+    numero: initialAddr.numero || '100',
+    bairro: initialAddr.bairro || 'Centro',
+    cidade: initialAddr.cidade || 'Maceió',
+    estado: initialAddr.estado || 'AL',
     instagram: merchant?.vitrineInstagram || '@barbearia',
     facebook: merchant?.vitrineFacebook || '',
     serviceMode: (merchant?.serviceMode || 'agendamento') as ServiceMode
@@ -163,7 +164,7 @@ export default function MerchantDashboard({
   useEffect(() => {
     if (merchant && merchant.uid !== lastMerchantUidRef.current) {
       lastMerchantUidRef.current = merchant.uid;
-      const curAddr = typeof merchant.vitrineEndereco === 'object' && merchant.vitrineEndereco ? merchant.vitrineEndereco : null;
+      const curAddr = parseAddressComponents(merchant, onboardingData);
       setConfigData({
         nomeBarbearia: merchant.nomeBarbearia || onboardingData.businessName || '',
         nomeProprietario: merchant.nomeProprietario || onboardingData.fullName || '',
@@ -172,12 +173,12 @@ export default function MerchantDashboard({
         vitrineLogoImage: merchant.vitrineLogoImage || '',
         vitrineCapa: merchant.vitrineCapa || '',
         barbeiroUnico: Boolean(merchant.vitrineBarbeiroUnico ?? merchant.barbeiroUnico ?? false),
-        cep: curAddr?.cep || onboardingData.cep || '57000-000',
-        rua: curAddr?.rua || onboardingData.street || 'Av. Principal',
-        numero: curAddr?.numero || onboardingData.number || '100',
-        bairro: curAddr?.bairro || onboardingData.neighborhood || 'Centro',
-        cidade: curAddr?.cidade || onboardingData.city || 'Maceió',
-        estado: curAddr?.estado || onboardingData.state || 'AL',
+        cep: curAddr.cep || onboardingData.cep || '57000-000',
+        rua: curAddr.rua || onboardingData.street || 'Av. Principal',
+        numero: curAddr.numero || onboardingData.number || '100',
+        bairro: curAddr.bairro || onboardingData.neighborhood || 'Centro',
+        cidade: curAddr.cidade || onboardingData.city || 'Maceió',
+        estado: curAddr.estado || onboardingData.state || 'AL',
         instagram: merchant.vitrineInstagram || '@barbearia',
         facebook: merchant.vitrineFacebook || '',
         serviceMode: (merchant.serviceMode || 'agendamento') as ServiceMode
@@ -1221,6 +1222,14 @@ export default function MerchantDashboard({
       const finalLogo = compressedLogo || configData.vitrineLogoImage || merchant?.vitrineLogoImage || '';
       const finalCapa = compressedCapa || configData.vitrineCapa || merchant?.vitrineCapa || '';
 
+      const addrParts: string[] = [];
+      if (configData.rua) {
+        addrParts.push(configData.numero ? `${configData.rua}, ${configData.numero}` : configData.rua);
+      }
+      if (configData.bairro) addrParts.push(configData.bairro);
+      if (configData.cidade) addrParts.push(configData.estado ? `${configData.cidade}/${configData.estado}` : configData.cidade);
+      const formattedEnderecoStr = addrParts.length > 0 ? addrParts.join(' - ') : '';
+
       const updatedProfile: Partial<MerchantUser> = {
         nomeBarbearia: configData.nomeBarbearia,
         nomeProprietario: configData.nomeProprietario,
@@ -1233,6 +1242,7 @@ export default function MerchantDashboard({
         vitrineInstagram: configData.instagram,
         vitrineFacebook: configData.facebook,
         serviceMode: configData.serviceMode,
+        vitrineLocalizacao: formattedEnderecoStr || (merchant as any)?.vitrineLocalizacao || '',
         vitrineEndereco: {
           cep: configData.cep,
           rua: configData.rua,

@@ -202,10 +202,8 @@ export default function App() {
         }
 
         try {
-          const fetchedServices = await firebaseService.getServices(m.uid);
-          if (fetchedServices.length > 0) {
-            setPublicVitrineServices(fetchedServices);
-          } else if (m.vitrineProdutos && m.vitrineProdutos.length > 0) {
+          // If merchant has customized vitrineProdutos or servicos directly saved in their profile, prioritize them
+          if (m.vitrineProdutos && m.vitrineProdutos.length > 0) {
             setPublicVitrineServices(m.vitrineProdutos.map((p, idx) => ({
               id: p.id || `p-${idx}`,
               name: p.name,
@@ -222,7 +220,12 @@ export default function App() {
               commissionPercent: 0
             })));
           } else {
-            setPublicVitrineServices(defaultServices);
+            const fetchedServices = await firebaseService.getServices(m.uid);
+            if (fetchedServices.length > 0) {
+              setPublicVitrineServices(fetchedServices);
+            } else {
+              setPublicVitrineServices(defaultServices);
+            }
           }
           
           const fetchedBarbers = await firebaseService.getBarbers(m.uid);

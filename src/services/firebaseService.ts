@@ -23,6 +23,7 @@ import {
 } from "firebase/auth";
 import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData, DraftVitrine, AppNotification, QueueItem, AnalyticsVisit, AnalyticsEvent } from "../types";
 import { analyticsTracker } from "./analyticsTracker";
+import { extractAddressString } from "../utils/addressUtils";
 
 // Collection Names
 const COLL_SERVICES = "services";
@@ -649,6 +650,7 @@ export const firebaseService = {
       const servs = (d.servicos && d.servicos.length > 0)
         ? d.servicos.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0), durationMin: s.durationMin || 30 }))
         : (d as any).vitrineProdutos || [];
+      const endFormatted = extractAddressString(d) || d.endereco || '';
 
       return {
         uid: d.id || `draft_${d.codigo}`,
@@ -664,8 +666,8 @@ export const firebaseService = {
         onboardingCompleted: true,
         vitrineWhatsApp: d.whatsapp,
         vitrineInstagram: d.instagram,
-        vitrineEndereco: d.endereco,
-        vitrineLocalizacao: d.endereco,
+        vitrineEndereco: endFormatted,
+        vitrineLocalizacao: endFormatted,
         vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
         vitrineHorarios: d.horarios || 'Seg - Sáb: 08:00 às 20:00',
         vitrineLogoImage: logo,
@@ -692,13 +694,25 @@ export const firebaseService = {
       };
     };
 
+    const enhanceUserAddress = (u: MerchantUser): MerchantUser => {
+      const resolvedAddress = extractAddressString(u);
+      if (resolvedAddress && (!u.vitrineLocalizacao || typeof u.vitrineLocalizacao !== 'string' || !u.vitrineLocalizacao.trim())) {
+        return {
+          ...u,
+          vitrineLocalizacao: resolvedAddress,
+          vitrineEndereco: u.vitrineEndereco || resolvedAddress
+        };
+      }
+      return u;
+    };
+
     // 1. Search in Firestore "users"
     try {
       // First try quick exact queries on vitrineLinkPersonalizado
       const qExact = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", rawSlug));
       const snapExact = await withTimeout(getDocs(qExact), 8000);
       if (!snapExact.empty) {
-        return snapExact.docs[0].data() as MerchantUser;
+        return enhanceUserAddress(snapExact.docs[0].data() as MerchantUser);
       }
 
       // Scan all users with timeout protection
@@ -708,7 +722,7 @@ export const firebaseService = {
         for (const docSnap of snapAll.docs) {
           const user = docSnap.data() as MerchantUser;
           if (matchesMerchant(user)) {
-            return user;
+            return enhanceUserAddress(user);
           }
         }
       }

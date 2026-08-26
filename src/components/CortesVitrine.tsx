@@ -58,6 +58,7 @@ import {
 import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem, VitrineHorarioHoje, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import { notificationService } from '../services/notificationService';
+import { extractAddressString } from '../utils/addressUtils';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
 import ClientBooking from './ClientBooking';
 import { 
@@ -200,9 +201,7 @@ export default function CortesVitrine({
   const [activeSubTab, setActiveSubTab] = useState<'editor' | 'preview'>('editor');
   
   // Local state for Vitrine inputs
-  const rawEndereco = merchant.vitrineLocalizacao || 
-    (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : '') || 
-    (merchant as any).endereco || '';
+  const rawEndereco = extractAddressString(merchant);
   const [horarios, setHorarios] = useState(merchant.vitrineHorarios || (merchant as any).horarios || 'Segunda a Sábado: 09:00 às 19:00');
   const [localizacao, setLocalizacao] = useState(rawEndereco || 'Av. Principal, 123 - Centro');
   const [whatsapp, setWhatsapp] = useState(merchant.vitrineWhatsApp || merchant.whatsapp || '');
@@ -407,6 +406,7 @@ export default function CortesVitrine({
   });
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
+  const [newProdDuration, setNewProdDuration] = useState('30');
 
   // Local state for gallery
   const [gallery, setGallery] = useState<string[]>(() => {
@@ -740,7 +740,7 @@ export default function CortesVitrine({
       if (merchant.vitrineGradientEnabled !== undefined) setGradientEnabled(merchant.vitrineGradientEnabled);
       if (merchant.vitrineTemplate) setTemplate(merchant.vitrineTemplate);
       if (merchant.vitrineHorarios || (merchant as any).horarios) setHorarios(merchant.vitrineHorarios || (merchant as any).horarios);
-      const incomingEnd = merchant.vitrineLocalizacao || (typeof merchant.vitrineEndereco === 'string' ? merchant.vitrineEndereco : '') || (merchant as any).endereco;
+      const incomingEnd = extractAddressString(merchant);
       if (incomingEnd) setLocalizacao(incomingEnd);
       if (merchant.vitrineWhatsApp || merchant.whatsapp) setWhatsapp(merchant.vitrineWhatsApp || merchant.whatsapp || '');
       if (merchant.vitrineModoAcao) {
@@ -1010,13 +1010,15 @@ export default function CortesVitrine({
     if (!newProdName || !newProdPrice) return;
     const price = parseFloat(newProdPrice);
     if (isNaN(price)) return;
+    const durationMin = parseInt(newProdDuration, 10) || 30;
     
     setProducts(prev => [
       ...prev,
-      { id: `p-${Date.now()}`, name: newProdName, price }
+      { id: `p-${Date.now()}`, name: newProdName, price, durationMin }
     ]);
     setNewProdName('');
     setNewProdPrice('');
+    setNewProdDuration('30');
   };
 
   const handleRemoveProduct = (id: string) => {
@@ -1121,6 +1123,23 @@ export default function CortesVitrine({
       const merchantUid = merchant?.uid || '';
       if (merchantUid && !merchantUid.startsWith('draft')) {
         await firebaseService.updateMerchantProfile(merchantUid, dataToUpdate);
+        
+        // Also synchronize and persist services into Firestore services collection
+        if (products && products.length > 0) {
+          try {
+            for (const prod of products) {
+              await firebaseService.saveService({
+                id: prod.id || `s-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                name: prod.name,
+                price: typeof prod.price === 'number' ? prod.price : (parseFloat(prod.price as any) || 0),
+                durationMin: prod.durationMin || 30,
+                commissionPercent: 0
+              }, merchantUid);
+            }
+          } catch (servErr) {
+            console.warn("Aviso ao sincronizar serviços individuais no Firebase:", servErr);
+          }
+        }
       }
 
       // If this is a draft vitrine (or has invite code / is in admin preview), also persist to draft_vitrines
@@ -4471,20 +4490,20 @@ export default function CortesVitrine({
                 />
               </div>
 
-              {/* PRODUCTS MANAGEMENT */}
+              {/* SERVICES & PRODUCTS MANAGEMENT */}
               <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime border-b border-white/10 pb-3 pt-4 flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4" />
-                <span>Nossos Produtos</span>
+                <Scissors className="w-4 h-4" />
+                <span>Serviços & Produtos da Vitrine</span>
               </h3>
 
               <div className="space-y-3">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
                   <input 
                     type="text" 
                     value={newProdName}
                     onChange={e => setNewProdName(e.target.value)}
-                    placeholder="Nome do produto (ex: Cera Modeladora)"
-                    className="flex-1 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
+                    placeholder="Nome do serviço (ex: Corte + Barba)"
+                    className="flex-1 min-w-[140px] bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
                   />
                   <input 
                     type="number" 
@@ -4493,9 +4512,20 @@ export default function CortesVitrine({
                     placeholder="Preço R$"
                     className="w-24 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
                   />
+                  <div className="flex items-center gap-1 bg-[#051b42] border border-white/10 rounded-2xl px-2">
+                    <input 
+                      type="number" 
+                      value={newProdDuration}
+                      onChange={e => setNewProdDuration(e.target.value)}
+                      placeholder="Min"
+                      className="w-12 bg-transparent text-white p-2 text-xs font-medium focus:outline-none text-center"
+                    />
+                    <span className="text-[10px] text-gray-400 font-bold pr-1">min</span>
+                  </div>
                   <button 
                     onClick={handleAddProduct}
-                    className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark px-4 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer"
+                    className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer"
+                    title="Adicionar serviço/produto"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -4503,17 +4533,25 @@ export default function CortesVitrine({
 
                 <div className="divide-y divide-white/5 border border-white/10 rounded-2xl overflow-hidden bg-[#051b42]/30">
                   {products.length === 0 ? (
-                    <p className="p-4 text-xs text-center text-gray-500 font-medium">Nenhum produto cadastrado na vitrine.</p>
+                    <p className="p-4 text-xs text-center text-gray-500 font-medium">Nenhum serviço cadastrado na vitrine.</p>
                   ) : (
                     products.map(p => (
                       <div key={p.id} className="p-3.5 flex justify-between items-center text-xs">
                         <div className="text-left font-medium">
-                          <p className="text-white">{p.name}</p>
-                          <p className="text-brand-lime font-bold mt-0.5">R$ {p.price.toFixed(2)}</p>
+                          <p className="text-white font-bold">{p.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-brand-lime font-bold">R$ {p.price.toFixed(2)}</span>
+                            {p.durationMin && (
+                              <span className="text-gray-400 text-[10px] flex items-center gap-0.5">
+                                • {p.durationMin} min
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <button 
                           onClick={() => handleRemoveProduct(p.id)}
                           className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          title="Remover serviço"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

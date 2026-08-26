@@ -43,6 +43,7 @@ import { firebaseService } from '../services/firebaseService';
 import CortesVitrine from './CortesVitrine';
 import AdminAnalyticsDashboard from './AdminAnalyticsDashboard';
 import { THEME_PRESETS } from '../utils/vitrineTheme';
+import { extractAddressString } from '../utils/addressUtils';
 
 function compressImageFile(file: File, maxWidth = 500, maxHeight = 500, quality = 0.8): Promise<string> {
   return new Promise((resolve) => {
@@ -1914,7 +1915,7 @@ export default function AdminSubscriptionManager({
                       slogan: updatedMerchant.vitrineSlogan ?? previewDraft.slogan,
                       whatsapp: updatedMerchant.vitrineWhatsApp || updatedMerchant.whatsapp || previewDraft.whatsapp,
                       instagram: updatedMerchant.vitrineInstagram ?? previewDraft.instagram,
-                      endereco: typeof updatedMerchant.vitrineEndereco === 'string' ? updatedMerchant.vitrineEndereco : (updatedMerchant.vitrineLocalizacao ?? previewDraft.endereco),
+                      endereco: extractAddressString(updatedMerchant) || previewDraft.endereco || '',
                       horarios: updatedMerchant.vitrineHorarios ?? previewDraft.horarios,
                       logoUrl: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
                       vitrineLogoImage: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
