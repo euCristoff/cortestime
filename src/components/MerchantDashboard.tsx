@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import LogoIcon from './LogoIcon';
 import InstallCortestimeStep from './InstallCortestimeStep';
@@ -64,7 +64,7 @@ import {
   PhoneCall,
   Loader2
 } from 'lucide-react';
-import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser, AppNotification, QueueItem, ServiceMode } from '../types';
+import { OnboardingData, Service, Barber, Client, Appointment, MerchantUser, AppNotification, QueueItem, ServiceMode, safeEncodeURIComponent } from '../types';
 import { notificationService } from '../services/notificationService';
 import CortesVitrine from './CortesVitrine';
 import MercadoPagoCheckout from './MercadoPagoCheckout';
@@ -83,6 +83,8 @@ interface MerchantDashboardProps {
   clients: Client[];
   appointments: Appointment[];
   onAddService: (service: Omit<Service, 'id'>) => void;
+  onUpdateService?: (service: Service) => void;
+  onDeleteService?: (serviceId: string) => void;
   onAddBarber: (barber: Omit<Barber, 'id' | 'rating'>) => void;
   onUpdateBarber?: (barber: Barber) => void;
   onDeleteBarber?: (barberId: string) => void;
@@ -108,6 +110,8 @@ export default function MerchantDashboard({
   clients,
   appointments,
   onAddService,
+  onUpdateService,
+  onDeleteService,
   onAddBarber,
   onUpdateBarber,
   onDeleteBarber,
@@ -154,9 +158,11 @@ export default function MerchantDashboard({
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingCapa, setIsUploadingCapa] = useState(false);
 
-  // Synchronize configData whenever merchant changes (e.g. returning from Vitrine or update)
+  // Synchronize configData only when merchant UID actually switches or on initial load
+  const lastMerchantUidRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (merchant) {
+    if (merchant && merchant.uid !== lastMerchantUidRef.current) {
+      lastMerchantUidRef.current = merchant.uid;
       const curAddr = typeof merchant.vitrineEndereco === 'object' && merchant.vitrineEndereco ? merchant.vitrineEndereco : null;
       setConfigData({
         nomeBarbearia: merchant.nomeBarbearia || onboardingData.businessName || '',
@@ -177,7 +183,7 @@ export default function MerchantDashboard({
         serviceMode: (merchant.serviceMode || 'agendamento') as ServiceMode
       });
     }
-  }, [merchant]);
+  }, [merchant?.uid]);
 
   // Real-time Queue State
   const [merchantQueue, setMerchantQueue] = useState<QueueItem[]>([]);
@@ -318,7 +324,7 @@ export default function MerchantDashboard({
       isSubscribed = false;
       clearInterval(interval);
     };
-  }, [merchant?.uid, appointments]);
+  }, [merchant?.uid]);
 
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     notificationService.getPermissionStatus()
@@ -331,6 +337,7 @@ export default function MerchantDashboard({
   
   // Modals state
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [isBarberModalOpen, setIsBarberModalOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
@@ -942,15 +949,58 @@ export default function MerchantDashboard({
   const step3Done = merchant ? (services.length > 4 || services.some(s => !['serv-1', 'serv-2', 'serv-3', 'serv-4'].includes(s.id))) : (services.length > 4);
 
   // Handlers
+  const handleOpenNewService = () => {
+    setEditingService(null);
+    setNewServiceName('');
+    setNewServicePrice('');
+    setNewServiceDuration('30');
+    setNewServiceCommission('10');
+    setIsServiceModalOpen(true);
+  };
+
+  const handleOpenEditService = (s: Service) => {
+    setEditingService(s);
+    setNewServiceName(s.name);
+    setNewServicePrice(s.price.toString());
+    setNewServiceDuration((s.durationMin || 30).toString());
+    setNewServiceCommission((s.commissionPercent || 10).toString());
+    setIsServiceModalOpen(true);
+  };
+
+  const handleDeleteServiceClick = (serviceId: string) => {
+    if (window.confirm("Deseja realmente excluir este serviço?")) {
+      if (onDeleteService) {
+        onDeleteService(serviceId);
+      }
+      setIsServiceModalOpen(false);
+      setEditingService(null);
+    }
+  };
+
   const handleCreateService = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newServiceName || !newServicePrice) return;
-    onAddService({
-      name: newServiceName,
-      price: parseFloat(newServicePrice),
-      durationMin: parseInt(newServiceDuration),
-      commissionPercent: parseInt(newServiceCommission)
-    });
+    const priceVal = parseFloat(newServicePrice);
+    const durationVal = parseInt(newServiceDuration) || 30;
+    const commissionVal = parseInt(newServiceCommission) || 10;
+
+    if (editingService && onUpdateService) {
+      onUpdateService({
+        ...editingService,
+        name: newServiceName,
+        price: priceVal,
+        durationMin: durationVal,
+        commissionPercent: commissionVal
+      });
+    } else {
+      onAddService({
+        name: newServiceName,
+        price: priceVal,
+        durationMin: durationVal,
+        commissionPercent: commissionVal
+      });
+    }
+    setEditingService(null);
     setNewServiceName('');
     setNewServicePrice('');
     setIsServiceModalOpen(false);
@@ -3288,7 +3338,7 @@ export default function MerchantDashboard({
                 <p className="text-xs text-gray-500">Cadastre e edite serviços, preços, durações e regras de comissão dos barbeiros</p>
               </div>
               <button 
-                onClick={() => setIsServiceModalOpen(true)}
+                onClick={handleOpenNewService}
                 className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 px-5 rounded-2xl flex items-center justify-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
               >
                 <Plus className="w-4 h-4" />
@@ -3315,12 +3365,19 @@ export default function MerchantDashboard({
                         <td className="p-3 text-brand-blue font-bold">R$ {s.price.toFixed(2)}</td>
                         <td className="p-3">{s.durationMin} min</td>
                         <td className="p-3 font-medium text-emerald-600">{s.commissionPercent}% (R$ {(s.price * (s.commissionPercent / 100)).toFixed(2)})</td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-right space-x-2">
                           <button 
-                            onClick={() => setIsServiceModalOpen(true)}
+                            onClick={() => handleOpenEditService(s)}
                             className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                           >
                             Editar
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteServiceClick(s.id)}
+                            className="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            title="Excluir serviço"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 inline" />
                           </button>
                         </td>
                       </tr>
@@ -3641,7 +3698,7 @@ export default function MerchantDashboard({
                                     <span className="hidden sm:inline">Histórico</span>
                                   </button>
                                   <a 
-                                    href={`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(c.name)},%20tudo%20bem?%20Gostaria%20de%20agendar%20um%20horário%20na%20${encodeURIComponent(merchant?.nomeBarbearia || 'barbearia')}?`}
+                                    href={`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=Olá%20${safeEncodeURIComponent(c.name)},%20tudo%20bem?%20Gostaria%20de%20agendar%20um%20horário%20na%20${safeEncodeURIComponent(merchant?.nomeBarbearia || 'barbearia')}?`}
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-xs bg-brand-blue hover:bg-brand-blue-light text-white font-bold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
@@ -4255,7 +4312,7 @@ export default function MerchantDashboard({
               </div>
 
               <a 
-                href={`https://wa.me/558298089045?text=${encodeURIComponent('Olá equipe Cortestime! Preciso de suporte e ajuda com a minha barbearia no painel.')}`}
+                href={`https://wa.me/558298089045?text=${safeEncodeURIComponent('Olá equipe Cortestime! Preciso de suporte e ajuda com a minha barbearia no painel.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-white hover:bg-blue-50 text-brand-blue font-extrabold text-xs py-3.5 px-5 rounded-2xl flex items-center gap-2 uppercase tracking-wide transition-all shadow-md cursor-pointer shrink-0"
@@ -4662,7 +4719,7 @@ export default function MerchantDashboard({
                 <button 
                   onClick={() => {
                     const formattedPhone = getFormattedPhoneForWhatsApp(whatsappAlert.clientPhone);
-                    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(whatsappAlert.message)}`, '_blank');
+                    window.open(`https://wa.me/${formattedPhone}?text=${safeEncodeURIComponent(whatsappAlert.message)}`, '_blank');
                     setWhatsappAlert({isOpen: false, clientName: '', clientPhone: '', message: ''});
                   }}
                   className="w-full bg-brand-blue hover:bg-brand-blue-light text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors"
@@ -4691,8 +4748,8 @@ export default function MerchantDashboard({
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-3xl max-w-sm w-full p-6 text-left space-y-4 shadow-2xl relative"
             >
-              <button onClick={() => setIsServiceModalOpen(false)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
-              <h3 className="font-display font-bold text-lg text-brand-dark">Cadastrar Novo Serviço</h3>
+              <button onClick={() => { setIsServiceModalOpen(false); setEditingService(null); }} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
+              <h3 className="font-display font-bold text-lg text-brand-dark">{editingService ? 'Editar Serviço' : 'Cadastrar Novo Serviço'}</h3>
               <form onSubmit={handleCreateService} className="space-y-4 text-xs">
                 <div className="space-y-1">
                   <label className="font-bold text-gray-600">Nome do Serviço</label>
@@ -4712,7 +4769,19 @@ export default function MerchantDashboard({
                     <input type="number" required value={newServiceCommission} onChange={e => setNewServiceCommission(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" />
                   </div>
                 </div>
-                <button type="submit" className="w-full bg-brand-blue text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs">Salvar Serviço</button>
+                <button type="submit" className="w-full bg-brand-blue text-white font-bold py-3 rounded-xl uppercase tracking-wider text-xs">
+                  {editingService ? 'Salvar Alterações' : 'Salvar Serviço'}
+                </button>
+                {editingService && (
+                  <button 
+                    type="button" 
+                    onClick={() => handleDeleteServiceClick(editingService.id)} 
+                    className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold py-2.5 rounded-xl uppercase tracking-wider text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir Serviço</span>
+                  </button>
+                )}
               </form>
             </motion.div>
           </div>
@@ -5021,7 +5090,7 @@ export default function MerchantDashboard({
 
                 <div className="pt-2 flex gap-2">
                   <a 
-                    href={`https://wa.me/55${client.phone.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(client.name)},%20tudo%20bem?`}
+                    href={`https://wa.me/55${client.phone.replace(/\D/g, '')}?text=Olá%20${safeEncodeURIComponent(client.name)},%20tudo%20bem?`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex-1 bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-1.5 uppercase transition-colors"

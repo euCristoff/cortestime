@@ -127,6 +127,27 @@ function compressImageFile(file: File, maxWidth = 900, maxHeight = 900, quality 
   });
 }
 
+function safeEncode(val: string = ''): string {
+  if (!val) return '';
+  try {
+    const sanitized = String(val).replace(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+      ''
+    );
+    return encodeURIComponent(sanitized);
+  } catch (_) {
+    try {
+      return encodeURI(String(val));
+    } catch (_) {
+      return String(val)
+        .replace(/&/g, '%26')
+        .replace(/\+/g, '%2B')
+        .replace(/#/g, '%23')
+        .replace(/\s/g, '%20');
+    }
+  }
+}
+
 function compressDataUrl(dataUrl: string, maxWidth = 800, maxHeight = 800, quality = 0.75): Promise<string> {
   if (!dataUrl || !dataUrl.startsWith('data:image') || dataUrl.length < 80000) {
     return Promise.resolve(dataUrl);
@@ -188,15 +209,18 @@ export default function CortesVitrine({
   // Mensagens personalizadas para o WhatsApp
   const [mensagemWhatsAppAgendamento, setMensagemWhatsAppAgendamento] = useState<string>(
     merchant.vitrineMensagemWhatsAppAgendamento || 
+    (merchant as any).mensagemWhatsAppAgendamento ||
     merchant.vitrineMensagemWhatsAppPersonalizada || 
+    (merchant as any).mensagemWhatsAppPersonalizada ||
     'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️'
   );
   const [mensagemWhatsAppOrdemChegada, setMensagemWhatsAppOrdemChegada] = useState<string>(
     merchant.vitrineMensagemWhatsAppOrdemChegada || 
+    (merchant as any).mensagemWhatsAppOrdemChegada ||
     'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈'
   );
   const [mensagemWhatsAppCustom, setMensagemWhatsAppCustom] = useState<string>(
-    merchant.vitrineMensagemWhatsAppPersonalizada || ''
+    merchant.vitrineMensagemWhatsAppPersonalizada || (merchant as any).mensagemWhatsAppPersonalizada || ''
   );
   const [activeMsgTab, setActiveMsgTab] = useState<'agendamento' | 'ordem_chegada'>(
     (merchant.vitrineModoAcao === 'whatsapp' || (merchant as any).modoAcao === 'whatsapp') ? 'ordem_chegada' : 'agendamento'
@@ -302,7 +326,7 @@ export default function CortesVitrine({
         ...extraParams
       }
     );
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    return `https://wa.me/${cleanPhone}?text=${safeEncode(msg)}`;
   };
 
   const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -343,23 +367,47 @@ export default function CortesVitrine({
     (merchant?.nomeBarbearia || 'barbearia').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
   );
   
-  // Local state for products
-  const [products, setProducts] = useState<{ id: string; name: string; price: number }[]>(
-    merchant.vitrineProdutos || 
-    (services && services.length > 0 
-      ? services.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price })) 
-      : [
-          { id: 'p1', name: 'Pomada Efeito Matte Premium', price: 45.00 },
-          { id: 'p2', name: 'Óleo Hidratante para Barba', price: 35.00 }
-        ])
-  );
+  // Local state for products / services
+  const [products, setProducts] = useState<{ id: string; name: string; price: number; durationMin?: number }[]>(() => {
+    if (services && services.length > 0) {
+      return services.map((s, idx) => ({
+        id: s.id || `p-${idx}`,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: (s as any).durationMin || 30
+      }));
+    }
+    if (merchant.vitrineProdutos && merchant.vitrineProdutos.length > 0) {
+      return merchant.vitrineProdutos.map((p, idx) => ({
+        id: p.id || `p-${idx}`,
+        name: p.name,
+        price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+        durationMin: (p as any).durationMin || 30
+      }));
+    }
+    if ((merchant as any).servicos && (merchant as any).servicos.length > 0) {
+      return (merchant as any).servicos.map((s: any, idx: number) => ({
+        id: s.id || `p-${idx}`,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: s.durationMin || 30
+      }));
+    }
+    return [
+      { id: 'p1', name: 'Corte de Cabelo', price: 40.00, durationMin: 30 },
+      { id: 'p2', name: 'Barba Alinhada', price: 30.00, durationMin: 25 },
+      { id: 'p3', name: 'Combo Cabelo + Barba', price: 60.00, durationMin: 45 }
+    ];
+  });
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
 
   // Local state for gallery
-  const [gallery, setGallery] = useState<string[]>(
-    merchant.vitrineGaleria || []
-  );
+  const [gallery, setGallery] = useState<string[]>(() => {
+    if (merchant.vitrineGaleria && merchant.vitrineGaleria.length > 0) return [...merchant.vitrineGaleria];
+    if ((merchant as any).galeria && (merchant as any).galeria.length > 0) return [...(merchant as any).galeria];
+    return [];
+  });
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
 
@@ -514,9 +562,12 @@ export default function CortesVitrine({
     };
   }, [merchant?.uid]);
 
-  // Synchronize state when merchant object or UID changes (e.g. reload or session update)
+  // Synchronize state ONLY when merchant ID actually changes (e.g. switching between different merchants or drafts)
+  const lastMerchantKeyRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (merchant) {
+    const currentKey = merchant?.uid || (merchant as any)?.codigoVitrine || 'merchant-default';
+    if (merchant && lastMerchantKeyRef.current !== currentKey) {
+      lastMerchantKeyRef.current = currentKey;
       if (merchant.vitrineThemePreset) setThemePreset(merchant.vitrineThemePreset);
       if (merchant.vitrinePrimaryColor) setPrimaryColor(merchant.vitrinePrimaryColor);
       if (merchant.vitrineSecondaryColor) setSecondaryColor(merchant.vitrineSecondaryColor);
@@ -538,45 +589,50 @@ export default function CortesVitrine({
       if (merchant.vitrineInstagram) setInstagram(merchant.vitrineInstagram);
       if (merchant.vitrineLinkBio) setLinkBio(merchant.vitrineLinkBio);
       if (merchant.vitrineLinkPersonalizado) setLinkPersonalizado(merchant.vitrineLinkPersonalizado);
-      if (merchant.vitrineProdutos) setProducts(merchant.vitrineProdutos);
-      if (merchant.vitrineGaleria) setGallery(merchant.vitrineGaleria);
+      if (services && services.length > 0) {
+        setProducts(services.map((s, idx) => ({
+          id: s.id || `p-${idx}`,
+          name: s.name,
+          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+          durationMin: (s as any).durationMin || 30
+        })));
+      } else if (merchant.vitrineProdutos && merchant.vitrineProdutos.length > 0) {
+        setProducts(merchant.vitrineProdutos.map((p, idx) => ({
+          id: p.id || `p-${idx}`,
+          name: p.name,
+          price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+          durationMin: (p as any).durationMin || 30
+        })));
+      } else if ((merchant as any).servicos && (merchant as any).servicos.length > 0) {
+        setProducts((merchant as any).servicos.map((s: any, idx: number) => ({
+          id: s.id || `p-${idx}`,
+          name: s.name,
+          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+          durationMin: s.durationMin || 30
+        })));
+      }
+      if (merchant.vitrineGaleria && merchant.vitrineGaleria.length > 0) {
+        setGallery(merchant.vitrineGaleria);
+      } else if ((merchant as any).galeria && (merchant as any).galeria.length > 0) {
+        setGallery((merchant as any).galeria);
+      }
       if (merchant.vitrineHorarioHoje) setHorarioHoje(merchant.vitrineHorarioHoje);
-      if (merchant.vitrineMensagemWhatsAppAgendamento) setMensagemWhatsAppAgendamento(merchant.vitrineMensagemWhatsAppAgendamento);
-      if (merchant.vitrineMensagemWhatsAppOrdemChegada) setMensagemWhatsAppOrdemChegada(merchant.vitrineMensagemWhatsAppOrdemChegada);
-      if (merchant.vitrineMensagemWhatsAppPersonalizada) setMensagemWhatsAppCustom(merchant.vitrineMensagemWhatsAppPersonalizada);
+      if (merchant.vitrineMensagemWhatsAppAgendamento || (merchant as any).mensagemWhatsAppAgendamento) {
+        setMensagemWhatsAppAgendamento(merchant.vitrineMensagemWhatsAppAgendamento || (merchant as any).mensagemWhatsAppAgendamento);
+      }
+      if (merchant.vitrineMensagemWhatsAppOrdemChegada || (merchant as any).mensagemWhatsAppOrdemChegada) {
+        setMensagemWhatsAppOrdemChegada(merchant.vitrineMensagemWhatsAppOrdemChegada || (merchant as any).mensagemWhatsAppOrdemChegada);
+      }
+      if (merchant.vitrineMensagemWhatsAppPersonalizada || (merchant as any).mensagemWhatsAppPersonalizada) {
+        setMensagemWhatsAppCustom(merchant.vitrineMensagemWhatsAppPersonalizada || (merchant as any).mensagemWhatsAppPersonalizada);
+      }
       if (merchant.vitrinePermitirAgendamentoWhatsApp !== undefined) setPermitirWhatsApp(merchant.vitrinePermitirAgendamentoWhatsApp);
       if (merchant.vitrineUsarSaudacaoHorarioWhatsApp !== undefined) setUsarSaudacaoHorario(merchant.vitrineUsarSaudacaoHorarioWhatsApp);
       if (merchant.vitrineBarbeiroUnico !== undefined || merchant.barbeiroUnico !== undefined) {
         setBarbeiroUnico(merchant.vitrineBarbeiroUnico ?? merchant.barbeiroUnico ?? false);
       }
     }
-  }, [
-    merchant?.uid,
-    merchant?.nomeBarbearia,
-    merchant?.whatsapp,
-    merchant?.vitrinePrimaryColor,
-    merchant?.vitrineSecondaryColor,
-    merchant?.vitrineThemePreset,
-    merchant?.vitrineTemplate,
-    merchant?.vitrineBarbeiroUnico,
-    merchant?.barbeiroUnico,
-    merchant?.vitrineHorarios,
-    merchant?.vitrineLocalizacao,
-    merchant?.vitrineEndereco,
-    merchant?.vitrineWhatsApp,
-    merchant?.vitrineModoAcao,
-    merchant?.vitrineLogo,
-    merchant?.vitrineLogoImage,
-    merchant?.vitrineSlogan,
-    merchant?.vitrineCapa,
-    merchant?.vitrineInstagram,
-    merchant?.vitrineLinkBio,
-    merchant?.vitrineLinkPersonalizado,
-    merchant?.vitrineProdutos,
-    merchant?.vitrineGaleria,
-    merchant?.vitrineHorarioHoje,
-    merchant?.vitrineGradientEnabled
-  ]);
+  }, [merchant?.uid, (merchant as any)?.codigoVitrine]);
 
   // Derived queue metrics
   const waitingQueue = liveQueue.filter(q => q.status === 'waiting');
@@ -883,6 +939,7 @@ export default function CortesVitrine({
         vitrineCapa: finalCapa,
         vitrineLinkPersonalizado: linkPersonalizado || '',
         vitrineProdutos: products || [],
+        servicos: products || [],
         vitrineGaleria: finalGallery || [],
         vitrineTemplate: template,
         vitrinePrimaryColor: primaryColor,
@@ -1600,7 +1657,7 @@ export default function CortesVitrine({
 
               {/* Location Card */}
               <div 
-                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(localizacao)}`, '_blank')}
+                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao)}`, '_blank')}
                 className={`mt-3.5 bg-black/25 hover:bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl text-left transition-all cursor-pointer shadow-xs ${
                   isPreview ? 'p-2.5' : 'p-3.5'
                 }`}
@@ -1932,7 +1989,7 @@ export default function CortesVitrine({
           <div className="pt-1 pb-4">
             {/* Endereço Card */}
             <div 
-              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(localizacao || 'Centro')}`, '_blank')}
+              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao || 'Centro')}`, '_blank')}
               className="rounded-2xl p-3.5 border shadow-2xs flex items-center gap-3 transition-colors cursor-pointer"
               style={{
                 backgroundColor: tokens.cardBg,
@@ -2314,7 +2371,7 @@ export default function CortesVitrine({
                 </div>
 
                 <div 
-                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(localizacao)}`, '_blank')}
+                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao)}`, '_blank')}
                   className="flex items-start gap-2 p-2.5 rounded-xl border transition-colors cursor-pointer"
                   style={{
                     backgroundColor: tokens.cardInnerBg,

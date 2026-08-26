@@ -118,8 +118,10 @@ export interface MerchantUser {
   vitrineInstagram?: string;
   vitrineFacebook?: string;
   vitrineLinkBio?: string;
-  vitrineProdutos?: { id: string; name: string; price: number; imageUrl?: string }[];
+  vitrineProdutos?: { id: string; name: string; price: number; durationMin?: number; imageUrl?: string; description?: string }[];
   vitrineGaleria?: string[];
+  galeria?: string[];
+  servicos?: { id?: string; name: string; price: number; durationMin?: number; description?: string }[];
   vitrineAvaliacoes?: { id: string; author: string; rating: number; comment: string; timeAgo?: string; date?: string }[];
   
   // Vitrine Action Mode & WhatsApp Direct Configuration
@@ -129,6 +131,9 @@ export interface MerchantUser {
   vitrineMensagemWhatsAppAgendamento?: string;
   vitrineMensagemWhatsAppOrdemChegada?: string;
   vitrineUsarSaudacaoHorarioWhatsApp?: boolean;
+  mensagemWhatsAppAgendamento?: string;
+  mensagemWhatsAppOrdemChegada?: string;
+  mensagemWhatsAppPersonalizada?: string;
 
   // Vitrine Template & Theme Styling
   vitrineTemplate?: 'modelo1' | 'modelo2';
@@ -305,7 +310,16 @@ export interface DraftVitrine {
   vitrineGaleria?: string[];
   horarios?: string;
   servicos?: { id?: string; name: string; price: number; durationMin: number; description?: string }[];
+  vitrineProdutos?: { id: string; name: string; price: number; durationMin?: number; description?: string }[];
   barbeiroUnico?: boolean; // Se ativo, oculta seleção/ícones de barbeiro no agendamento e vitrine
+  mensagemWhatsAppAgendamento?: string;
+  mensagemWhatsAppOrdemChegada?: string;
+  mensagemWhatsAppPersonalizada?: string;
+  vitrineMensagemWhatsAppAgendamento?: string;
+  vitrineMensagemWhatsAppOrdemChegada?: string;
+  vitrineMensagemWhatsAppPersonalizada?: string;
+  vitrinePermitirAgendamentoWhatsApp?: boolean;
+  vitrineUsarSaudacaoHorarioWhatsApp?: boolean;
   themePreset?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -332,4 +346,39 @@ export interface VitrineHorarioHoje {
   mensagem?: string; // aviso rápido opcional
   dataAtualizacao?: string; // data em que foi publicado (ex: '2026-08-20')
 }
+
+export function safeEncodeURIComponent(val: string = ''): string {
+  if (!val) return '';
+  try {
+    const sanitized = String(val).replace(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+      ''
+    );
+    return encodeURIComponent(sanitized);
+  } catch (_) {
+    try {
+      return encodeURI(String(val));
+    } catch (_) {
+      return String(val)
+        .replace(/&/g, '%26')
+        .replace(/\+/g, '%2B')
+        .replace(/#/g, '%23')
+        .replace(/\s/g, '%20');
+    }
+  }
+}
+
+export function safeDecodeURIComponent(val: string = ''): string {
+  if (!val) return '';
+  try {
+    return decodeURIComponent(String(val));
+  } catch (_) {
+    try {
+      return decodeURI(String(val));
+    } catch (_) {
+      return String(val);
+    }
+  }
+}
+
 

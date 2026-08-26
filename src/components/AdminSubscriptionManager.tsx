@@ -349,6 +349,18 @@ export default function AdminSubscriptionManager({
       return;
     }
 
+    // Auto-include service if user typed in the new service box without clicking + Add
+    let finalServicos = [...draftServicos];
+    if (newSvcName.trim()) {
+      finalServicos.push({
+        name: newSvcName.trim(),
+        price: parseFloat(newSvcPrice) || 0,
+        durationMin: parseInt(newSvcDuration) || 30
+      });
+      setNewSvcName('');
+      setNewSvcPrice('');
+    }
+
     try {
       const finalCode = draftCodigo.trim() 
         ? draftCodigo.trim().toUpperCase() 
@@ -369,7 +381,8 @@ export default function AdminSubscriptionManager({
         galeria: draftGaleria,
         vitrineGaleria: draftGaleria,
         horarios: draftHorarios,
-        servicos: draftServicos,
+        servicos: finalServicos,
+        vitrineProdutos: finalServicos.map((s, idx) => ({ id: (s as any).id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
         barbeiroUnico: draftBarbeiroUnico,
         themePreset: draftThemePreset,
         primaryColor: draftPrimaryColor,
@@ -377,6 +390,12 @@ export default function AdminSubscriptionManager({
         gradientEnabled: draftGradientEnabled,
         template: draftTemplate,
         modoAcao: draftModoAcao,
+        mensagemWhatsAppAgendamento: 'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️',
+        mensagemWhatsAppOrdemChegada: 'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈',
+        vitrineMensagemWhatsAppAgendamento: 'Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️',
+        vitrineMensagemWhatsAppOrdemChegada: 'Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈',
+        vitrinePermitirAgendamentoWhatsApp: true,
+        vitrineUsarSaudacaoHorarioWhatsApp: true,
         criadoPorAdmin: currentAdmin.email
       });
 
@@ -404,6 +423,11 @@ export default function AdminSubscriptionManager({
       setDraftGradientEnabled(true);
       setDraftTemplate('modelo1');
       setDraftModoAcao('agendamento');
+      setDraftServicos([
+        { name: 'Corte Degrade / Fade', price: 35, durationMin: 30 },
+        { name: 'Barba Terapia & Alinhamento', price: 25, durationMin: 20 },
+        { name: 'Combo Cabelo + Barba', price: 55, durationMin: 45 }
+      ]);
     } catch (err: any) {
       alert(`Erro ao criar vitrine rascunho: ${err?.message || 'Tente novamente'}`);
     }
@@ -437,7 +461,12 @@ export default function AdminSubscriptionManager({
     setEditGradientEnabled(draft.gradientEnabled ?? true);
     setEditTemplate(draft.template || 'modelo1');
     setEditModoAcao(draft.modoAcao || 'agendamento');
-    setEditServicos(draft.servicos ? [...draft.servicos] : []);
+    const existingServicos = (draft.servicos && draft.servicos.length > 0)
+      ? [...draft.servicos]
+      : (draft as any).vitrineProdutos && (draft as any).vitrineProdutos.length > 0
+      ? [...(draft as any).vitrineProdutos]
+      : [];
+    setEditServicos(existingServicos);
     setEditNewSvcName('');
     setEditNewSvcPrice('');
     setEditNewSvcDuration('30');
@@ -482,6 +511,18 @@ export default function AdminSubscriptionManager({
       return;
     }
 
+    // Auto-include service if user typed in edit box without clicking Add
+    let finalEditServicos = [...editServicos];
+    if (editNewSvcName.trim()) {
+      finalEditServicos.push({
+        name: editNewSvcName.trim(),
+        price: parseFloat(editNewSvcPrice) || 0,
+        durationMin: parseInt(editNewSvcDuration) || 30
+      });
+      setEditNewSvcName('');
+      setEditNewSvcPrice('');
+    }
+
     setIsSavingEditDraft(true);
     try {
       const updatedFields: Partial<DraftVitrine> = {
@@ -505,7 +546,16 @@ export default function AdminSubscriptionManager({
         gradientEnabled: editGradientEnabled,
         template: editTemplate,
         modoAcao: editModoAcao,
-        servicos: editServicos
+        servicos: finalEditServicos,
+        vitrineProdutos: finalEditServicos.map((s, idx) => ({ id: (s as any).id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
+        mensagemWhatsAppAgendamento: editingDraft.mensagemWhatsAppAgendamento || editingDraft.vitrineMensagemWhatsAppAgendamento,
+        mensagemWhatsAppOrdemChegada: editingDraft.mensagemWhatsAppOrdemChegada || editingDraft.vitrineMensagemWhatsAppOrdemChegada,
+        mensagemWhatsAppPersonalizada: editingDraft.mensagemWhatsAppPersonalizada || editingDraft.vitrineMensagemWhatsAppPersonalizada,
+        vitrineMensagemWhatsAppAgendamento: editingDraft.vitrineMensagemWhatsAppAgendamento || editingDraft.mensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: editingDraft.vitrineMensagemWhatsAppOrdemChegada || editingDraft.mensagemWhatsAppOrdemChegada,
+        vitrineMensagemWhatsAppPersonalizada: editingDraft.vitrineMensagemWhatsAppPersonalizada || editingDraft.mensagemWhatsAppPersonalizada,
+        vitrinePermitirAgendamentoWhatsApp: editingDraft.vitrinePermitirAgendamentoWhatsApp ?? true,
+        vitrineUsarSaudacaoHorarioWhatsApp: editingDraft.vitrineUsarSaudacaoHorarioWhatsApp ?? true
       };
 
       await firebaseService.updateDraftVitrine(editingDraft.id, updatedFields);
@@ -541,7 +591,13 @@ export default function AdminSubscriptionManager({
     const origin = window.location.origin;
     let url = `${origin}/?dias=15`;
     if (draft) {
-      url = `${origin}/?dias=15&convite=${encodeURIComponent(draft.codigo)}`;
+      let safeCodigo = draft.codigo || '';
+      try {
+        safeCodigo = encodeURIComponent(safeCodigo.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, ''));
+      } catch (_) {
+        safeCodigo = draft.codigo || '';
+      }
+      url = `${origin}/?dias=15&convite=${safeCodigo}`;
     }
     navigator.clipboard.writeText(url);
     const key = draft ? `link-${draft.codigo}` : 'link-15';
@@ -1784,7 +1840,8 @@ export default function AdminSubscriptionManager({
                     vitrineLogoImage: previewDraft.logoUrl,
                     vitrineLogo: previewDraft.nomeBarbearia,
                     vitrineCapa: previewDraft.capaUrl,
-                    vitrineGaleria: previewDraft.galeria || [],
+                    vitrineGaleria: previewDraft.galeria || previewDraft.vitrineGaleria || [],
+                    galeria: previewDraft.galeria || previewDraft.vitrineGaleria || [],
                     vitrineThemePreset: previewDraft.themePreset || 'cortestime',
                     vitrinePrimaryColor: previewDraft.primaryColor || '#051b42',
                     vitrineSecondaryColor: previewDraft.secondaryColor || '#2563eb',
@@ -1793,10 +1850,25 @@ export default function AdminSubscriptionManager({
                     vitrineModoAcao: previewDraft.modoAcao || 'agendamento',
                     vitrineBarbeiroUnico: previewDraft.barbeiroUnico ?? false,
                     barbeiroUnico: previewDraft.barbeiroUnico ?? false,
-                    vitrineProdutos: (previewDraft.servicos || []).map((s, idx) => ({
+                    vitrineMensagemWhatsAppAgendamento: previewDraft.vitrineMensagemWhatsAppAgendamento || previewDraft.mensagemWhatsAppAgendamento,
+                    vitrineMensagemWhatsAppOrdemChegada: previewDraft.vitrineMensagemWhatsAppOrdemChegada || previewDraft.mensagemWhatsAppOrdemChegada,
+                    vitrineMensagemWhatsAppPersonalizada: previewDraft.vitrineMensagemWhatsAppPersonalizada || previewDraft.mensagemWhatsAppPersonalizada,
+                    mensagemWhatsAppAgendamento: previewDraft.vitrineMensagemWhatsAppAgendamento || previewDraft.mensagemWhatsAppAgendamento,
+                    mensagemWhatsAppOrdemChegada: previewDraft.vitrineMensagemWhatsAppOrdemChegada || previewDraft.mensagemWhatsAppOrdemChegada,
+                    mensagemWhatsAppPersonalizada: previewDraft.vitrineMensagemWhatsAppPersonalizada || previewDraft.mensagemWhatsAppPersonalizada,
+                    vitrinePermitirAgendamentoWhatsApp: previewDraft.vitrinePermitirAgendamentoWhatsApp ?? true,
+                    vitrineUsarSaudacaoHorarioWhatsApp: previewDraft.vitrineUsarSaudacaoHorarioWhatsApp ?? true,
+                    vitrineProdutos: (previewDraft.servicos || (previewDraft as any).vitrineProdutos || []).map((s: any, idx: number) => ({
                       id: s.id || `p-${idx}`,
                       name: s.name,
-                      price: s.price
+                      price: typeof s.price === 'number' ? s.price : (parseFloat(s.price) || 0),
+                      durationMin: s.durationMin || 30
+                    })),
+                    servicos: (previewDraft.servicos || (previewDraft as any).vitrineProdutos || []).map((s: any, idx: number) => ({
+                      id: s.id || `s-${idx}`,
+                      name: s.name,
+                      price: typeof s.price === 'number' ? s.price : (parseFloat(s.price) || 0),
+                      durationMin: s.durationMin || 30
                     })),
                     plano: 'pro',
                     trialInicio: '01/01/2026',
@@ -1804,10 +1876,10 @@ export default function AdminSubscriptionManager({
                     status: 'ativo',
                     criadoEm: '01/01/2026'
                   }}
-                  services={(previewDraft.servicos || []).map((s, idx) => ({
+                  services={(previewDraft.servicos || (previewDraft as any).vitrineProdutos || []).map((s: any, idx: number) => ({
                     id: s.id || `s-${idx}`,
                     name: s.name,
-                    price: s.price,
+                    price: typeof s.price === 'number' ? s.price : (parseFloat(s.price) || 0),
                     durationMin: s.durationMin || 30,
                     commissionPercent: 0
                   }))}
@@ -1822,6 +1894,20 @@ export default function AdminSubscriptionManager({
                   ]}
                   isOnlyView={false}
                   onUpdateMerchant={async (updatedMerchant) => {
+                    const parsedServices = (updatedMerchant.vitrineProdutos !== undefined
+                      ? updatedMerchant.vitrineProdutos.map((p, idx) => ({
+                          id: p.id || `s-${idx}`,
+                          name: p.name,
+                          price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+                          durationMin: (p as any).durationMin || 30
+                        }))
+                      : (previewDraft.servicos || []).map((s: any, idx: number) => ({
+                          id: s.id || `s-${idx}`,
+                          name: s.name,
+                          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+                          durationMin: s.durationMin || 30
+                        })));
+
                     const updatedDraft: DraftVitrine = {
                       ...previewDraft,
                       nomeBarbearia: updatedMerchant.nomeBarbearia || updatedMerchant.vitrineLogo || previewDraft.nomeBarbearia,
@@ -1831,8 +1917,11 @@ export default function AdminSubscriptionManager({
                       endereco: typeof updatedMerchant.vitrineEndereco === 'string' ? updatedMerchant.vitrineEndereco : (updatedMerchant.vitrineLocalizacao ?? previewDraft.endereco),
                       horarios: updatedMerchant.vitrineHorarios ?? previewDraft.horarios,
                       logoUrl: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
+                      vitrineLogoImage: updatedMerchant.vitrineLogoImage ?? previewDraft.logoUrl,
                       capaUrl: updatedMerchant.vitrineCapa ?? previewDraft.capaUrl,
+                      vitrineCapa: updatedMerchant.vitrineCapa ?? previewDraft.capaUrl,
                       galeria: updatedMerchant.vitrineGaleria !== undefined ? updatedMerchant.vitrineGaleria : (previewDraft.galeria || []),
+                      vitrineGaleria: updatedMerchant.vitrineGaleria !== undefined ? updatedMerchant.vitrineGaleria : (previewDraft.galeria || []),
                       themePreset: updatedMerchant.vitrineThemePreset ?? previewDraft.themePreset,
                       primaryColor: updatedMerchant.vitrinePrimaryColor ?? previewDraft.primaryColor,
                       secondaryColor: updatedMerchant.vitrineSecondaryColor ?? previewDraft.secondaryColor,
@@ -1840,14 +1929,16 @@ export default function AdminSubscriptionManager({
                       template: updatedMerchant.vitrineTemplate ?? previewDraft.template,
                       modoAcao: updatedMerchant.vitrineModoAcao ?? previewDraft.modoAcao,
                       barbeiroUnico: updatedMerchant.vitrineBarbeiroUnico ?? updatedMerchant.barbeiroUnico ?? previewDraft.barbeiroUnico,
-                      servicos: (updatedMerchant.vitrineProdutos !== undefined
-                        ? updatedMerchant.vitrineProdutos.map((p, idx) => ({
-                            id: p.id || `s-${idx}`,
-                            name: p.name,
-                            price: typeof p.price === 'number' ? p.price : (parseFloat(p.price) || 0),
-                            durationMin: 30
-                          }))
-                        : (previewDraft.servicos || []))
+                      mensagemWhatsAppAgendamento: updatedMerchant.vitrineMensagemWhatsAppAgendamento || (updatedMerchant as any).mensagemWhatsAppAgendamento || previewDraft.mensagemWhatsAppAgendamento,
+                      mensagemWhatsAppOrdemChegada: updatedMerchant.vitrineMensagemWhatsAppOrdemChegada || (updatedMerchant as any).mensagemWhatsAppOrdemChegada || previewDraft.mensagemWhatsAppOrdemChegada,
+                      mensagemWhatsAppPersonalizada: updatedMerchant.vitrineMensagemWhatsAppPersonalizada || (updatedMerchant as any).mensagemWhatsAppPersonalizada || previewDraft.mensagemWhatsAppPersonalizada,
+                      vitrineMensagemWhatsAppAgendamento: updatedMerchant.vitrineMensagemWhatsAppAgendamento || (updatedMerchant as any).mensagemWhatsAppAgendamento || previewDraft.vitrineMensagemWhatsAppAgendamento,
+                      vitrineMensagemWhatsAppOrdemChegada: updatedMerchant.vitrineMensagemWhatsAppOrdemChegada || (updatedMerchant as any).mensagemWhatsAppOrdemChegada || previewDraft.vitrineMensagemWhatsAppOrdemChegada,
+                      vitrineMensagemWhatsAppPersonalizada: updatedMerchant.vitrineMensagemWhatsAppPersonalizada || (updatedMerchant as any).mensagemWhatsAppPersonalizada || previewDraft.vitrineMensagemWhatsAppPersonalizada,
+                      vitrinePermitirAgendamentoWhatsApp: updatedMerchant.vitrinePermitirAgendamentoWhatsApp ?? (previewDraft as any).permitirWhatsApp ?? true,
+                      vitrineUsarSaudacaoHorarioWhatsApp: updatedMerchant.vitrineUsarSaudacaoHorarioWhatsApp ?? (previewDraft as any).usarSaudacaoHorario ?? true,
+                      servicos: parsedServices,
+                      vitrineProdutos: parsedServices
                     };
 
                     setPreviewDraft(updatedDraft);

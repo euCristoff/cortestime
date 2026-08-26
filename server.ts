@@ -1403,9 +1403,8 @@ app.use(express.json());
         }
       });
 
-      const serverPort = process.env.PORT || PORT;
-      app.listen(Number(serverPort), "0.0.0.0", () => {
-        console.log(`Server running in production on port ${serverPort}`);
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running in production on port ${PORT}`);
       });
     }
   }

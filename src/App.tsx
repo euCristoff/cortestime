@@ -203,7 +203,27 @@ export default function App() {
 
         try {
           const fetchedServices = await firebaseService.getServices(m.uid);
-          setPublicVitrineServices(fetchedServices.length > 0 ? fetchedServices : defaultServices);
+          if (fetchedServices.length > 0) {
+            setPublicVitrineServices(fetchedServices);
+          } else if (m.vitrineProdutos && m.vitrineProdutos.length > 0) {
+            setPublicVitrineServices(m.vitrineProdutos.map((p, idx) => ({
+              id: p.id || `p-${idx}`,
+              name: p.name,
+              price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+              durationMin: (p as any).durationMin || 30,
+              commissionPercent: 0
+            })));
+          } else if ((m as any).servicos && (m as any).servicos.length > 0) {
+            setPublicVitrineServices((m as any).servicos.map((s: any, idx: number) => ({
+              id: s.id || `s-${idx}`,
+              name: s.name,
+              price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+              durationMin: s.durationMin || 30,
+              commissionPercent: 0
+            })));
+          } else {
+            setPublicVitrineServices(defaultServices);
+          }
           
           const fetchedBarbers = await firebaseService.getBarbers(m.uid);
           if (fetchedBarbers.length > 0) {
@@ -211,7 +231,17 @@ export default function App() {
           }
         } catch (e) {
           console.error("Error loading services for public vitrine:", e);
-          setPublicVitrineServices(defaultServices);
+          if (m.vitrineProdutos && m.vitrineProdutos.length > 0) {
+            setPublicVitrineServices(m.vitrineProdutos.map((p, idx) => ({
+              id: p.id || `p-${idx}`,
+              name: p.name,
+              price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+              durationMin: (p as any).durationMin || 30,
+              commissionPercent: 0
+            })));
+          } else {
+            setPublicVitrineServices(defaultServices);
+          }
         }
       } else {
         setVitrineNotFoundSlug(targetSlug);
@@ -239,12 +269,20 @@ export default function App() {
 
     if (!slug) {
       const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const safeDecode = (s: string) => {
+        try {
+          return decodeURIComponent(s);
+        } catch (_) {
+          return s;
+        }
+      };
+
       if (pathParts.length >= 2 && (pathParts[0] === 'vitrine' || pathParts[0] === 'v' || pathParts[0] === 'd' || pathParts[0] === 'convite')) {
-        slug = decodeURIComponent(pathParts[1]);
+        slug = safeDecode(pathParts[1]);
       } else if (pathParts.length === 1) {
         const reserved = ['admin', 'login', 'register', 'dashboard', 'checkout', 'api', 'app', 'auth', 'onboarding'];
         if (!reserved.includes(pathParts[0].toLowerCase())) {
-          slug = decodeURIComponent(pathParts[0]);
+          slug = safeDecode(pathParts[0]);
         }
       }
     }
@@ -544,11 +582,11 @@ export default function App() {
     } catch (e) {
       console.error("Error loading cached lists:", e);
     }
-  }, [currentMerchant]);
+  }, [currentMerchant?.uid]);
 
   // Fetch and load merchant data from Firestore in the background
   useEffect(() => {
-    if (!currentMerchant) return;
+    if (!currentMerchant?.uid) return;
     
     let isMounted = true;
     const loadMerchantData = async () => {
@@ -568,6 +606,26 @@ export default function App() {
             if (fbServices.length > 0) {
               setServices(fbServices);
               localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(fbServices));
+            } else if (currentMerchant.vitrineProdutos && currentMerchant.vitrineProdutos.length > 0) {
+              const vitrineServs: Service[] = currentMerchant.vitrineProdutos.map((p, idx) => ({
+                id: p.id || `p-${idx}`,
+                name: p.name,
+                price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+                durationMin: (p as any).durationMin || 30,
+                commissionPercent: 10
+              }));
+              setServices(vitrineServs);
+              localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(vitrineServs));
+            } else if ((currentMerchant as any).servicos && (currentMerchant as any).servicos.length > 0) {
+              const vitrineServs: Service[] = (currentMerchant as any).servicos.map((p: any, idx: number) => ({
+                id: p.id || `s-${idx}`,
+                name: p.name,
+                price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+                durationMin: p.durationMin || 30,
+                commissionPercent: 10
+              }));
+              setServices(vitrineServs);
+              localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(vitrineServs));
             } else if (!localStorage.getItem(`cortestime_services_${uid}`)) {
               setServices(defaultServices);
               localStorage.setItem(`cortestime_services_${uid}`, JSON.stringify(defaultServices));
@@ -624,7 +682,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [currentMerchant]);
+  }, [currentMerchant?.uid]);
 
   // Automated background notifications scanning
   useEffect(() => {
@@ -647,17 +705,143 @@ export default function App() {
   const handleAddService = async (newService: Omit<Service, 'id'>) => {
     const id = `serv-${Date.now()}`;
     const item: Service = { id, ...newService };
+    
     setServices(prev => {
       const updated = [...prev, item];
-      const key = currentMerchant ? `cortestime_services_${currentMerchant.uid}` : 'cortestime_guest_services';
-      localStorage.setItem(key, JSON.stringify(updated));
+      if (currentMerchant) {
+        localStorage.setItem(`cortestime_services_${currentMerchant.uid}`, JSON.stringify(updated));
+      } else {
+        localStorage.setItem('cortestime_guest_services', JSON.stringify(updated));
+      }
       return updated;
     });
-    if (currentMerchant?.uid) {
+
+    if (currentMerchant) {
+      const updatedList = [...services.filter(s => s.id !== id), item];
+      const prodList = updatedList.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: s.durationMin || 30
+      }));
+
+      const updatedMerchant: MerchantUser = {
+        ...currentMerchant,
+        vitrineProdutos: prodList,
+        servicos: prodList
+      };
+      setCurrentMerchant(updatedMerchant);
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(updatedMerchant));
+        localStorage.setItem(`cortestime_merchant_${currentMerchant.uid}`, JSON.stringify(updatedMerchant));
+      } catch (_) {}
+
       analyticsTracker.trackEvent(currentMerchant.uid, currentMerchant.nomeBarbearia, 'service_create', `Serviço Criado: ${item.name}`, { serviceId: id, price: item.price });
+
+      if (firebaseConnected) {
+        try {
+          await firebaseService.saveService(item, currentMerchant.uid);
+          await firebaseService.updateMerchantProfile(currentMerchant.uid, {
+            vitrineProdutos: prodList,
+            servicos: prodList
+          });
+        } catch (e) {
+          console.warn("Erro ao salvar serviço no Firebase:", e);
+        }
+      }
     }
-    if (firebaseConnected && currentMerchant) {
-      await firebaseService.saveService(item, currentMerchant.uid);
+  };
+
+  const handleUpdateService = async (updatedService: Service) => {
+    setServices(prev => {
+      const updated = prev.map(s => s.id === updatedService.id ? updatedService : s);
+      if (currentMerchant) {
+        localStorage.setItem(`cortestime_services_${currentMerchant.uid}`, JSON.stringify(updated));
+      } else {
+        localStorage.setItem('cortestime_guest_services', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    if (currentMerchant) {
+      const updatedList = services.map(s => s.id === updatedService.id ? updatedService : s);
+      const prodList = updatedList.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: s.durationMin || 30
+      }));
+
+      const updatedMerchant: MerchantUser = {
+        ...currentMerchant,
+        vitrineProdutos: prodList,
+        servicos: prodList
+      };
+      setCurrentMerchant(updatedMerchant);
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(updatedMerchant));
+        localStorage.setItem(`cortestime_merchant_${currentMerchant.uid}`, JSON.stringify(updatedMerchant));
+      } catch (_) {}
+
+      if (firebaseConnected) {
+        try {
+          await firebaseService.saveService(updatedService, currentMerchant.uid);
+          await firebaseService.updateMerchantProfile(currentMerchant.uid, {
+            vitrineProdutos: prodList,
+            servicos: prodList
+          });
+        } catch (e) {
+          console.warn("Erro ao atualizar serviço no Firebase:", e);
+        }
+      }
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    setServices(prev => {
+      const updated = prev.filter(s => s.id !== serviceId);
+      if (currentMerchant) {
+        localStorage.setItem(`cortestime_services_${currentMerchant.uid}`, JSON.stringify(updated));
+      } else {
+        localStorage.setItem('cortestime_guest_services', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    if (currentMerchant) {
+      const updatedList = services.filter(s => s.id !== serviceId);
+      const prodList = updatedList.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: s.durationMin || 30
+      }));
+
+      const updatedMerchant: MerchantUser = {
+        ...currentMerchant,
+        vitrineProdutos: prodList,
+        servicos: prodList
+      };
+      setCurrentMerchant(updatedMerchant);
+      try {
+        localStorage.setItem('cortestime_merchant_session', JSON.stringify(updatedMerchant));
+        localStorage.setItem('cortestime_merchant_profile', JSON.stringify(updatedMerchant));
+        localStorage.setItem(`cortestime_merchant_${currentMerchant.uid}`, JSON.stringify(updatedMerchant));
+      } catch (_) {}
+
+      if (firebaseConnected) {
+        try {
+          await firebaseService.deleteService(serviceId);
+          await firebaseService.updateMerchantProfile(currentMerchant.uid, {
+            vitrineProdutos: prodList,
+            servicos: prodList
+          });
+        } catch (e) {
+          console.warn("Erro ao deletar serviço no Firebase:", e);
+        }
+      }
     }
   };
 
@@ -1143,6 +1327,8 @@ export default function App() {
               clients={clients}
               appointments={appointments}
               onAddService={handleAddService}
+              onUpdateService={handleUpdateService}
+              onDeleteService={handleDeleteService}
               onAddBarber={handleAddBarber}
               onUpdateBarber={handleUpdateBarber}
               onDeleteBarber={handleDeleteBarber}

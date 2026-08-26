@@ -31,6 +31,8 @@ interface ClientBookingProps {
   singleBarberMode?: boolean;
 }
 
+import { safeEncodeURIComponent } from '../types';
+
 export default function ClientBooking({ 
   businessName, 
   businessLogo,
@@ -791,7 +793,7 @@ export default function ClientBooking({
                       .replace(/\{horario\}|\{horário\}/gi, selectedTime || '15:00')
                       .replace(/\{cliente\}/gi, `${firstName} ${lastName}`.trim() || 'Cliente');
                     const cleanPhone = merchantWhatsApp.replace(/\D/g, '');
-                    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(formattedMsg)}`, '_blank');
+                    window.open(`https://wa.me/${cleanPhone}?text=${safeEncodeURIComponent(formattedMsg)}`, '_blank');
                   }}
                   className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-98"
                 >

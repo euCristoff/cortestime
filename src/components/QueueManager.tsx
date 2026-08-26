@@ -23,7 +23,7 @@ import {
   Calendar as CalendarIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Barber, Service, QueueItem } from '../types';
+import { Barber, Service, QueueItem, safeEncodeURIComponent } from '../types';
 
 interface QueueManagerProps {
   merchantUid: string;
@@ -150,7 +150,7 @@ export default function QueueManager({
 
     const pos = positionIndex + 1;
     const msg = `Olá *${item.clientName}*! Passando para avisar que sua vez está chegando na barbearia! Você é o número *#${pos}* da fila de espera. Por favor, esteja próximo! 💈✂️`;
-    window.open(`https://wa.me/55${phoneClean}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(`https://wa.me/55${phoneClean}?text=${safeEncodeURIComponent(msg)}`, '_blank');
   };
 
   return (

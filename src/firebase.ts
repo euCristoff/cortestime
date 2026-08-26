@@ -28,9 +28,8 @@ const activeConfig = prodConfig;
 // Inicializa o Firebase com a configuração ativa
 const app = initializeApp(activeConfig);
 
-// Inicializa o Firestore com auto-detect de polling e persistência robusta de cache
+// Inicializa o Firestore com persistência robusta de cache
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),

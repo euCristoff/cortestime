@@ -143,8 +143,8 @@ export const firebaseService = {
 
       ...(draft ? {
         vitrineLogo: draft.nomeBarbearia || '',
-        vitrineLogoImage: draft.logoUrl || '',
-        vitrineCapa: draft.capaUrl || '',
+        vitrineLogoImage: draft.logoUrl || (draft as any).vitrineLogoImage || '',
+        vitrineCapa: draft.capaUrl || (draft as any).vitrineCapa || '',
         vitrineSlogan: draft.slogan || '',
         vitrineHorarios: draft.horarios || '',
         vitrineLocalizacao: draft.endereco || '',
@@ -161,7 +161,15 @@ export const firebaseService = {
         vitrineGradientEnabled: draft.gradientEnabled,
         vitrineTemplate: draft.template,
         vitrineModoAcao: draft.modoAcao,
-        vitrineGaleria: draft.galeria || []
+        vitrineGaleria: draft.galeria || (draft as any).vitrineGaleria || [],
+        vitrineMensagemWhatsAppAgendamento: draft.mensagemWhatsAppAgendamento || draft.vitrineMensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: draft.mensagemWhatsAppOrdemChegada || draft.vitrineMensagemWhatsAppOrdemChegada,
+        vitrineMensagemWhatsAppPersonalizada: draft.mensagemWhatsAppPersonalizada || draft.vitrineMensagemWhatsAppPersonalizada,
+        vitrinePermitirAgendamentoWhatsApp: draft.vitrinePermitirAgendamentoWhatsApp ?? (draft as any).permitirWhatsApp ?? true,
+        vitrineUsarSaudacaoHorarioWhatsApp: draft.vitrineUsarSaudacaoHorarioWhatsApp ?? (draft as any).usarSaudacaoHorario ?? true,
+        vitrineProdutos: (draft.servicos && draft.servicos.length > 0)
+          ? draft.servicos.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 }))
+          : (draft as any).vitrineProdutos || []
       } : {})
     };
 
@@ -512,12 +520,7 @@ export const firebaseService = {
           "Tempo limite esgotado ao atualizar perfil."
         );
       } catch (err) {
-        console.error("Erro ao atualizar perfil no Firestore:", err);
-        try {
-          await updateDoc(docRef, cleanData);
-        } catch (err2) {
-          console.error("Fallback updateDoc também falhou:", err2);
-        }
+        console.warn("Aviso ao atualizar perfil no Firestore (cache local preservado):", err);
       }
     }
 
@@ -640,6 +643,13 @@ export const firebaseService = {
 
     // Helper to evaluate if a DraftVitrine matches
     const draftToMerchant = (d: DraftVitrine): MerchantUser => {
+      const logo = d.logoUrl || (d as any).vitrineLogoImage || '';
+      const capa = d.capaUrl || (d as any).vitrineCapa || '';
+      const gal = (d.galeria && d.galeria.length > 0) ? d.galeria : ((d as any).vitrineGaleria || []);
+      const servs = (d.servicos && d.servicos.length > 0)
+        ? d.servicos.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0), durationMin: s.durationMin || 30 }))
+        : (d as any).vitrineProdutos || [];
+
       return {
         uid: d.id || `draft_${d.codigo}`,
         email: d.resgatadoPorEmail || 'contato@cortestime.com',
@@ -657,8 +667,9 @@ export const firebaseService = {
         vitrineEndereco: d.endereco,
         vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
         vitrineHorarios: d.horarios || 'Seg - Sáb: 08:00 às 20:00',
-        vitrineLogoImage: d.logoUrl,
-        vitrineCapa: d.capaUrl,
+        vitrineLogoImage: logo,
+        vitrineLogo: d.nomeBarbearia,
+        vitrineCapa: capa,
         vitrineLinkPersonalizado: d.nomeBarbearia ? toKebab(d.nomeBarbearia) : d.codigo,
         codigoConviteResgatado: d.codigo,
         barbeiroUnico: d.barbeiroUnico !== undefined ? d.barbeiroUnico : true,
@@ -669,7 +680,14 @@ export const firebaseService = {
         vitrineGradientEnabled: d.gradientEnabled,
         vitrineTemplate: d.template,
         vitrineModoAcao: d.modoAcao,
-        vitrineGaleria: d.galeria || []
+        vitrineGaleria: gal,
+        vitrineProdutos: servs,
+        servicos: servs,
+        vitrineMensagemWhatsAppAgendamento: d.mensagemWhatsAppAgendamento || d.vitrineMensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: d.mensagemWhatsAppOrdemChegada || d.vitrineMensagemWhatsAppOrdemChegada,
+        vitrineMensagemWhatsAppPersonalizada: d.mensagemWhatsAppPersonalizada || d.vitrineMensagemWhatsAppPersonalizada,
+        vitrinePermitirAgendamentoWhatsApp: d.vitrinePermitirAgendamentoWhatsApp ?? (d as any).permitirWhatsApp ?? true,
+        vitrineUsarSaudacaoHorarioWhatsApp: d.vitrineUsarSaudacaoHorarioWhatsApp ?? (d as any).usarSaudacaoHorario ?? true
       };
     };
 
@@ -787,6 +805,15 @@ export const firebaseService = {
       setDoc(docRef, { ...service, ownerId }),
       15000,
       "Tempo esgotado ao salvar serviço."
+    );
+  },
+
+  async deleteService(serviceId: string): Promise<void> {
+    const docRef = doc(db, COLL_SERVICES, serviceId);
+    await withTimeout(
+      deleteDoc(docRef),
+      15000,
+      "Tempo esgotado ao excluir serviço."
     );
   },
 
@@ -1281,6 +1308,11 @@ export const firebaseService = {
     const logo = draftData.logoUrl || (draftData as any)?.vitrineLogoImage || '';
     const capa = draftData.capaUrl || (draftData as any)?.vitrineCapa || '';
     const gal = draftData.galeria || (draftData as any)?.vitrineGaleria || [];
+    const servs = draftData.servicos || (draftData as any)?.vitrineProdutos || [
+      { name: 'Corte de Cabelo', price: 35, durationMin: 30 },
+      { name: 'Barba Completa', price: 25, durationMin: 20 },
+      { name: 'Combo Cabelo + Barba', price: 55, durationMin: 45 }
+    ];
     const newDraft: DraftVitrine = {
       id,
       codigo: rawCode,
@@ -1297,12 +1329,17 @@ export const firebaseService = {
       galeria: gal,
       vitrineGaleria: gal,
       horarios: draftData.horarios || 'Seg - Sáb: 08:00 às 20:00',
-      servicos: draftData.servicos || [
-        { name: 'Corte de Cabelo', price: 35, durationMin: 30 },
-        { name: 'Barba Completa', price: 25, durationMin: 20 },
-        { name: 'Combo Cabelo + Barba', price: 55, durationMin: 45 }
-      ],
+      servicos: servs,
+      vitrineProdutos: (draftData as any)?.vitrineProdutos || servs.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
       barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : true,
+      mensagemWhatsAppAgendamento: draftData.mensagemWhatsAppAgendamento || (draftData as any)?.vitrineMensagemWhatsAppAgendamento,
+      mensagemWhatsAppOrdemChegada: draftData.mensagemWhatsAppOrdemChegada || (draftData as any)?.vitrineMensagemWhatsAppOrdemChegada,
+      mensagemWhatsAppPersonalizada: draftData.mensagemWhatsAppPersonalizada || (draftData as any)?.vitrineMensagemWhatsAppPersonalizada,
+      vitrineMensagemWhatsAppAgendamento: draftData.vitrineMensagemWhatsAppAgendamento || draftData.mensagemWhatsAppAgendamento,
+      vitrineMensagemWhatsAppOrdemChegada: draftData.vitrineMensagemWhatsAppOrdemChegada || draftData.mensagemWhatsAppOrdemChegada,
+      vitrineMensagemWhatsAppPersonalizada: draftData.vitrineMensagemWhatsAppPersonalizada || draftData.mensagemWhatsAppPersonalizada,
+      vitrinePermitirAgendamentoWhatsApp: draftData.vitrinePermitirAgendamentoWhatsApp ?? (draftData as any)?.permitirWhatsApp ?? true,
+      vitrineUsarSaudacaoHorarioWhatsApp: draftData.vitrineUsarSaudacaoHorarioWhatsApp ?? (draftData as any)?.usarSaudacaoHorario ?? true,
       themePreset: draftData.themePreset || 'cortestime',
       primaryColor: draftData.primaryColor || '#051b42',
       secondaryColor: draftData.secondaryColor || '#2563eb',
@@ -1361,6 +1398,12 @@ export const firebaseService = {
       ? (draftData as any).vitrineGaleria
       : (existing?.galeria ?? (existing as any)?.vitrineGaleria ?? []);
 
+    const incomingServicos = draftData.servicos !== undefined
+      ? draftData.servicos
+      : (draftData as any)?.vitrineProdutos !== undefined
+      ? (draftData as any).vitrineProdutos
+      : (existing?.servicos ?? (existing as any)?.vitrineProdutos ?? []);
+
     const merged: DraftVitrine = {
       id: finalId,
       codigo: finalCode,
@@ -1377,8 +1420,17 @@ export const firebaseService = {
       galeria: incomingGaleria,
       vitrineGaleria: incomingGaleria,
       horarios: draftData.horarios !== undefined ? draftData.horarios : (existing?.horarios ?? 'Seg - Sáb: 08:00 às 20:00'),
-      servicos: draftData.servicos !== undefined ? draftData.servicos : (existing?.servicos ?? []),
+      servicos: incomingServicos,
+      vitrineProdutos: (draftData as any)?.vitrineProdutos || incomingServicos.map((s: any, idx: number) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
       barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : (existing?.barbeiroUnico ?? true),
+      mensagemWhatsAppAgendamento: draftData.mensagemWhatsAppAgendamento !== undefined ? draftData.mensagemWhatsAppAgendamento : (existing?.mensagemWhatsAppAgendamento ?? (existing as any)?.vitrineMensagemWhatsAppAgendamento),
+      mensagemWhatsAppOrdemChegada: draftData.mensagemWhatsAppOrdemChegada !== undefined ? draftData.mensagemWhatsAppOrdemChegada : (existing?.mensagemWhatsAppOrdemChegada ?? (existing as any)?.vitrineMensagemWhatsAppOrdemChegada),
+      mensagemWhatsAppPersonalizada: draftData.mensagemWhatsAppPersonalizada !== undefined ? draftData.mensagemWhatsAppPersonalizada : (existing?.mensagemWhatsAppPersonalizada ?? (existing as any)?.vitrineMensagemWhatsAppPersonalizada),
+      vitrineMensagemWhatsAppAgendamento: draftData.vitrineMensagemWhatsAppAgendamento !== undefined ? draftData.vitrineMensagemWhatsAppAgendamento : (draftData.mensagemWhatsAppAgendamento ?? (existing?.vitrineMensagemWhatsAppAgendamento ?? existing?.mensagemWhatsAppAgendamento)),
+      vitrineMensagemWhatsAppOrdemChegada: draftData.vitrineMensagemWhatsAppOrdemChegada !== undefined ? draftData.vitrineMensagemWhatsAppOrdemChegada : (draftData.mensagemWhatsAppOrdemChegada ?? (existing?.vitrineMensagemWhatsAppOrdemChegada ?? existing?.mensagemWhatsAppOrdemChegada)),
+      vitrineMensagemWhatsAppPersonalizada: draftData.vitrineMensagemWhatsAppPersonalizada !== undefined ? draftData.vitrineMensagemWhatsAppPersonalizada : (draftData.mensagemWhatsAppPersonalizada ?? (existing?.vitrineMensagemWhatsAppPersonalizada ?? existing?.mensagemWhatsAppPersonalizada)),
+      vitrinePermitirAgendamentoWhatsApp: draftData.vitrinePermitirAgendamentoWhatsApp !== undefined ? draftData.vitrinePermitirAgendamentoWhatsApp : (draftData as any)?.permitirWhatsApp !== undefined ? (draftData as any).permitirWhatsApp : (existing?.vitrinePermitirAgendamentoWhatsApp ?? (existing as any)?.permitirWhatsApp ?? true),
+      vitrineUsarSaudacaoHorarioWhatsApp: draftData.vitrineUsarSaudacaoHorarioWhatsApp !== undefined ? draftData.vitrineUsarSaudacaoHorarioWhatsApp : (draftData as any)?.usarSaudacaoHorario !== undefined ? (draftData as any).usarSaudacaoHorario : (existing?.vitrineUsarSaudacaoHorarioWhatsApp ?? (existing as any)?.usarSaudacaoHorario ?? true),
       themePreset: draftData.themePreset !== undefined ? draftData.themePreset : (existing?.themePreset || 'cortestime'),
       primaryColor: draftData.primaryColor !== undefined ? draftData.primaryColor : (existing?.primaryColor || '#051b42'),
       secondaryColor: draftData.secondaryColor !== undefined ? draftData.secondaryColor : (existing?.secondaryColor || '#2563eb'),
@@ -1544,6 +1596,7 @@ export const firebaseService = {
       const logo = fItem.logoUrl || (fItem as any).vitrineLogoImage || '';
       const capa = fItem.capaUrl || (fItem as any).vitrineCapa || '';
       const gal = fItem.galeria || (fItem as any).vitrineGaleria || [];
+      const servs = fItem.servicos || (fItem as any).vitrineProdutos || [];
       mergedList.push({
         ...fItem,
         logoUrl: logo,
@@ -1551,7 +1604,15 @@ export const firebaseService = {
         capaUrl: capa,
         vitrineCapa: capa,
         galeria: gal,
-        vitrineGaleria: gal
+        vitrineGaleria: gal,
+        servicos: servs,
+        vitrineProdutos: (fItem as any).vitrineProdutos || servs.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
+        mensagemWhatsAppAgendamento: fItem.mensagemWhatsAppAgendamento || (fItem as any).vitrineMensagemWhatsAppAgendamento,
+        mensagemWhatsAppOrdemChegada: fItem.mensagemWhatsAppOrdemChegada || (fItem as any).vitrineMensagemWhatsAppOrdemChegada,
+        mensagemWhatsAppPersonalizada: fItem.mensagemWhatsAppPersonalizada || (fItem as any).vitrineMensagemWhatsAppPersonalizada,
+        vitrineMensagemWhatsAppAgendamento: fItem.vitrineMensagemWhatsAppAgendamento || fItem.mensagemWhatsAppAgendamento,
+        vitrineMensagemWhatsAppOrdemChegada: fItem.vitrineMensagemWhatsAppOrdemChegada || fItem.mensagemWhatsAppOrdemChegada,
+        vitrineMensagemWhatsAppPersonalizada: fItem.vitrineMensagemWhatsAppPersonalizada || fItem.mensagemWhatsAppPersonalizada,
       });
     }
 
@@ -1570,6 +1631,7 @@ export const firebaseService = {
       const lLogo = lItem.logoUrl || (lItem as any).vitrineLogoImage || '';
       const lCapa = lItem.capaUrl || (lItem as any).vitrineCapa || '';
       const lGal = lItem.galeria || (lItem as any).vitrineGaleria || [];
+      const lServs = lItem.servicos || (lItem as any).vitrineProdutos || [];
 
       if (existingIdx >= 0) {
         const current = mergedList[existingIdx];
@@ -1581,7 +1643,15 @@ export const firebaseService = {
           capaUrl: current.capaUrl || lCapa,
           vitrineCapa: current.vitrineCapa || current.capaUrl || lCapa,
           galeria: (current.galeria && current.galeria.length > 0) ? current.galeria : lGal,
-          servicos: (current.servicos && current.servicos.length > 0) ? current.servicos : (lItem.servicos || []),
+          vitrineGaleria: (current.galeria && current.galeria.length > 0) ? current.galeria : lGal,
+          servicos: (current.servicos && current.servicos.length > 0) ? current.servicos : lServs,
+          vitrineProdutos: (current.vitrineProdutos && current.vitrineProdutos.length > 0) ? current.vitrineProdutos : ((current.servicos && current.servicos.length > 0) ? current.servicos.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })) : lServs),
+          mensagemWhatsAppAgendamento: current.mensagemWhatsAppAgendamento || lItem.mensagemWhatsAppAgendamento || (lItem as any).vitrineMensagemWhatsAppAgendamento,
+          mensagemWhatsAppOrdemChegada: current.mensagemWhatsAppOrdemChegada || lItem.mensagemWhatsAppOrdemChegada || (lItem as any).vitrineMensagemWhatsAppOrdemChegada,
+          mensagemWhatsAppPersonalizada: current.mensagemWhatsAppPersonalizada || lItem.mensagemWhatsAppPersonalizada || (lItem as any).vitrineMensagemWhatsAppPersonalizada,
+          vitrineMensagemWhatsAppAgendamento: current.vitrineMensagemWhatsAppAgendamento || current.mensagemWhatsAppAgendamento || lItem.vitrineMensagemWhatsAppAgendamento || lItem.mensagemWhatsAppAgendamento,
+          vitrineMensagemWhatsAppOrdemChegada: current.vitrineMensagemWhatsAppOrdemChegada || current.mensagemWhatsAppOrdemChegada || lItem.vitrineMensagemWhatsAppOrdemChegada || lItem.mensagemWhatsAppOrdemChegada,
+          vitrineMensagemWhatsAppPersonalizada: current.vitrineMensagemWhatsAppPersonalizada || current.mensagemWhatsAppPersonalizada || lItem.vitrineMensagemWhatsAppPersonalizada || lItem.mensagemWhatsAppPersonalizada,
           id: current.id || lItem.id,
           codigo: current.codigo || lItem.codigo
         };
@@ -1593,7 +1663,15 @@ export const firebaseService = {
           capaUrl: lCapa,
           vitrineCapa: lCapa,
           galeria: lGal,
-          vitrineGaleria: lGal
+          vitrineGaleria: lGal,
+          servicos: lServs,
+          vitrineProdutos: (lItem as any).vitrineProdutos || lServs.map((s: any, idx: number) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
+          mensagemWhatsAppAgendamento: lItem.mensagemWhatsAppAgendamento || (lItem as any).vitrineMensagemWhatsAppAgendamento,
+          mensagemWhatsAppOrdemChegada: lItem.mensagemWhatsAppOrdemChegada || (lItem as any).vitrineMensagemWhatsAppOrdemChegada,
+          mensagemWhatsAppPersonalizada: lItem.mensagemWhatsAppPersonalizada || (lItem as any).vitrineMensagemWhatsAppPersonalizada,
+          vitrineMensagemWhatsAppAgendamento: lItem.vitrineMensagemWhatsAppAgendamento || lItem.mensagemWhatsAppAgendamento,
+          vitrineMensagemWhatsAppOrdemChegada: lItem.vitrineMensagemWhatsAppOrdemChegada || lItem.mensagemWhatsAppOrdemChegada,
+          vitrineMensagemWhatsAppPersonalizada: lItem.vitrineMensagemWhatsAppPersonalizada || lItem.mensagemWhatsAppPersonalizada,
         });
       }
     }

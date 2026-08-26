@@ -32,6 +32,10 @@ const STORAGE_VISITOR_ID = "cortestime_visitor_id";
 const STORAGE_LOCAL_VISITS = "cortestime_analytics_visits";
 const STORAGE_LOCAL_EVENTS = "cortestime_analytics_events";
 
+// In-memory throttling map to prevent document hotspotting on users/{uid} (max 1 write per 60s per user)
+const lastUserActivityUpdateMap = new Map<string, number>();
+let lastVisitWriteTime = 0;
+
 function generateUUID(prefix = "ct"): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
@@ -130,13 +134,13 @@ export const analyticsTracker = {
         dateStr
       };
 
-      // Gravar no Firestore
-      try {
-        setDoc(doc(db, COLL_VISITS, visitRecord.id), visitRecord).catch(err => {
-          console.warn("Analytics visit Firestore save notice:", err);
-        });
-      } catch (e) {
-        console.warn("Analytics visit error:", e);
+      // Gravar no Firestore com debounce de tempo para evitar flood
+      const now = Date.now();
+      if (now - lastVisitWriteTime > 5000) {
+        lastVisitWriteTime = now;
+        try {
+          setDoc(doc(db, COLL_VISITS, visitRecord.id), visitRecord).catch(() => {});
+        } catch (_) {}
       }
 
       // Gravar no cache LocalStorage
@@ -208,27 +212,30 @@ export const analyticsTracker = {
       dateStr
     };
 
-    // 1. Gravar evento no Firestore
+    // 1. Gravar evento no Firestore de forma segura
     try {
-      setDoc(doc(db, COLL_EVENTS, eventId), eventRecord).catch(err => {
-        console.warn("Analytics event Firestore save warning:", err);
-      });
-    } catch (e) {
-      console.warn("Analytics trackEvent Firestore error:", e);
-    }
+      setDoc(doc(db, COLL_EVENTS, eventId), eventRecord).catch(() => {});
+    } catch (_) {}
 
-    // 2. Atualizar atividade recente no perfil do Merchant
-    try {
-      const userRef = doc(db, "users", merchantUid);
-      const updateData: any = {
-        lastActivityAt: nowIso,
-        lastActivityLabel: eventLabel
-      };
-      if (eventType === "login") {
-        updateData.lastLoginAt = nowIso;
-      }
-      setDoc(userRef, updateData, { merge: true }).catch(() => {});
-    } catch (e) {}
+    // 2. Atualizar atividade recente no perfil do Merchant com throttle de 60 segundos
+    // para evitar ultrapassar o limite de 1 write/s por documento no Firestore
+    const lastUpdate = lastUserActivityUpdateMap.get(merchantUid) || 0;
+    const shouldUpdateUserDoc = eventType === "login" || (Date.now() - lastUpdate > 60000);
+
+    if (shouldUpdateUserDoc) {
+      lastUserActivityUpdateMap.set(merchantUid, Date.now());
+      try {
+        const userRef = doc(db, "users", merchantUid);
+        const updateData: any = {
+          lastActivityAt: nowIso,
+          lastActivityLabel: eventLabel
+        };
+        if (eventType === "login") {
+          updateData.lastLoginAt = nowIso;
+        }
+        setDoc(userRef, updateData, { merge: true }).catch(() => {});
+      } catch (_) {}
+    }
 
     // 3. Gravar no LocalStorage cache
     try {
