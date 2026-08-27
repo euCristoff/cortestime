@@ -652,7 +652,13 @@ export const firebaseService = {
         : ((d as any).vitrineProdutos && (d as any).vitrineProdutos.length > 0)
         ? (d as any).vitrineProdutos.map((s: any, idx: number) => ({ id: s.id || `p-${idx}`, name: s.name, price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0), durationMin: s.durationMin || 30 }))
         : [];
-      const endFormatted = d.endereco || (d as any).vitrineEndereco || extractAddressString(d) || '';
+      const endFormatted = (typeof d.endereco === 'string' && d.endereco.trim())
+        ? d.endereco.trim()
+        : (typeof (d as any).vitrineEndereco === 'string' && (d as any).vitrineEndereco.trim())
+        ? (d as any).vitrineEndereco.trim()
+        : (typeof (d as any).vitrineLocalizacao === 'string' && (d as any).vitrineLocalizacao.trim())
+        ? (d as any).vitrineLocalizacao.trim()
+        : extractAddressString(d) || '';
 
       const horarioHojeObj = d.vitrineHorarioHoje || d.horarioHoje || (d as any).vitrineHorarioHoje || (d as any).horarioHoje || {
         ativo: true,
@@ -675,6 +681,7 @@ export const firebaseService = {
         onboardingCompleted: true,
         vitrineWhatsApp: d.whatsapp,
         vitrineInstagram: d.instagram,
+        endereco: endFormatted,
         vitrineEndereco: endFormatted,
         vitrineLocalizacao: endFormatted,
         vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
@@ -705,12 +712,17 @@ export const firebaseService = {
     };
 
     const enhanceUserAddress = (u: MerchantUser): MerchantUser => {
-      const resolvedAddress = extractAddressString(u);
-      if (resolvedAddress && (!u.vitrineLocalizacao || typeof u.vitrineLocalizacao !== 'string' || !u.vitrineLocalizacao.trim())) {
+      const resolvedAddress = (typeof u.vitrineEndereco === 'string' && u.vitrineEndereco.trim() && u.vitrineEndereco !== 'Av. Principal, 123 - Centro' ? u.vitrineEndereco.trim() : '')
+        || (typeof u.vitrineLocalizacao === 'string' && u.vitrineLocalizacao.trim() && u.vitrineLocalizacao !== 'Av. Principal, 123 - Centro' ? u.vitrineLocalizacao.trim() : '')
+        || (typeof (u as any).endereco === 'string' && (u as any).endereco.trim() && (u as any).endereco !== 'Av. Principal, 123 - Centro' ? (u as any).endereco.trim() : '')
+        || extractAddressString(u);
+
+      if (resolvedAddress && resolvedAddress.trim()) {
         return {
           ...u,
-          vitrineLocalizacao: resolvedAddress,
-          vitrineEndereco: u.vitrineEndereco || resolvedAddress
+          vitrineLocalizacao: resolvedAddress.trim(),
+          vitrineEndereco: resolvedAddress.trim(),
+          endereco: (u as any).endereco || resolvedAddress.trim()
         };
       }
       return u;

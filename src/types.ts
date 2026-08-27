@@ -111,8 +111,10 @@ export interface MerchantUser {
   vitrineCapa?: string;
   vitrineLinkPersonalizado?: string;
   vitrineHorarios?: string;
+  horarios?: string;
   vitrineLocalizacao?: string;
   vitrineEndereco?: string | { cep?: string; rua?: string; numero?: string; bairro?: string; cidade?: string; estado?: string };
+  endereco?: string | { cep?: string; rua?: string; numero?: string; bairro?: string; cidade?: string; estado?: string };
   vitrineWhatsApp?: string;
   vitrinePermitirAgendamentoWhatsApp?: boolean;
   vitrineInstagram?: string;

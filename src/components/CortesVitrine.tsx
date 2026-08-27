@@ -476,6 +476,22 @@ export default function CortesVitrine({
     ];
   }, [products, services, merchant?.vitrineProdutos, (merchant as any)?.servicos]);
 
+  // Computed effective location/address that guarantees live synchronization across templates
+  const effectiveLocalizacao = useMemo(() => {
+    const rawProp = merchant?.vitrineEndereco || merchant?.vitrineLocalizacao || (merchant as any)?.endereco || extractAddressString(merchant);
+    const fromProp = typeof rawProp === 'string' ? rawProp.trim() : (typeof rawProp === 'object' ? extractAddressString({ endereco: rawProp }) : '');
+    
+    if (fromProp && fromProp !== 'Av. Principal, 123 - Centro') {
+      if (isPublicAccess || isOnlyView || !localizacao || localizacao === 'Av. Principal, 123 - Centro') {
+        return fromProp;
+      }
+    }
+    if (localizacao && localizacao.trim()) {
+      return localizacao.trim();
+    }
+    return fromProp || 'Av. Principal, 123 - Centro';
+  }, [localizacao, merchant, isPublicAccess, isOnlyView]);
+
   // Synchronize local state with merchant prop when loaded/updated
   useEffect(() => {
     if (merchant) {
@@ -502,12 +518,12 @@ export default function CortesVitrine({
         })));
       }
 
-      const rawEnd = merchant.vitrineEndereco || merchant.vitrineLocalizacao || extractAddressString(merchant);
-      const endStr = typeof rawEnd === 'string' ? rawEnd : (typeof rawEnd === 'object' ? `${(rawEnd as any)?.rua || ''} ${(rawEnd as any)?.numero || ''}`.trim() : '');
-      if (endStr && !localizacao) {
-        setLocalizacao(endStr);
+      const rawEnd = merchant.vitrineEndereco || merchant.vitrineLocalizacao || (merchant as any).endereco || extractAddressString(merchant);
+      const endStr = typeof rawEnd === 'string' ? rawEnd.trim() : (typeof rawEnd === 'object' ? extractAddressString({ endereco: rawEnd }) : '');
+      if (endStr && endStr.trim() && (isPublicAccess || isOnlyView || !localizacao || localizacao === 'Av. Principal, 123 - Centro')) {
+        setLocalizacao(endStr.trim());
       }
-      if (merchant.vitrineHorarios && !horarios) {
+      if (merchant.vitrineHorarios && (!horarios || isPublicAccess || isOnlyView)) {
         setHorarios(merchant.vitrineHorarios);
       }
       if (merchant.vitrineHorarioHoje || (merchant as any).horarioHoje) {
@@ -526,7 +542,7 @@ export default function CortesVitrine({
         });
       }
     }
-  }, [merchant, services]);
+  }, [merchant, services, isPublicAccess, isOnlyView]);
 
   // Horário de Hoje (Recurso Dinâmico e Ágil)
   const [horarioHoje, setHorarioHoje] = useState<VitrineHorarioHoje>(() => {
@@ -1951,7 +1967,7 @@ export default function CortesVitrine({
 
               {/* Location Card */}
               <div 
-                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao)}`, '_blank')}
+                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(effectiveLocalizacao)}`, '_blank')}
                 className={`mt-3.5 bg-black/25 hover:bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl text-left transition-all cursor-pointer shadow-xs ${
                   isPreview ? 'p-2.5' : 'p-3.5'
                 }`}
@@ -1961,7 +1977,7 @@ export default function CortesVitrine({
                   <span>Localização</span>
                 </div>
                 <p className={`text-white/85 font-medium mt-0.5 leading-snug ${isPreview ? 'text-[10px]' : 'text-[11px]'}`}>
-                  {localizacao}
+                  {effectiveLocalizacao}
                 </p>
               </div>
 
@@ -2283,7 +2299,7 @@ export default function CortesVitrine({
           <div className="pt-1 pb-4">
             {/* Endereço Card */}
             <div 
-              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao || 'Centro')}`, '_blank')}
+              onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(effectiveLocalizacao || 'Centro')}`, '_blank')}
               className="rounded-2xl p-3.5 border shadow-2xs flex items-center gap-3 transition-colors cursor-pointer"
               style={{
                 backgroundColor: tokens.cardBg,
@@ -2301,7 +2317,7 @@ export default function CortesVitrine({
                   ENDEREÇO
                 </p>
                 <p className="font-bold text-xs mt-0.5 leading-snug truncate" style={{ color: tokens.textPrimary }}>
-                  {localizacao || 'Av. Principal, 123 - Centro'}
+                  {effectiveLocalizacao || 'Av. Principal, 123 - Centro'}
                 </p>
               </div>
             </div>
@@ -2665,7 +2681,7 @@ export default function CortesVitrine({
                 </div>
 
                 <div 
-                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(localizacao)}`, '_blank')}
+                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${safeEncode(effectiveLocalizacao)}`, '_blank')}
                   className="flex items-start gap-2 p-2.5 rounded-xl border transition-colors cursor-pointer"
                   style={{
                     backgroundColor: tokens.cardInnerBg,
@@ -2675,7 +2691,7 @@ export default function CortesVitrine({
                   <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tokens.primaryColor }} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.textMuted }}>Localização (Abrir no Mapa)</p>
-                    <p className="font-semibold mt-0.5 leading-snug" style={{ color: tokens.textPrimary }}>{localizacao || 'Centro da Cidade'}</p>
+                    <p className="font-semibold mt-0.5 leading-snug" style={{ color: tokens.textPrimary }}>{effectiveLocalizacao || 'Centro da Cidade'}</p>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 shrink-0 mt-1" style={{ color: tokens.textMuted }} />
                 </div>
@@ -5383,7 +5399,7 @@ export default function CortesVitrine({
                 singleBarberMode={barbeiroUnico || merchant.vitrineBarbeiroUnico || merchant.barbeiroUnico || (barbers && barbers.length <= 1)}
                 businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
                 businessLogo={merchant.vitrineLogoImage || logoImage}
-                services={services}
+                services={effectiveServicesList}
                 barbers={
                   barbers && barbers.length > 0
                     ? barbers.map(b => ({
@@ -6072,7 +6088,7 @@ export default function CortesVitrine({
                         <div className="bg-white p-1.5 rounded-xl border border-gray-100 space-y-1 text-[7px] text-left text-gray-600 mt-1">
                           <div className="flex items-center gap-1">
                             <MapPin className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                            <span className="text-gray-600 truncate">{localizacao || 'Av. Principal, 123 - Centro'}</span>
+                            <span className="text-gray-600 truncate">{effectiveLocalizacao || 'Av. Principal, 123 - Centro'}</span>
                           </div>
                         </div>
 
@@ -6302,7 +6318,7 @@ export default function CortesVitrine({
                             <span>Localização</span>
                           </div>
                           <p className="text-[6.5px] text-white/90 truncate font-medium">
-                            {localizacao || 'Av. Principal, 123 - Centro'}
+                            {effectiveLocalizacao || 'Av. Principal, 123 - Centro'}
                           </p>
                         </div>
 

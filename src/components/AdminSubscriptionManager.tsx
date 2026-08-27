@@ -374,6 +374,8 @@ export default function AdminSubscriptionManager({
         whatsapp: draftWhatsapp,
         instagram: draftInstagram,
         endereco: draftEndereco,
+        vitrineEndereco: draftEndereco,
+        vitrineLocalizacao: draftEndereco,
         slogan: draftSlogan,
         logoUrl: draftLogoUrl,
         vitrineLogoImage: draftLogoUrl,
