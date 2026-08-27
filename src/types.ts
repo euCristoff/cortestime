@@ -152,6 +152,7 @@ export interface MerchantUser {
   vitrineBarbeiroUnico?: boolean;
 
   // Invite code / Draft vitrine redemption fields
+  codigoVitrine?: string;
   codigoConviteResgatado?: string;
   vitrineDraftResgatada?: boolean;
   draftJustClaimed?: boolean;

@@ -24,6 +24,7 @@ import {
 import { Service, Barber, Client, Appointment, MerchantUser, OnboardingData, DraftVitrine, AppNotification, QueueItem, AnalyticsVisit, AnalyticsEvent } from "../types";
 import { analyticsTracker } from "./analyticsTracker";
 import { extractAddressString } from "../utils/addressUtils";
+import { getVitrineCode, merchantToDraftVitrine } from "../utils/vitrineCodeUtils";
 
 // Collection Names
 const COLL_SERVICES = "services";
@@ -1296,12 +1297,12 @@ export const firebaseService = {
     }
   },
 
-  // Draft Vitrines / Invite Codes operations
+  // Draft Vitrines / Invite Codes operations - supports both draft templates and any merchant showcase
   async getDraftVitrineByCode(codigo: string): Promise<DraftVitrine | null> {
     if (!codigo) return null;
     const norm = codigo.trim().toUpperCase();
 
-    // 1. Try Firestore
+    // 1. Try Firestore Draft Vitrines collection
     try {
       const q = query(collection(db, COLL_DRAFT_VITRINES), where("codigo", "==", norm));
       const snap = await getDocs(q);
@@ -1328,7 +1329,7 @@ export const firebaseService = {
       console.warn("Firestore draft vitrine fetch error, checking LocalStorage:", err);
     }
 
-    // 2. Check LocalStorage fallback
+    // 2. Check LocalStorage draft vitrines fallback
     try {
       const raw = localStorage.getItem("cortestime_draft_vitrines");
       if (raw) {
@@ -1339,6 +1340,61 @@ export const firebaseService = {
     } catch (e) {
       console.error("LocalStorage draft vitrines parse error:", e);
     }
+
+    // 3. Search in users collection for matching showcase code or merchant
+    try {
+      const usersRef = collection(db, "users");
+      // Search by specific code fields
+      const qFields = [
+        query(usersRef, where("codigoVitrine", "==", norm)),
+        query(usersRef, where("codigoConviteResgatado", "==", norm)),
+        query(usersRef, where("codigo", "==", norm)),
+      ];
+
+      for (const q of qFields) {
+        const userSnap = await getDocs(q);
+        if (!userSnap.empty) {
+          const u = userSnap.docs[0].data() as MerchantUser;
+          return merchantToDraftVitrine(u, norm);
+        }
+      }
+
+      // Check all merchants or try slug match
+      const allMerchants = await this.getAllMerchants();
+      for (const m of allMerchants) {
+        const generated = getVitrineCode(m);
+        if (
+          generated.toUpperCase() === norm ||
+          (m.codigoVitrine && m.codigoVitrine.trim().toUpperCase() === norm) ||
+          (m.codigoConviteResgatado && m.codigoConviteResgatado.trim().toUpperCase() === norm) ||
+          (m.codigo && m.codigo.trim().toUpperCase() === norm) ||
+          (m.uid && m.uid.trim().toUpperCase() === norm)
+        ) {
+          return merchantToDraftVitrine(m, norm);
+        }
+      }
+    } catch (err) {
+      console.warn("Error querying users collection for vitrine code:", err);
+    }
+
+    // 4. LocalStorage merchant cache check
+    try {
+      const rawSession = localStorage.getItem("cortestime_merchant_session");
+      if (rawSession) {
+        const sess = JSON.parse(rawSession) as MerchantUser;
+        if (sess && getVitrineCode(sess).toUpperCase() === norm) {
+          return merchantToDraftVitrine(sess, norm);
+        }
+      }
+      const rawMerchants = localStorage.getItem("cortestime_merchants");
+      if (rawMerchants) {
+        const list: MerchantUser[] = JSON.parse(rawMerchants);
+        const matched = list.find(m => getVitrineCode(m).toUpperCase() === norm || (m.codigo && m.codigo.toUpperCase() === norm));
+        if (matched) {
+          return merchantToDraftVitrine(matched, norm);
+        }
+      }
+    } catch (_) {}
 
     return null;
   },
