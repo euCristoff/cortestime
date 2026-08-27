@@ -648,7 +648,6 @@ export default function CortesVitrine({
   }, [merchant, foundDraft]);
 
   const [copiedVitrineCode, setCopiedVitrineCode] = useState<boolean>(false);
-  const [showCloneVitrineModal, setShowCloneVitrineModal] = useState<boolean>(false);
 
   const handleCopyVitrineCode = (customCode?: string) => {
     const code = (customCode || activeVitrineCode || '').trim();
@@ -924,7 +923,6 @@ export default function CortesVitrine({
       } catch (_) {}
 
       setDraftSuccessMsg(`✨ Vitrine "${draft.nomeBarbearia}" (Código: ${draft.codigo}) aplicada com sucesso!`);
-      setShowCloneVitrineModal(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -2273,9 +2271,6 @@ export default function CortesVitrine({
               renderReviewsSection(isPreview)
             )}
 
-            {/* Código da Vitrine & Personalização */}
-            {renderVitrineCodeFooter(isPreview)}
-
             {/* Footer Branding */}
             <div 
               className="text-center pt-4 pb-2 mt-auto text-[10px] font-medium flex items-center justify-center gap-1.5"
@@ -2714,9 +2709,6 @@ export default function CortesVitrine({
             </div>
           )}
 
-          {/* Código da Vitrine & Personalização */}
-          {renderVitrineCodeFooter(isPreview)}
-
           {/* Branding badge */}
           <div className="text-center py-3 text-[10px] font-medium" style={{ color: tokens.textMuted }}>
             Desenvolvido por <strong style={{ color: tokens.textPrimary }}>Cortestime Vitrine</strong>
@@ -2725,267 +2717,6 @@ export default function CortesVitrine({
       </div>
     );
   };
-
-  // Renderiza o card do Código da Vitrine no final de todas as vitrines
-  const renderVitrineCodeFooter = (isPreview = false) => {
-    return (
-      <div 
-        className={`rounded-3xl border text-center transition-all ${
-          isPreview ? 'p-3.5 my-3' : 'p-5 sm:p-6 my-4'
-        }`}
-        style={{
-          backgroundColor: tokens.cardBg,
-          borderColor: tokens.cardBorder,
-          color: tokens.textPrimary,
-        }}
-      >
-        <div className="flex items-center justify-center gap-1.5 mb-2">
-          <Sparkles className="w-4 h-4" style={{ color: tokens.primaryColor }} />
-          <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider" style={{ color: tokens.textMuted }}>
-            Código Desta Vitrine
-          </span>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 max-w-sm mx-auto">
-          {/* Badge com o código */}
-          <div 
-            onClick={() => handleCopyVitrineCode()}
-            className="w-full sm:w-auto px-4 py-2 rounded-2xl border flex items-center justify-between sm:justify-center gap-3 cursor-pointer hover:opacity-90 active:scale-98 transition-all shadow-2xs"
-            style={{
-              backgroundColor: tokens.cardInnerBg,
-              borderColor: tokens.cardBorder,
-            }}
-            title="Clique para copiar este código"
-          >
-            <div className="flex items-center gap-2">
-              <Ticket className="w-4 h-4 shrink-0" style={{ color: tokens.primaryColor }} />
-              <span className="font-mono font-black text-xs sm:text-sm tracking-widest" style={{ color: tokens.textPrimary }}>
-                {activeVitrineCode}
-              </span>
-            </div>
-            
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCopyVitrineCode();
-              }}
-              className="text-[10px] font-bold px-2.5 py-1 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-              style={{
-                backgroundColor: copiedVitrineCode ? '#10b981' : tokens.accentBadgeBg,
-                color: copiedVitrineCode ? '#ffffff' : tokens.primaryColor,
-              }}
-            >
-              {copiedVitrineCode ? (
-                <>
-                  <Check className="w-3 h-3" />
-                  <span>Copiado!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" />
-                  <span>Copiar</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Botão Usar / Clonar Este Modelo */}
-          <button
-            type="button"
-            onClick={() => setShowCloneVitrineModal(true)}
-            className="w-full sm:w-auto text-xs font-extrabold px-4 py-2.5 rounded-2xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shrink-0"
-            style={{
-              background: tokens.primaryGradient,
-              color: tokens.primaryButtonText,
-            }}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Usar este Modelo</span>
-          </button>
-        </div>
-
-        <p className="text-[10px] sm:text-[11px] font-medium mt-3 max-w-md mx-auto leading-relaxed" style={{ color: tokens.textMuted }}>
-          Qualquer pessoa ou barbearia pode usar este código no <strong>Cortestime</strong> para aplicar toda a personalização (tema, cores, serviços, layout e fotos) na sua própria vitrine.
-        </p>
-      </div>
-    );
-  };
-
-  const renderCloneVitrineModal = () => (
-    <AnimatePresence>
-      {showCloneVitrineModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-5 sm:p-6 relative text-left border my-auto"
-            style={{
-              backgroundColor: tokens.cardBg,
-              borderColor: tokens.cardBorder,
-              color: tokens.textPrimary,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setShowCloneVitrineModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full hover:opacity-75 transition-colors cursor-pointer"
-              style={{ color: tokens.textMuted }}
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="flex items-center gap-3">
-                <div 
-                  className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md"
-                  style={{ background: tokens.primaryGradient, color: tokens.primaryButtonText }}
-                >
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block"
-                    style={{ backgroundColor: tokens.accentBadgeBg, color: tokens.primaryColor }}
-                  >
-                    Clonagem & Personalização
-                  </span>
-                  <h3 className="text-base sm:text-lg font-black mt-0.5" style={{ color: tokens.textPrimary }}>
-                    Usar este Modelo de Vitrine
-                  </h3>
-                </div>
-              </div>
-
-              {/* Code Box */}
-              <div 
-                className="p-4 rounded-2xl border space-y-2.5 text-center"
-                style={{
-                  backgroundColor: tokens.cardInnerBg,
-                  borderColor: tokens.cardBorder,
-                }}
-              >
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tokens.textMuted }}>
-                  Código Desta Vitrine
-                </p>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="font-mono font-black text-lg sm:text-xl tracking-widest" style={{ color: tokens.primaryColor }}>
-                    {activeVitrineCode}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyVitrineCode()}
-                    className="p-2 rounded-xl transition-all border cursor-pointer active:scale-95 flex items-center gap-1 text-xs font-bold"
-                    style={{
-                      backgroundColor: copiedVitrineCode ? '#10b981' : tokens.cardBg,
-                      borderColor: tokens.cardBorder,
-                      color: copiedVitrineCode ? '#ffffff' : tokens.textPrimary
-                    }}
-                    title="Copiar código"
-                  >
-                    {copiedVitrineCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedVitrineCode ? 'Copiado!' : 'Copiar'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Summary of what will be imported */}
-              <div className="space-y-2 text-xs" style={{ color: tokens.textSecondary }}>
-                <p className="font-bold text-[11px]" style={{ color: tokens.textPrimary }}>
-                  ✨ O que está incluído nesta personalização:
-                </p>
-                <div 
-                  className="grid grid-cols-2 gap-2 p-3 rounded-2xl border text-[11px]"
-                  style={{
-                    backgroundColor: tokens.cardInnerBg,
-                    borderColor: tokens.cardBorder,
-                  }}
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Palette className="w-3.5 h-3.5 shrink-0" style={{ color: tokens.primaryColor }} />
-                    <span className="truncate">Tema & Cores</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Layout className="w-3.5 h-3.5 shrink-0" style={{ color: tokens.primaryColor }} />
-                    <span className="truncate">{template === 'modelo2' ? 'Modelo 2 (Degradê)' : 'Modelo 1 (Clássico)'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Scissors className="w-3.5 h-3.5 shrink-0" style={{ color: tokens.primaryColor }} />
-                    <span className="truncate">{effectiveServicesList.length} Serviços</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: tokens.primaryColor }} />
-                    <span className="truncate">Horários & Capa</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions based on context */}
-              <div className="space-y-2 pt-1">
-                {merchant && merchant.uid && !isPublicAccess ? (
-                  <button
-                    type="button"
-                    disabled={isApplyingDraft}
-                    onClick={() => handleApplyCodeDirectly(activeVitrineCode)}
-                    className="w-full font-extrabold text-xs py-3 px-4 rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
-                    style={{
-                      background: tokens.primaryGradient,
-                      color: tokens.primaryButtonText,
-                    }}
-                  >
-                    {isApplyingDraft ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-4 h-4" />
-                    )}
-                    <span>{isApplyingDraft ? 'Aplicando Personalização...' : '✨ Aplicar no Meu Painel Agora'}</span>
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleCopyVitrineCode();
-                        const url = new URL(window.location.origin);
-                        url.searchParams.set('codigo', activeVitrineCode);
-                        window.open(url.toString(), '_blank');
-                      }}
-                      className="w-full font-extrabold text-xs py-3 px-4 rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                      style={{
-                        background: tokens.primaryGradient,
-                        color: tokens.primaryButtonText,
-                      }}
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Criar Barbearia com este Modelo</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleCopyVitrineCode();
-                        alert(`Código ${activeVitrineCode} copiado! No seu painel Cortestime, acesse "Vitrine" > "Resgatar / Importar por Código" e cole o código.`);
-                        setShowCloneVitrineModal(false);
-                      }}
-                      className="w-full text-xs font-bold py-2.5 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2 cursor-pointer hover:opacity-90 active:scale-95"
-                      style={{
-                        backgroundColor: tokens.cardInnerBg,
-                        borderColor: tokens.cardBorder,
-                        color: tokens.textPrimary
-                      }}
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copiar Código & Instruções</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
 
   const renderHorarioHojeDetailsModal = () => (
     <AnimatePresence>
@@ -3175,9 +2906,6 @@ export default function CortesVitrine({
 
         {/* DETAILS MODAL FOR HORÁRIO DE HOJE */}
         {renderHorarioHojeDetailsModal()}
-
-        {/* MODAL PARA CLONAR / USAR MODELO DA VITRINE */}
-        {renderCloneVitrineModal()}
 
         {/* CLIENT BOOKING MODAL FOR SITE BOOKING IN PUBLIC ACCESS */}
         <AnimatePresence>
@@ -6876,9 +6604,6 @@ export default function CortesVitrine({
 
       {/* DETAILS MODAL FOR HORÁRIO DE HOJE IN DASHBOARD */}
       {renderHorarioHojeDetailsModal()}
-
-      {/* MODAL PARA CLONAR / USAR MODELO DA VITRINE */}
-      {renderCloneVitrineModal()}
 
     </div>
   );
