@@ -431,6 +431,103 @@ export default function CortesVitrine({
     return resolveVitrineTokens(themePreset, primaryColor, secondaryColor, gradientEnabled);
   }, [themePreset, primaryColor, secondaryColor, gradientEnabled]);
 
+  // Computed effective services list that guarantees live synchronization
+  const effectiveServicesList = useMemo(() => {
+    if (products && products.length > 0) {
+      return products.map(p => ({
+        id: p.id,
+        name: p.name,
+        price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+        durationMin: (p as any).durationMin || 30,
+        commissionPercent: 0
+      }));
+    }
+    if (services && services.length > 0) {
+      return services.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: (s as any).durationMin || 30,
+        commissionPercent: 0
+      }));
+    }
+    if (merchant?.vitrineProdutos && merchant.vitrineProdutos.length > 0) {
+      return merchant.vitrineProdutos.map((p, idx) => ({
+        id: p.id || `p-${idx}`,
+        name: p.name,
+        price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+        durationMin: (p as any).durationMin || 30,
+        commissionPercent: 0
+      }));
+    }
+    if ((merchant as any)?.servicos && (merchant as any).servicos.length > 0) {
+      return (merchant as any).servicos.map((s: any, idx: number) => ({
+        id: s.id || `s-${idx}`,
+        name: s.name,
+        price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+        durationMin: s.durationMin || 30,
+        commissionPercent: 0
+      }));
+    }
+    return [
+      { id: 'p1', name: 'Corte de Cabelo', price: 40.00, durationMin: 30, commissionPercent: 0 },
+      { id: 'p2', name: 'Barba Alinhada', price: 30.00, durationMin: 25, commissionPercent: 0 },
+      { id: 'p3', name: 'Combo Cabelo + Barba', price: 60.00, durationMin: 45, commissionPercent: 0 }
+    ];
+  }, [products, services, merchant?.vitrineProdutos, (merchant as any)?.servicos]);
+
+  // Synchronize local state with merchant prop when loaded/updated
+  useEffect(() => {
+    if (merchant) {
+      if (merchant.vitrineProdutos && merchant.vitrineProdutos.length > 0) {
+        setProducts(merchant.vitrineProdutos.map((p, idx) => ({
+          id: p.id || `p-${idx}`,
+          name: p.name,
+          price: typeof p.price === 'number' ? p.price : (parseFloat(p.price as any) || 0),
+          durationMin: (p as any).durationMin || 30
+        })));
+      } else if ((merchant as any).servicos && (merchant as any).servicos.length > 0) {
+        setProducts((merchant as any).servicos.map((s: any, idx: number) => ({
+          id: s.id || `s-${idx}`,
+          name: s.name,
+          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+          durationMin: s.durationMin || 30
+        })));
+      } else if (services && services.length > 0) {
+        setProducts(services.map((s, idx) => ({
+          id: s.id || `p-${idx}`,
+          name: s.name,
+          price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0),
+          durationMin: (s as any).durationMin || 30
+        })));
+      }
+
+      const rawEnd = merchant.vitrineEndereco || merchant.vitrineLocalizacao || extractAddressString(merchant);
+      const endStr = typeof rawEnd === 'string' ? rawEnd : (typeof rawEnd === 'object' ? `${(rawEnd as any)?.rua || ''} ${(rawEnd as any)?.numero || ''}`.trim() : '');
+      if (endStr && !localizacao) {
+        setLocalizacao(endStr);
+      }
+      if (merchant.vitrineHorarios && !horarios) {
+        setHorarios(merchant.vitrineHorarios);
+      }
+      if (merchant.vitrineHorarioHoje || (merchant as any).horarioHoje) {
+        const hh = merchant.vitrineHorarioHoje || (merchant as any).horarioHoje;
+        setHorarioHoje({
+          ativo: hh.ativo ?? true,
+          status: hh.status || 'atendendo',
+          inicio: hh.inicio || '09:00',
+          fim: hh.fim || '19:00',
+          temIntervalo: hh.temIntervalo ?? false,
+          intervaloInicio: hh.intervaloInicio || '12:00',
+          intervaloFim: hh.intervaloFim || '13:30',
+          proximoAtendimento: hh.proximoAtendimento || 'Amanhã, das 09:00 às 18:00',
+          mensagem: hh.mensagem || '',
+          dataAtualizacao: hh.dataAtualizacao || new Date().toISOString().split('T')[0]
+        });
+      }
+    }
+  }, [merchant, services]);
+
   // Horário de Hoje (Recurso Dinâmico e Ágil)
   const [horarioHoje, setHorarioHoje] = useState<VitrineHorarioHoje>(() => {
     if (merchant.vitrineHorarioHoje) {
@@ -1154,8 +1251,12 @@ export default function CortesVitrine({
           whatsapp: whatsapp || '',
           instagram: instagram || '',
           endereco: localizacao || '',
+          vitrineEndereco: localizacao || '',
+          vitrineLocalizacao: localizacao || '',
           slogan: slogan || '',
           horarios: horarios || 'Seg - Sáb: 08:00 às 20:00',
+          vitrineHorarioHoje: horarioHoje,
+          horarioHoje: horarioHoje,
           logoUrl: finalLogoImage,
           vitrineLogoImage: finalLogoImage,
           capaUrl: finalCapa,
@@ -1169,6 +1270,13 @@ export default function CortesVitrine({
           template: template,
           modoAcao: modoAcao,
           barbeiroUnico: barbeiroUnico,
+          vitrineLinkPersonalizado: linkPersonalizado || '',
+          vitrineProdutos: (products && products.length > 0 ? products : (services && services.length > 0 ? services : [])).map((p: any, idx: number) => ({
+            id: p.id || `s-${idx}`,
+            name: p.name || 'Serviço',
+            price: typeof p.price === 'number' ? p.price : (parseFloat(p.price) || 0),
+            durationMin: p.durationMin || 30
+          })),
           servicos: (products && products.length > 0 ? products : (services && services.length > 0 ? services : [])).map((p: any, idx: number) => ({
             id: p.id || `s-${idx}`,
             name: p.name || 'Serviço',
@@ -1909,10 +2017,10 @@ export default function CortesVitrine({
                 Nossos serviços
               </h3>
               <div className="space-y-2">
-                {services.length === 0 ? (
+                {effectiveServicesList.length === 0 ? (
                   <p className="text-xs" style={{ color: tokens.textMuted }}>Nenhum serviço cadastrado.</p>
                 ) : (
-                  services.map(s => (
+                  effectiveServicesList.map(s => (
                     <div
                       key={s.id}
                       onClick={() => {
@@ -2205,10 +2313,10 @@ export default function CortesVitrine({
               Tabela de Serviços & Preços
             </h4>
             <div className="space-y-2.5">
-              {services.length === 0 ? (
+              {effectiveServicesList.length === 0 ? (
                 <p className="text-xs" style={{ color: tokens.textMuted }}>Nenhum serviço cadastrado.</p>
               ) : (
-                services.map(s => (
+                effectiveServicesList.map(s => (
                   <div 
                     key={s.id} 
                     className="flex justify-between items-center text-xs p-2.5 rounded-2xl border transition-colors"
@@ -2656,7 +2764,7 @@ export default function CortesVitrine({
                   singleBarberMode={barbeiroUnico || merchant.vitrineBarbeiroUnico || merchant.barbeiroUnico || (barbers && barbers.length <= 1)}
                   businessName={merchant.vitrineLogo || merchant.nomeBarbearia || 'Cortes Vitrine'}
                   businessLogo={merchant.vitrineLogoImage || logoImage}
-                  services={services}
+                  services={effectiveServicesList}
                   barbers={
                     barbers && barbers.length > 0
                       ? barbers.map(b => ({

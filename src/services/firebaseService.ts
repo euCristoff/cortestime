@@ -649,8 +649,17 @@ export const firebaseService = {
       const gal = (d.galeria && d.galeria.length > 0) ? d.galeria : ((d as any).vitrineGaleria || []);
       const servs = (d.servicos && d.servicos.length > 0)
         ? d.servicos.map((s, idx) => ({ id: s.id || `p-${idx}`, name: s.name, price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0), durationMin: s.durationMin || 30 }))
-        : (d as any).vitrineProdutos || [];
-      const endFormatted = extractAddressString(d) || d.endereco || '';
+        : ((d as any).vitrineProdutos && (d as any).vitrineProdutos.length > 0)
+        ? (d as any).vitrineProdutos.map((s: any, idx: number) => ({ id: s.id || `p-${idx}`, name: s.name, price: typeof s.price === 'number' ? s.price : (parseFloat(s.price as any) || 0), durationMin: s.durationMin || 30 }))
+        : [];
+      const endFormatted = d.endereco || (d as any).vitrineEndereco || extractAddressString(d) || '';
+
+      const horarioHojeObj = d.vitrineHorarioHoje || d.horarioHoje || (d as any).vitrineHorarioHoje || (d as any).horarioHoje || {
+        ativo: true,
+        status: 'atendendo',
+        inicio: '09:00',
+        fim: '19:00'
+      };
 
       return {
         uid: d.id || `draft_${d.codigo}`,
@@ -670,6 +679,7 @@ export const firebaseService = {
         vitrineLocalizacao: endFormatted,
         vitrineSlogan: d.slogan || 'Sua Barbearia de Confiança',
         vitrineHorarios: d.horarios || 'Seg - Sáb: 08:00 às 20:00',
+        vitrineHorarioHoje: horarioHojeObj,
         vitrineLogoImage: logo,
         vitrineLogo: d.nomeBarbearia,
         vitrineCapa: capa,
@@ -677,12 +687,12 @@ export const firebaseService = {
         codigoConviteResgatado: d.codigo,
         barbeiroUnico: d.barbeiroUnico !== undefined ? d.barbeiroUnico : true,
         vitrineBarbeiroUnico: d.barbeiroUnico !== undefined ? d.barbeiroUnico : true,
-        vitrineThemePreset: d.themePreset,
-        vitrinePrimaryColor: d.primaryColor,
-        vitrineSecondaryColor: d.secondaryColor,
-        vitrineGradientEnabled: d.gradientEnabled,
-        vitrineTemplate: d.template,
-        vitrineModoAcao: d.modoAcao,
+        vitrineThemePreset: d.themePreset || 'cortestime',
+        vitrinePrimaryColor: d.primaryColor || '#051b42',
+        vitrineSecondaryColor: d.secondaryColor || '#2563eb',
+        vitrineGradientEnabled: d.gradientEnabled ?? true,
+        vitrineTemplate: d.template || 'modelo1',
+        vitrineModoAcao: d.modoAcao || 'agendamento',
         vitrineGaleria: gal,
         vitrineProdutos: servs,
         servicos: servs,
@@ -706,31 +716,8 @@ export const firebaseService = {
       return u;
     };
 
-    // 1. Search in Firestore "users"
-    try {
-      // First try quick exact queries on vitrineLinkPersonalizado
-      const qExact = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", rawSlug));
-      const snapExact = await withTimeout(getDocs(qExact), 8000);
-      if (!snapExact.empty) {
-        return enhanceUserAddress(snapExact.docs[0].data() as MerchantUser);
-      }
-
-      // Scan all users with timeout protection
-      const qAll = query(collection(db, "users"));
-      const snapAll = await withTimeout(getDocs(qAll), 10000);
-      if (!snapAll.empty) {
-        for (const docSnap of snapAll.docs) {
-          const user = docSnap.data() as MerchantUser;
-          if (matchesMerchant(user)) {
-            return enhanceUserAddress(user);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Error querying users in Firestore:", err);
-    }
-
-    // 2. Search in Firestore "draft_vitrines"
+    // First, check if there is a matching draft in Firestore "draft_vitrines" or LocalStorage
+    let matchedDraft: DraftVitrine | null = null;
     try {
       const qDrafts = query(collection(db, COLL_DRAFT_VITRINES));
       const snapDrafts = await withTimeout(getDocs(qDrafts), 8000);
@@ -742,12 +729,89 @@ export const firebaseService = {
             (draft.nomeBarbearia && (toKebab(draft.nomeBarbearia) === targetKebab || toAlphaNum(draft.nomeBarbearia) === targetAlpha)) ||
             (draft.id === rawSlug)
           ) {
-            return draftToMerchant(draft);
+            matchedDraft = draft;
+            break;
           }
         }
       }
     } catch (err) {
       console.warn("Error querying draft_vitrines in Firestore:", err);
+    }
+
+    if (!matchedDraft) {
+      try {
+        const rawDrafts = localStorage.getItem("cortestime_draft_vitrines");
+        if (rawDrafts) {
+          const drafts: DraftVitrine[] = JSON.parse(rawDrafts);
+          for (const draft of drafts) {
+            if (
+              (draft.codigo && (draft.codigo.trim().toUpperCase() === rawSlug.toUpperCase() || toAlphaNum(draft.codigo) === targetAlpha)) ||
+              (draft.nomeBarbearia && (toKebab(draft.nomeBarbearia) === targetKebab || toAlphaNum(draft.nomeBarbearia) === targetAlpha)) ||
+              (draft.id === rawSlug)
+            ) {
+              matchedDraft = draft;
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Error reading local cache for draft lookup:", e);
+      }
+    }
+
+    // 1. Search in Firestore "users"
+    try {
+      // First try quick exact queries on vitrineLinkPersonalizado
+      const qExact = query(collection(db, "users"), where("vitrineLinkPersonalizado", "==", rawSlug));
+      const snapExact = await withTimeout(getDocs(qExact), 8000);
+      if (!snapExact.empty) {
+        let user = snapExact.docs[0].data() as MerchantUser;
+        // Merge draft data if user lacks services/address but draft has them
+        if (matchedDraft) {
+          user = {
+            ...draftToMerchant(matchedDraft),
+            ...user,
+            vitrineProdutos: (user.vitrineProdutos && user.vitrineProdutos.length > 0) ? user.vitrineProdutos : (matchedDraft.servicos || (matchedDraft as any).vitrineProdutos || []),
+            servicos: (user.servicos && user.servicos.length > 0) ? user.servicos : (matchedDraft.servicos || (matchedDraft as any).vitrineProdutos || []),
+            vitrineEndereco: user.vitrineEndereco || matchedDraft.endereco || '',
+            vitrineLocalizacao: user.vitrineLocalizacao || matchedDraft.endereco || '',
+            vitrineHorarios: user.vitrineHorarios || matchedDraft.horarios || 'Seg - Sáb: 08:00 às 20:00',
+            vitrineHorarioHoje: user.vitrineHorarioHoje || matchedDraft.vitrineHorarioHoje || (matchedDraft as any).horarioHoje,
+          };
+        }
+        return enhanceUserAddress(user);
+      }
+
+      // Scan all users with timeout protection
+      const qAll = query(collection(db, "users"));
+      const snapAll = await withTimeout(getDocs(qAll), 10000);
+      if (!snapAll.empty) {
+        for (const docSnap of snapAll.docs) {
+          let user = docSnap.data() as MerchantUser;
+          if (matchesMerchant(user)) {
+            if (matchedDraft) {
+              user = {
+                ...draftToMerchant(matchedDraft),
+                ...user,
+                vitrineProdutos: (user.vitrineProdutos && user.vitrineProdutos.length > 0) ? user.vitrineProdutos : (matchedDraft.servicos || (matchedDraft as any).vitrineProdutos || []),
+                servicos: (user.servicos && user.servicos.length > 0) ? user.servicos : (matchedDraft.servicos || (matchedDraft as any).vitrineProdutos || []),
+                vitrineEndereco: user.vitrineEndereco || matchedDraft.endereco || '',
+                vitrineLocalizacao: user.vitrineLocalizacao || matchedDraft.endereco || '',
+                vitrineHorarios: user.vitrineHorarios || matchedDraft.horarios || 'Seg - Sáb: 08:00 às 20:00',
+                vitrineHorarioHoje: user.vitrineHorarioHoje || matchedDraft.vitrineHorarioHoje || (matchedDraft as any).horarioHoje,
+              };
+            }
+            return enhanceUserAddress(user);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error querying users in Firestore:", err);
+    }
+
+    // 2. If no user in Firestore "users", return the matched DraftVitrine if found
+    if (matchedDraft) {
+      return draftToMerchant(matchedDraft);
     }
 
     // 3. Search in LocalStorage (session, cached profiles, drafts)
@@ -1419,6 +1483,17 @@ export const firebaseService = {
       ? (draftData as any).vitrineProdutos
       : (existing?.servicos ?? (existing as any)?.vitrineProdutos ?? []);
 
+    const incomingHorarioHoje = draftData.vitrineHorarioHoje !== undefined
+      ? draftData.vitrineHorarioHoje
+      : ((draftData as any)?.horarioHoje !== undefined
+      ? (draftData as any).horarioHoje
+      : (existing?.vitrineHorarioHoje ?? (existing as any)?.horarioHoje ?? {
+        ativo: true,
+        status: 'atendendo',
+        inicio: '09:00',
+        fim: '19:00'
+      }));
+
     const merged: DraftVitrine = {
       id: finalId,
       codigo: finalCode,
@@ -1427,6 +1502,8 @@ export const firebaseService = {
       whatsapp: draftData.whatsapp !== undefined ? draftData.whatsapp : (existing?.whatsapp ?? ''),
       instagram: draftData.instagram !== undefined ? draftData.instagram : (existing?.instagram ?? ''),
       endereco: draftData.endereco !== undefined ? draftData.endereco : (existing?.endereco ?? ''),
+      vitrineEndereco: draftData.endereco !== undefined ? draftData.endereco : (existing?.endereco ?? ''),
+      vitrineLocalizacao: draftData.endereco !== undefined ? draftData.endereco : (existing?.endereco ?? ''),
       slogan: draftData.slogan !== undefined ? draftData.slogan : (existing?.slogan ?? ''),
       logoUrl: incomingLogo,
       vitrineLogoImage: incomingLogo,
@@ -1435,6 +1512,8 @@ export const firebaseService = {
       galeria: incomingGaleria,
       vitrineGaleria: incomingGaleria,
       horarios: draftData.horarios !== undefined ? draftData.horarios : (existing?.horarios ?? 'Seg - Sáb: 08:00 às 20:00'),
+      vitrineHorarioHoje: incomingHorarioHoje,
+      horarioHoje: incomingHorarioHoje,
       servicos: incomingServicos,
       vitrineProdutos: (draftData as any)?.vitrineProdutos || incomingServicos.map((s: any, idx: number) => ({ id: s.id || `p-${idx}`, name: s.name, price: s.price, durationMin: s.durationMin || 30 })),
       barbeiroUnico: draftData.barbeiroUnico !== undefined ? draftData.barbeiroUnico : (existing?.barbeiroUnico ?? true),
@@ -1477,6 +1556,52 @@ export const firebaseService = {
             await setDoc(d.ref, cleanData, { merge: true });
           }
         }
+      }
+      // Also query by nomeBarbearia in Firestore
+      if (merged.nomeBarbearia) {
+        const qName = query(collection(db, COLL_DRAFT_VITRINES), where("nomeBarbearia", "==", merged.nomeBarbearia));
+        const snapName = await getDocs(qName);
+        if (!snapName.empty) {
+          for (const d of snapName.docs) {
+            await setDoc(d.ref, cleanData, { merge: true });
+          }
+        }
+      }
+      // Sync into users collection if a user exists with matching code or name
+      try {
+        const qUsers = query(collection(db, "users"));
+        const snapUsers = await getDocs(qUsers);
+        if (!snapUsers.empty) {
+          for (const uDoc of snapUsers.docs) {
+            const uData = uDoc.data() as MerchantUser;
+            if (
+              (uData.codigoConviteResgatado && finalCode && uData.codigoConviteResgatado.trim().toUpperCase() === finalCode.trim().toUpperCase()) ||
+              (uData.nomeBarbearia && merged.nomeBarbearia && uData.nomeBarbearia.trim().toLowerCase() === merged.nomeBarbearia.trim().toLowerCase())
+            ) {
+              await setDoc(uDoc.ref, {
+                vitrineProdutos: merged.vitrineProdutos,
+                servicos: merged.servicos,
+                vitrineEndereco: merged.endereco,
+                vitrineLocalizacao: merged.endereco,
+                vitrineHorarios: merged.horarios,
+                vitrineHorarioHoje: merged.vitrineHorarioHoje,
+                vitrineSlogan: merged.slogan,
+                vitrineLogoImage: merged.logoUrl,
+                vitrineCapa: merged.capaUrl,
+                vitrineGaleria: merged.galeria,
+                vitrineThemePreset: merged.themePreset,
+                vitrinePrimaryColor: merged.primaryColor,
+                vitrineSecondaryColor: merged.secondaryColor,
+                vitrineGradientEnabled: merged.gradientEnabled,
+                vitrineTemplate: merged.template,
+                vitrineModoAcao: merged.modoAcao,
+                vitrineBarbeiroUnico: merged.barbeiroUnico
+              }, { merge: true });
+            }
+          }
+        }
+      } catch (userSyncErr) {
+        console.warn("User sync error in updateDraftVitrine:", userSyncErr);
       }
     } catch (err) {
       console.warn("Firestore update draft vitrine error:", err);

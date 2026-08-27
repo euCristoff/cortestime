@@ -301,6 +301,9 @@ export interface DraftVitrine {
   whatsapp?: string;
   instagram?: string;
   endereco?: string;
+  vitrineEndereco?: string;
+  vitrineLocalizacao?: string;
+  vitrineLinkPersonalizado?: string;
   slogan?: string;
   logoUrl?: string;
   vitrineLogoImage?: string;
@@ -309,6 +312,8 @@ export interface DraftVitrine {
   galeria?: string[]; // Portfólio de fotos dos cortes e trabalhos
   vitrineGaleria?: string[];
   horarios?: string;
+  vitrineHorarioHoje?: VitrineHorarioHoje;
+  horarioHoje?: VitrineHorarioHoje;
   servicos?: { id?: string; name: string; price: number; durationMin: number; description?: string }[];
   vitrineProdutos?: { id: string; name: string; price: number; durationMin?: number; description?: string }[];
   barbeiroUnico?: boolean; // Se ativo, oculta seleção/ícones de barbeiro no agendamento e vitrine
