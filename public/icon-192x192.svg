@@ -8,10 +8,11 @@
     </linearGradient>
   </defs>
 
-  <rect width="1000" height="1000" fill="#ffffff" rx="180"/>
+  <!-- Full bleed white background for maskable icon safe zone (no rx to prevent black corner bleeding) -->
+  <rect width="1000" height="1000" fill="#ffffff"/>
 
-  <!-- Scaled down to 0.82 for clean, comfortable margins -->
-  <g transform="translate(500, 500) scale(0.82) translate(-612.5, -485)">
+  <!-- Scaled down to 0.68 for safe zone compliance -->
+  <g transform="translate(500, 500) scale(0.68) translate(-612.5, -485)">
     <!-- Main Upper Wing Swoosh -->
     <path d="M 315 730 
              L 480 360 

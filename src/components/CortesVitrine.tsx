@@ -248,6 +248,24 @@ export default function CortesVitrine({
   const [editingMsgType, setEditingMsgType] = useState<'agendamento' | 'ordem_chegada'>('agendamento');
   const [showAdvancedEditor, setShowAdvancedEditor] = useState<boolean>(false);
 
+  // States para os modais simplificados de configuração da vitrine
+  const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
+  const [serviceModalMode, setServiceModalMode] = useState<'create' | 'edit'>('create');
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [serviceFormName, setServiceFormName] = useState<string>('');
+  const [serviceFormPrice, setServiceFormPrice] = useState<string>('');
+  const [serviceFormDuration, setServiceFormDuration] = useState<string>('30');
+  const [serviceFormIcon, setServiceFormIcon] = useState<string>('✂️');
+
+  const [showHorariosModal, setShowHorariosModal] = useState<boolean>(false);
+  const [showContatoModal, setShowContatoModal] = useState<boolean>(false);
+  const [showHorarioHojeModal, setShowHorarioHojeModal] = useState<boolean>(false);
+  const [showCodigoModal, setShowCodigoModal] = useState<boolean>(false);
+  const [showModoAcaoModal, setShowModoAcaoModal] = useState<boolean>(false);
+  const [showLogoCapaModal, setShowLogoCapaModal] = useState<boolean>(false);
+  const [showColorPickerModal, setShowColorPickerModal] = useState<boolean>(false);
+  const [showAddPhotoModal, setShowAddPhotoModal] = useState<boolean>(false);
+
   // Usar saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite)
   const [usarSaudacaoHorario, setUsarSaudacaoHorario] = useState<boolean>(
     merchant.vitrineUsarSaudacaoHorarioWhatsApp ?? true
@@ -420,9 +438,87 @@ export default function CortesVitrine({
       { id: 'p3', name: 'Combo Cabelo + Barba', price: 60.00, durationMin: 45 }
     ];
   });
+  // Local state for products / services
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdDuration, setNewProdDuration] = useState('30');
+
+  const handleOpenAddService = () => {
+    setServiceModalMode('create');
+    setEditingServiceId(null);
+    setServiceFormName('');
+    setServiceFormPrice('');
+    setServiceFormDuration('30');
+    setServiceFormIcon('✂️');
+    setShowServiceModal(true);
+  };
+
+  const handleOpenEditService = (service: { id: string; name: string; price: number; durationMin?: number }) => {
+    setServiceModalMode('edit');
+    setEditingServiceId(service.id);
+    setServiceFormName(service.name);
+    setServiceFormPrice(String(service.price));
+    setServiceFormDuration(String(service.durationMin || 30));
+    setShowServiceModal(true);
+  };
+
+  const handleSaveService = () => {
+    if (!serviceFormName.trim()) {
+      alert('Por favor, informe o nome do serviço.');
+      return;
+    }
+    const cleanPrice = typeof serviceFormPrice === 'string' 
+      ? parseFloat(serviceFormPrice.replace(',', '.')) || 0 
+      : (Number(serviceFormPrice) || 0);
+    const cleanDuration = parseInt(serviceFormDuration) || 30;
+
+    if (serviceModalMode === 'create') {
+      const newService = {
+        id: `p-${Date.now()}`,
+        name: serviceFormName.trim(),
+        price: cleanPrice,
+        durationMin: cleanDuration
+      };
+      setProducts(prev => [...prev, newService]);
+    } else if (editingServiceId) {
+      setProducts(prev => prev.map(p => {
+        if (p.id === editingServiceId) {
+          return {
+            ...p,
+            name: serviceFormName.trim(),
+            price: cleanPrice,
+            durationMin: cleanDuration
+          };
+        }
+        return p;
+      }));
+    }
+    setShowServiceModal(false);
+  };
+
+  const handleDeleteService = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleAddPhotoUrl = (url: string) => {
+    if (!url.trim()) return;
+    setGallery(prev => [...prev, url.trim()]);
+    setShowAddPhotoModal(false);
+    setNewGalleryUrl('');
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setGallery(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const COLOR_SWATCHES = [
+    { id: 'red', name: 'Vermelho & Preto', primary: '#ef4444', secondary: '#dc2626', bg: 'bg-red-500' },
+    { id: 'blue', name: 'Azul Real & Ciano', primary: '#2563eb', secondary: '#06b6d4', bg: 'bg-blue-600' },
+    { id: 'green', name: 'Esmeralda & Menta', primary: '#10b981', secondary: '#059669', bg: 'bg-emerald-500' },
+    { id: 'purple', name: 'Dark Rose & Roxo', primary: '#a855f7', secondary: '#7c3aed', bg: 'bg-purple-600' },
+    { id: 'orange', name: 'Laranja Solar', primary: '#f97316', secondary: '#ea580c', bg: 'bg-orange-500' },
+    { id: 'gold', name: 'Black & Gold', primary: '#f59e0b', secondary: '#d97706', bg: 'bg-amber-500' },
+  ];
 
   // Local state for gallery
   const [gallery, setGallery] = useState<string[]>(() => {
@@ -3323,7 +3419,7 @@ export default function CortesVitrine({
       </header>
 
       {/* CORE LAYOUT */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-8 py-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-8 py-8 pb-32">
         
         {/* DOWNGRADE NOTICE BANNER */}
         {downgradeNotice && (
@@ -3422,7 +3518,7 @@ export default function CortesVitrine({
                     Como funciona o Cortes Vitrine?
                   </h3>
                   <p className="text-xs text-gray-300 leading-relaxed">
-                    Crie e um mini site promocional totalmente gratuito gerado para divulgar os produtos e serviços da sua barbearia. Preencha as informações abaixo para manter seu perfil público e acessível nas redes sociais!
+                    Seu mini site promocional da barbearia para divulgar serviços, preços e fotos para seus clientes agendarem com facilidade.
                   </p>
                   
                   {/* Public Link Display Pill */}
@@ -3431,25 +3527,27 @@ export default function CortesVitrine({
                       <div className="flex items-center gap-2 min-w-0">
                         <Globe className="w-4 h-4 text-blue-400 shrink-0" />
                         <span className="text-xs text-gray-300 font-medium truncate">
-                          Seu link público: <strong className="text-white font-bold">{displayUrl}</strong>
+                          Link público: <strong className="text-white font-bold">{displayUrl}</strong>
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyLink}
-                        className="text-xs font-bold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-                        title="Copiar link da vitrine"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copied ? 'Copiado!' : 'Copiar'}</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleCopyLink}
+                          className="text-xs font-bold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Copiar link da vitrine"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{copied ? 'Copiado!' : 'Copiar'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* CARD 2: DADOS DE IDENTIDADE */}
+            {/* CARD 2: DADOS DE IDENTIDADE E CONTATO */}
             <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
@@ -3457,31 +3555,32 @@ export default function CortesVitrine({
                 </div>
                 <div>
                   <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                    Dados de Identidade
+                    Dados da Barbearia
                   </h4>
                   <p className="text-xs text-gray-400">
-                    Informações básicas da sua barbearia
+                    Informações básicas e canais de contato
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
-                    Nome de Exibição da Vitrine
+                  <label className="text-[11px] font-extrabold text-blue-300 uppercase tracking-wider">
+                    Nome da Barbearia
                   </label>
                   <input 
                     type="text" 
                     value={logoText}
                     onChange={e => setLogoText(e.target.value)}
                     placeholder="Ex: Barbearia Cortes Time"
-                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                    className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
-                    Usuário do Instagram
+                  <label className="text-[11px] font-extrabold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                    <Instagram className="w-3 h-3 text-pink-400" />
+                    <span>Instagram</span>
                   </label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">@</span>
@@ -3490,163 +3589,384 @@ export default function CortesVitrine({
                       value={instagram.replace(/^@/, '')}
                       onChange={e => setInstagram(e.target.value.startsWith('@') ? e.target.value : `@${e.target.value}`)}
                       placeholder="cortestime_barber"
-                      className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl pl-8 pr-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                      className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-2xl pl-8 pr-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
                     />
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* CARD 3: LOGO DA VITRINE */}
-            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-                  <ImageIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                    Logo da Vitrine
-                  </h4>
-                  <p className="text-xs text-gray-400">
-                    Adicione a logo da sua barbearia
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
-                {/* Logo Preview Circle */}
-                <div className="w-20 h-20 rounded-full bg-white border-2 border-white/20 overflow-hidden flex items-center justify-center shadow-lg shrink-0">
-                  {logoImage ? (
-                    <img 
-                      src={logoImage} 
-                      alt="Logo preview" 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <span className="font-black text-2xl text-blue-950 uppercase">
-                      {logoText ? logoText.charAt(0) : 'B'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Upload Box */}
-                <label className="flex-1 w-full border-2 border-dashed border-white/20 hover:border-blue-400/60 rounded-2xl p-4 flex items-center gap-3 bg-[#040e24]/60 cursor-pointer transition-all">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white">Trocar logo</p>
-                    <p className="text-[10px] text-gray-400">PNG ou JPG. Máx. 2MB</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleLogoFileUpload} 
-                    className="hidden" 
-                  />
-                </label>
-              </div>
-
-              {/* URL Direta Opcional */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                  URL Direta da Logo (Opcional)
-                </label>
-                <div className="relative">
-                  <input 
-                    type="text" 
-                    value={logoImage}
-                    onChange={e => setLogoImage(e.target.value)}
-                    placeholder="https://exemplo.com/minha-logo.png"
-                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
-                  />
-                  {logoImage && (
-                    <button
-                      type="button"
-                      onClick={() => setLogoImage('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 text-xs cursor-pointer"
-                      title="Remover link"
-                    >
-                      &times;
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* CARD 4: CONTATO E LINKS */}
-            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-                  <Phone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
-                    Contato e Links
-                  </h4>
-                  <p className="text-xs text-gray-400">
-                    Facilite o contato e acesso às suas redes
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <label className="text-[11px] font-extrabold text-blue-300 uppercase tracking-wider flex items-center gap-1">
                     <Phone className="w-3 h-3 text-emerald-400" />
-                    <span>WhatsApp de Contato</span>
+                    <span>WhatsApp de Atendimento</span>
                   </label>
                   <input 
                     type="text" 
                     value={whatsapp}
                     onChange={e => setWhatsapp(e.target.value)}
                     placeholder="Ex: (82) 99122-3344"
-                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                    className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Instagram className="w-3 h-3 text-pink-400" />
-                    <span>Link para Bio do Instagram</span>
+                  <label className="text-[11px] font-extrabold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-blue-400" />
+                    <span>Horários de Funcionamento</span>
                   </label>
                   <input 
                     type="text" 
-                    value={linkBio}
-                    onChange={e => setLinkBio(e.target.value)}
-                    placeholder="Ex: linktr.ee/cortestime_barber"
-                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                    value={horarios}
+                    onChange={e => setHorarios(e.target.value)}
+                    placeholder="Ex: Seg a Sáb: 08:00 às 20:00"
+                    className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
                   />
                 </div>
               </div>
 
-              {/* Link da Vitrine Field */}
               <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Link2 className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Link da Vitrine</span>
+                <label className="text-[11px] font-extrabold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-rose-400" />
+                  <span>Endereço / Localização</span>
                 </label>
-                <div className="relative flex items-center">
+                <input 
+                  type="text" 
+                  value={localizacao}
+                  onChange={e => setLocalizacao(e.target.value)}
+                  placeholder="Ex: Rua Getúlio Vargas, 420 - Centro"
+                  className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
+                />
+              </div>
+            </div>
+
+            {/* CARD 3: LOGO & FOTO DE CAPA */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Logo & Capa da Vitrine
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Personalize a apresentação visual da sua página
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                {/* Logo Section */}
+                <div className="space-y-3 bg-[#040e24]/70 p-4 rounded-2xl border border-blue-900/30">
+                  <label className="text-xs font-bold text-blue-300 uppercase tracking-wider block">
+                    Logo da Barbearia
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-full bg-[#071739] border-2 border-blue-500/30 overflow-hidden flex items-center justify-center shadow-lg shrink-0">
+                      {logoImage ? (
+                        <img 
+                          src={logoImage} 
+                          alt="Logo preview" 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="font-black text-xl text-blue-400 uppercase">
+                          {logoText ? logoText.charAt(0) : 'B'}
+                        </span>
+                      )}
+                    </div>
+                    <label className="flex-1 border border-dashed border-blue-500/40 hover:border-blue-400 rounded-xl p-2.5 flex items-center justify-center gap-2 bg-blue-600/10 hover:bg-blue-600/20 cursor-pointer transition-all text-center">
+                      <Upload className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs font-bold text-white">Carregar Logo</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoFileUpload} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
                   <input 
                     type="text" 
-                    readOnly
-                    value={displayUrl}
-                    className="w-full bg-[#040e24] text-gray-300 border border-white/10 rounded-2xl pl-4 pr-24 py-3.5 text-xs font-medium select-all"
+                    value={logoImage}
+                    onChange={e => setLogoImage(e.target.value)}
+                    placeholder="Ou insira o link da logo (URL)"
+                    className="w-full bg-[#071739] text-white border border-blue-900/40 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-400 transition-all placeholder-gray-500"
                   />
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>{copied ? 'Copiado' : 'Copiar'}</span>
-                  </button>
+                </div>
+
+                {/* Banner / Cover Section */}
+                <div className="space-y-3 bg-[#040e24]/70 p-4 rounded-2xl border border-blue-900/30">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-blue-300 uppercase tracking-wider block">
+                      Banner de Capa
+                    </label>
+                    {capa !== DEFAULT_COVER_URL && (
+                      <button 
+                        type="button"
+                        onClick={() => setCapa(DEFAULT_COVER_URL)}
+                        className="text-[10px] text-blue-400 hover:text-blue-300 font-bold cursor-pointer"
+                      >
+                        Restaurar Padrão
+                      </button>
+                    )}
+                  </div>
+                  <div className="h-16 w-full rounded-xl overflow-hidden relative border border-blue-900/40 bg-black/40">
+                    <img src={capa || DEFAULT_COVER_URL} alt="Preview Capa" className="w-full h-full object-cover" />
+                  </div>
+                  <label className="w-full border border-dashed border-blue-500/40 hover:border-blue-400 rounded-xl p-2.5 flex items-center justify-center gap-2 bg-blue-600/10 hover:bg-blue-600/20 cursor-pointer transition-all text-center">
+                    <Upload className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-bold text-white">Carregar Banner</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleCapaFileUpload} 
+                      className="hidden" 
+                    />
+                  </label>
                 </div>
               </div>
             </div>
 
-            {/* CARD 5: MODO DE ATENDIMENTO */}
+            {/* CARD 4: SERVIÇOS & PREÇOS DA VITRINE */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                    <Scissors className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                      Serviços & Preços
+                    </h4>
+                    <p className="text-xs text-gray-400">
+                      Cadastre os cortes, barbas e combos com seus respectivos valores
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddService}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Serviço</span>
+                </button>
+              </div>
+
+              {/* Inline Quick Add Bar */}
+              <div className="bg-[#040e24]/70 p-3.5 rounded-2xl border border-blue-900/30 space-y-3">
+                <p className="text-[11px] font-bold text-blue-300 uppercase tracking-wider">
+                  Adicionar Rápido:
+                </p>
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                  <input 
+                    type="text" 
+                    value={newProdName}
+                    onChange={e => setNewProdName(e.target.value)}
+                    placeholder="Nome (ex: Corte Degradê)"
+                    className="flex-1 min-w-[140px] bg-[#071739] text-white border border-blue-900/40 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-400"
+                  />
+                  <div className="relative w-28 shrink-0">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                    <input 
+                      type="number" 
+                      value={newProdPrice}
+                      onChange={e => setNewProdPrice(e.target.value)}
+                      placeholder="35.00"
+                      className="w-full bg-[#071739] text-white border border-blue-900/40 rounded-xl pl-8 pr-2.5 py-2 text-xs font-medium focus:outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 bg-[#071739] border border-blue-900/40 rounded-xl px-2.5 shrink-0">
+                    <input 
+                      type="number" 
+                      value={newProdDuration}
+                      onChange={e => setNewProdDuration(e.target.value)}
+                      placeholder="30"
+                      className="w-10 bg-transparent text-white py-2 text-xs font-medium focus:outline-none text-center"
+                    />
+                    <span className="text-[10px] text-gray-400 font-bold">min</span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleAddProduct}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all shrink-0"
+                    title="Adicionar serviço"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Adicionar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Services List */}
+              <div className="space-y-2 pt-1">
+                {products.length === 0 ? (
+                  <div className="p-8 border border-dashed border-blue-900/40 rounded-2xl text-center bg-[#040e24]/40 space-y-2">
+                    <Scissors className="w-8 h-8 text-blue-400/50 mx-auto" />
+                    <p className="text-xs text-gray-400 font-medium">Nenhum serviço cadastrado ainda.</p>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddService}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-bold underline cursor-pointer"
+                    >
+                      Clique para adicionar seu primeiro serviço
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-blue-900/30 border border-blue-900/40 rounded-2xl overflow-hidden bg-[#040e24]/60">
+                    {products.map(p => (
+                      <div key={p.id} className="p-3.5 flex justify-between items-center text-xs hover:bg-blue-950/30 transition-colors">
+                        <div className="text-left font-medium space-y-1">
+                          <p className="text-white font-bold text-sm">{p.name}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-400 font-bold bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20">
+                              R$ {p.price.toFixed(2)}
+                            </span>
+                            {p.durationMin && (
+                              <span className="text-gray-400 text-[11px] flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-blue-400" />
+                                {p.durationMin} min
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => handleOpenEditService(p)}
+                            className="p-2 text-blue-400 hover:text-white hover:bg-blue-600/20 rounded-xl transition-colors cursor-pointer"
+                            title="Editar serviço"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveProduct(p.id)}
+                            className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
+                            title="Remover serviço"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 5: GALERIA DE FOTOS (PORTFÓLIO) */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                      Galeria de Fotos (Portfólio)
+                    </h4>
+                    <p className="text-xs text-gray-400">
+                      Mostre seus melhores cortes e trabalhos
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-blue-300 bg-blue-600/20 border border-blue-500/30 px-3 py-1 rounded-xl">
+                  {gallery.length} {gallery.length === 1 ? 'foto' : 'fotos'}
+                </span>
+              </div>
+
+              {/* Upload Action */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <label className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer inline-flex items-center gap-2 transition-all shadow-md shadow-blue-600/20 active:scale-95">
+                  {isUploadingGallery ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  <span>{isUploadingGallery ? 'Processando...' : 'Carregar Fotos do Celular'}</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    disabled={isUploadingGallery}
+                    onChange={handleGalleryFilesUpload} 
+                    className="hidden" 
+                  />
+                </label>
+
+                {gallery.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setGallery([])}
+                    className="text-xs text-red-400 hover:text-red-300 font-bold px-3 py-2 rounded-xl hover:bg-red-500/10 transition-colors cursor-pointer"
+                  >
+                    Limpar todas
+                  </button>
+                )}
+              </div>
+
+              {/* Direct Link Input */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-extrabold text-blue-300 uppercase tracking-wider block">
+                  Ou adicione link direto (URL):
+                </label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newGalleryUrl}
+                    onChange={e => setNewGalleryUrl(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddGalleryUrl();
+                      }
+                    }}
+                    placeholder="https://exemplo.com/foto-corte.jpg"
+                    className="flex-1 bg-[#040e24] text-white border border-blue-900/40 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-400 placeholder-gray-500"
+                  />
+                  <button 
+                    type="button"
+                    onClick={handleAddGalleryUrl}
+                    className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {/* Gallery Grid */}
+              <div className="pt-2">
+                {gallery.length === 0 ? (
+                  <div className="p-6 border border-dashed border-blue-900/40 rounded-2xl text-center text-gray-400 text-xs bg-[#040e24]/40">
+                    Nenhuma foto na galeria ainda. Adicione fotos para valorizar sua vitrine!
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {gallery.map((img, idx) => (
+                      <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-black/40 border border-blue-900/40 relative group shadow-sm">
+                        <img src={img} alt={`Portfólio ${idx + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => handleRemoveGalleryItem(idx)}
+                          className="absolute top-1.5 right-1.5 p-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-md"
+                          title="Remover foto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="absolute bottom-1 left-1 bg-blue-950/80 border border-blue-500/30 text-[9px] font-bold text-blue-200 px-1.5 py-0.5 rounded">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 6: MODO DE ATENDIMENTO */}
             <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
@@ -4148,61 +4468,61 @@ export default function CortesVitrine({
                 )}
               </div>
 
-              {/* SELEÇÃO DO MODELO DA VITRINE */}
-              <div 
-                onClick={() => setShowTemplateModal(true)}
-                className="bg-[#051b42] border border-white/10 hover:border-white/25 p-4 sm:p-5 rounded-2xl flex items-center justify-between transition-all cursor-pointer group"
-              >
-                <div className="space-y-0.5 text-left">
-                  <h4 className="text-sm font-extrabold text-white group-hover:text-amber-400 transition-colors">
-                    {template === 'modelo1' ? 'Modelo 1' : 'Modelo 2'}
-                  </h4>
-                  <p className="text-xs text-gray-300">
-                    {template === 'modelo1' 
-                      ? 'Completo, com carrossel e seções' 
-                      : 'Moderno, com degradê e seções em destaque'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTemplateModal(true);
-                  }}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/15 active:scale-95 text-white border border-white/20 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
-                >
-                  Trocar
-                </button>
-              </div>
-
-              {/* PERSONALIZAÇÃO DE CORES E DEGRADÊ */}
-              <div className="space-y-4 bg-[#051b42]/60 p-4 sm:p-5 rounded-2xl border border-white/10">
+              {/* CARD 9: PERSONALIZAÇÃO VISUAL & CORES */}
+              <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5 text-left">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Palette className="w-4 h-4 text-brand-lime" />
-                    <span>Personalização de Cores & Degradê</span>
-                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                      <Palette className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                        Aparência & Cores
+                      </h4>
+                      <p className="text-xs text-gray-400">
+                        Personalize o tema visual e o layout da sua vitrine
+                      </p>
+                    </div>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => {
-                      setPrimaryColor('#051b42');
-                      setSecondaryColor('#1e40af');
+                      setPrimaryColor('#071739');
+                      setSecondaryColor('#1d4ed8');
                       setGradientEnabled(true);
                       setThemePreset('custom');
                     }}
-                    className="text-[11px] text-gray-400 hover:text-brand-lime font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1.5 cursor-pointer bg-blue-600/10 px-3 py-1.5 rounded-xl border border-blue-500/20"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Restaurar Cores</span>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Restaurar</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-300 leading-relaxed">
-                  Personalize a paleta visual da sua vitrine. Escolha cores sólidas ou combine duas cores para criar um efeito de degradê moderno.
-                </p>
 
-                {/* Paletas Prontas (Presets Rápidos) */}
+                {/* Template selector card */}
+                <div 
+                  onClick={() => setShowTemplateModal(true)}
+                  className="bg-[#040e24] border border-blue-900/40 hover:border-blue-500/50 p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer group"
+                >
+                  <div className="space-y-0.5 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white group-hover:text-blue-400 transition-colors uppercase tracking-wider">
+                        Layout Ativo: {template === 'modelo1' ? 'Modelo 1 (Clássico com Abas)' : 'Modelo 2 (Moderno Fluido)'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Clique para alterar a estrutura visual do site
+                    </p>
+                  </div>
+                  <span className="px-3.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-xl text-xs font-bold transition-all">
+                    Trocar Layout
+                  </span>
+                </div>
+
+                {/* Color presets */}
                 <div className="space-y-2">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  <span className="text-[11px] font-bold text-blue-300 uppercase tracking-wider block">
                     Paletas de Cores Prontas:
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -4223,14 +4543,14 @@ export default function CortesVitrine({
                             setSecondaryColor(preset.secondary);
                             setGradientEnabled(preset.gradient);
                           }}
-                          className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer ${
+                          className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2.5 cursor-pointer ${
                             isSelected
-                              ? 'border-brand-lime bg-white/10 shadow-sm ring-1 ring-brand-lime/50'
-                              : 'border-white/10 bg-[#051b42] hover:bg-white/5'
+                              ? 'border-blue-500 bg-blue-600/20 shadow-md ring-1 ring-blue-400/40'
+                              : 'border-blue-900/40 bg-[#040e24] hover:bg-[#09224f]/40'
                           }`}
                         >
                           <div 
-                            className="w-7 h-7 rounded-lg shrink-0 border border-white/20 shadow-xs"
+                            className="w-6 h-6 rounded-lg shrink-0 border border-white/20 shadow-xs"
                             style={{
                               background: preset.gradient
                                 ? `linear-gradient(135deg, ${preset.primary} 0%, ${preset.secondary} 100%)`
@@ -4238,8 +4558,8 @@ export default function CortesVitrine({
                             }}
                           />
                           <div className="min-w-0 flex-1">
-                            <span className="text-[11px] font-bold text-white block truncate">{preset.name}</span>
-                            <span className="text-[9px] text-gray-400 block truncate">
+                            <span className="text-xs font-bold text-white block truncate">{preset.name}</span>
+                            <span className="text-[10px] text-gray-400 block truncate">
                               {preset.gradient ? 'Degradê' : 'Sólido'}
                             </span>
                           </div>
@@ -4249,418 +4569,30 @@ export default function CortesVitrine({
                   </div>
                 </div>
 
-                {/* Seletor Manual de Cores & Toggle Degradê */}
-                <div className="pt-3 border-t border-white/10 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Cor Primária */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-300 flex items-center justify-between">
-                        <span>Cor Principal</span>
-                        <span className="text-[10px] font-mono text-gray-400 uppercase">{primaryColor}</span>
-                      </label>
-                      <div className="flex items-center gap-2 bg-[#051b42] border border-white/10 rounded-2xl p-2">
-                        <input
-                          type="color"
-                          value={primaryColor}
-                          onChange={(e) => {
-                            setPrimaryColor(e.target.value);
-                            setThemePreset('custom');
-                          }}
-                          className="w-9 h-9 rounded-xl border-none cursor-pointer bg-transparent"
-                        />
-                        <input
-                          type="text"
-                          value={primaryColor}
-                          onChange={(e) => {
-                            setPrimaryColor(e.target.value);
-                            setThemePreset('custom');
-                          }}
-                          className="flex-1 bg-transparent text-white text-xs font-mono font-bold focus:outline-none uppercase"
-                          maxLength={7}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Cor Secundária (Degradê) */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-300 flex items-center justify-between">
-                        <span>Cor Secundária (Degradê)</span>
-                        <span className="text-[10px] font-mono text-gray-400 uppercase">{secondaryColor}</span>
-                      </label>
-                      <div className={`flex items-center gap-2 bg-[#051b42] border border-white/10 rounded-2xl p-2 ${!gradientEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                        <input
-                          type="color"
-                          value={secondaryColor}
-                          disabled={!gradientEnabled}
-                          onChange={(e) => {
-                            setSecondaryColor(e.target.value);
-                            setThemePreset('custom');
-                          }}
-                          className="w-9 h-9 rounded-xl border-none cursor-pointer bg-transparent disabled:cursor-not-allowed"
-                        />
-                        <input
-                          type="text"
-                          value={secondaryColor}
-                          disabled={!gradientEnabled}
-                          onChange={(e) => {
-                            setSecondaryColor(e.target.value);
-                            setThemePreset('custom');
-                          }}
-                          className="flex-1 bg-transparent text-white text-xs font-mono font-bold focus:outline-none uppercase disabled:cursor-not-allowed"
-                          maxLength={7}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Toggle Ativar / Desativar Degradê */}
-                  <div className="flex items-center justify-between pt-2">
-                    <div>
-                      <p className="text-xs font-bold text-white">Efeito Degradê (Gradiente Suave)</p>
-                      <p className="text-[10px] text-gray-400">Mescla a cor principal com a cor secundária</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setGradientEnabled(!gradientEnabled);
-                        setThemePreset('custom');
-                      }}
-                      className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                        gradientEnabled ? 'bg-brand-lime' : 'bg-gray-700'
-                      }`}
-                    >
-                      <div
-                        className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          gradientEnabled ? 'translate-x-6' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Visual Preview Bar */}
-                  <div className="pt-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
-                      Amostra Visual das Cores Selecionadas:
-                    </span>
-                    <div 
-                      className="h-10 w-full rounded-xl border border-white/20 shadow-inner flex items-center justify-center text-white text-xs font-black drop-shadow-sm"
-                      style={{
-                        background: gradientEnabled
-                          ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                          : primaryColor
-                      }}
-                    >
-                      <span>{logoText || 'Minha Barbearia'} • Amostra</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* OPÇÃO DE BARBEIRO ÚNICO (ATENDIMENTO INDIVIDUAL) */}
-              <div className="space-y-3 bg-[#051b42]/60 p-4 sm:p-5 rounded-2xl border border-white/10 text-left">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-brand-lime/10 text-brand-lime rounded-xl">
+                {/* Mode: Barbeiro Único */}
+                <div className="bg-[#040e24] p-4 rounded-2xl border border-blue-900/40 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/30">
                       <UserCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">Modo Barbeiro Único (Atendimento Próprio)</h4>
-                      <p className="text-[11px] text-gray-300 leading-relaxed mt-0.5">
-                        Oculte a seleção de profissionais no agendamento e a lista de equipe na vitrine (ideal para quem trabalha sozinho).
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">Modo Barbeiro Único</h4>
+                      <p className="text-[11px] text-gray-400 leading-relaxed">
+                        Oculte a seleção de profissionais (ideal para quem trabalha sozinho).
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setBarbeiroUnico(!barbeiroUnico)}
-                    className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                      barbeiroUnico ? 'bg-brand-lime' : 'bg-gray-700'
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                      barbeiroUnico ? 'bg-blue-600' : 'bg-gray-700'
                     }`}
                   >
-                    <div
-                      className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                        barbeiroUnico ? 'translate-x-6' : 'translate-x-0'
-                      }`}
-                    />
+                    <span className={`block w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      barbeiroUnico ? 'right-1' : 'left-1'
+                    }`} />
                   </button>
-                </div>
-              </div>
-
-              {/* Foto de Capa / Banner da Vitrine */}
-              <div className="space-y-3 bg-[#051b42]/60 p-4 rounded-2xl border border-white/10">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <ImageIcon className="w-4 h-4 text-brand-lime" />
-                    <span>Banner / Foto de Capa da Vitrine</span>
-                  </label>
-                  {capa !== DEFAULT_COVER_URL && (
-                    <button 
-                      type="button"
-                      onClick={() => setCapa(DEFAULT_COVER_URL)}
-                      className="text-[11px] text-gray-400 hover:text-brand-lime font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Restaurar Padrão</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Banner Preview */}
-                <div className="h-28 w-full rounded-xl overflow-hidden relative border border-white/10 shadow-inner">
-                  <img src={capa || DEFAULT_COVER_URL} alt="Preview Capa" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-2.5">
-                    <span className="text-[10px] font-bold text-white bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20">
-                      {capa === DEFAULT_COVER_URL || !capa ? 'Banner Padrão' : 'Banner Personalizado'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* File Upload & Gallery Selection */}
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-2.5 px-4 rounded-xl text-xs cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-sm">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Carregar Foto do Aparelho</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleCapaFileUpload} 
-                        className="hidden" 
-                      />
-                    </label>
-                  </div>
-
-                  {/* Select from Galeria if photos exist */}
-                  {gallery && gallery.length > 0 && (
-                    <div className="pt-2 border-t border-white/5">
-                      <span className="text-[10px] text-gray-300 font-bold uppercase block mb-1.5">Ou selecione uma foto da sua Galeria de Cortes:</span>
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
-                        {gallery.map((imgUrl, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setCapa(imgUrl)}
-                            className={`w-14 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer relative ${capa === imgUrl ? 'border-brand-lime scale-105 shadow-md ring-2 ring-brand-lime/50' : 'border-transparent opacity-70 hover:opacity-100'}`}
-                            title="Usar esta foto como Banner"
-                          >
-                            <img src={imgUrl} alt={`Galeria ${idx + 1}`} className="w-full h-full object-cover" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Direct Link Input */}
-                  <div className="pt-1">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Ou insira o link/URL da imagem:</span>
-                    <input 
-                      type="text" 
-                      value={capa}
-                      onChange={e => setCapa(e.target.value)}
-                      placeholder="Ex: https://images.unsplash.com/..."
-                      className="w-full bg-[#051b42] text-white border border-white/10 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Horários de Funcionamento</label>
-                <input 
-                  type="text" 
-                  value={horarios}
-                  onChange={e => setHorarios(e.target.value)}
-                  placeholder="Ex: Seg a Sáb: 08:00 às 20:00"
-                  className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Localização / Endereço</label>
-                <input 
-                  type="text" 
-                  value={localizacao}
-                  onChange={e => setLocalizacao(e.target.value)}
-                  placeholder="Ex: Rua Getúlio Vargas, 420 - Centro"
-                  className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
-                />
-              </div>
-
-              {/* SERVICES & PRODUCTS MANAGEMENT */}
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime border-b border-white/10 pb-3 pt-4 flex items-center gap-2">
-                <Scissors className="w-4 h-4" />
-                <span>Serviços & Produtos da Vitrine</span>
-              </h3>
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap sm:flex-nowrap gap-2">
-                  <input 
-                    type="text" 
-                    value={newProdName}
-                    onChange={e => setNewProdName(e.target.value)}
-                    placeholder="Nome do serviço (ex: Corte + Barba)"
-                    className="flex-1 min-w-[140px] bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
-                  />
-                  <input 
-                    type="number" 
-                    value={newProdPrice}
-                    onChange={e => setNewProdPrice(e.target.value)}
-                    placeholder="Preço R$"
-                    className="w-24 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none"
-                  />
-                  <div className="flex items-center gap-1 bg-[#051b42] border border-white/10 rounded-2xl px-2">
-                    <input 
-                      type="number" 
-                      value={newProdDuration}
-                      onChange={e => setNewProdDuration(e.target.value)}
-                      placeholder="Min"
-                      className="w-12 bg-transparent text-white p-2 text-xs font-medium focus:outline-none text-center"
-                    />
-                    <span className="text-[10px] text-gray-400 font-bold pr-1">min</span>
-                  </div>
-                  <button 
-                    onClick={handleAddProduct}
-                    className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer"
-                    title="Adicionar serviço/produto"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="divide-y divide-white/5 border border-white/10 rounded-2xl overflow-hidden bg-[#051b42]/30">
-                  {products.length === 0 ? (
-                    <p className="p-4 text-xs text-center text-gray-500 font-medium">Nenhum serviço cadastrado na vitrine.</p>
-                  ) : (
-                    products.map(p => (
-                      <div key={p.id} className="p-3.5 flex justify-between items-center text-xs">
-                        <div className="text-left font-medium">
-                          <p className="text-white font-bold">{p.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-brand-lime font-bold">R$ {p.price.toFixed(2)}</span>
-                            {p.durationMin && (
-                              <span className="text-gray-400 text-[10px] flex items-center gap-0.5">
-                                • {p.durationMin} min
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => handleRemoveProduct(p.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                          title="Remover serviço"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* GALLERY MANAGEMENT */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-3 pt-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime flex items-center gap-2">
-                  <Camera className="w-4 h-4" />
-                  <span>Galeria de Fotos (Portfólio de Cortes)</span>
-                </h3>
-                <span className="text-[11px] font-bold text-gray-300 bg-white/10 px-2.5 py-0.5 rounded-full">
-                  {gallery.length} {gallery.length === 1 ? 'foto' : 'fotos'}
-                </span>
-              </div>
-
-              <div className="space-y-4 bg-[#051b42]/60 p-4 sm:p-5 rounded-2xl border border-white/10 text-left">
-                <p className="text-xs text-gray-300">
-                  Adicione fotos dos seus melhores cortes e serviços para exibir no carrossel e portfólio da sua vitrine.
-                </p>
-
-                {/* Upload Buttons */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-3 px-5 rounded-2xl text-xs cursor-pointer inline-flex items-center gap-2 transition-all shadow-md active:scale-95">
-                    {isUploadingGallery ? (
-                      <div className="w-4 h-4 border-2 border-[#051b42] border-t-transparent animate-spin rounded-full" />
-                    ) : (
-                      <Upload className="w-4 h-4" />
-                    )}
-                    <span>{isUploadingGallery ? 'Processando Fotos...' : 'Adicionar Fotos da Galeria do Celular'}</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      multiple 
-                      disabled={isUploadingGallery}
-                      onChange={handleGalleryFilesUpload} 
-                      className="hidden" 
-                    />
-                  </label>
-                  
-                  {gallery.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setGallery([])}
-                      className="text-xs text-red-400 hover:text-red-300 font-bold px-3 py-2 rounded-xl hover:bg-red-500/10 transition-colors cursor-pointer"
-                    >
-                      Limpar todas
-                    </button>
-                  )}
-                </div>
-
-                {/* Direct Link Input */}
-                <div className="space-y-1.5 pt-2 border-t border-white/5">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
-                    Ou adicione por link de imagem (URL):
-                  </label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={newGalleryUrl}
-                      onChange={e => setNewGalleryUrl(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddGalleryUrl();
-                        }
-                      }}
-                      placeholder="https://exemplo.com/foto.jpg"
-                      className="flex-1 bg-[#051b42] text-white border border-white/10 rounded-2xl p-3 text-xs font-medium focus:outline-none focus:border-brand-lime"
-                    />
-                    <button 
-                      type="button"
-                      onClick={handleAddGalleryUrl}
-                      className="bg-white/10 hover:bg-white/20 text-white px-4 rounded-2xl font-bold text-xs flex items-center justify-center cursor-pointer transition-colors border border-white/10"
-                    >
-                      Adicionar Link
-                    </button>
-                  </div>
-                </div>
-
-                {/* Previews of gallery */}
-                <div className="pt-2">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
-                    Fotos no Portfólio ({gallery.length}):
-                  </span>
-                  {gallery.length === 0 ? (
-                    <div className="p-6 border-2 border-dashed border-white/10 rounded-2xl text-center text-gray-400 text-xs">
-                      Nenhuma foto adicionada ainda. Clique em "Adicionar Fotos da Galeria do Celular" acima!
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                      {gallery.map((img, idx) => (
-                        <div key={idx} className="aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/15 relative group shadow-sm">
-                          <img src={img} alt={`Portfólio ${idx + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveGalleryItem(idx)}
-                            className="absolute top-1.5 right-1.5 p-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-md"
-                            title="Remover foto"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-xs text-[9px] font-bold text-white px-1.5 py-0.5 rounded">
-                            #{idx + 1}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -6344,6 +6276,167 @@ export default function CortesVitrine({
 
       {/* DETAILS MODAL FOR HORÁRIO DE HOJE IN DASHBOARD */}
       {renderHorarioHojeDetailsModal()}
+
+      {/* SERVICE ADD / EDIT MODAL */}
+      <AnimatePresence>
+        {showServiceModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#071739] border border-blue-500/30 rounded-3xl p-6 sm:p-7 max-w-md w-full text-left space-y-5 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between border-b border-blue-900/40 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <Scissors className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-extrabold text-base sm:text-lg text-white">
+                      {serviceModalMode === 'edit' ? 'Editar Serviço' : 'Novo Serviço'}
+                    </h3>
+                    <p className="text-xs text-gray-400">
+                      Configure nome, valor e tempo estimado
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowServiceModal(false)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-blue-900/40 rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-blue-300 uppercase tracking-wider">
+                    Nome do Serviço *
+                  </label>
+                  <input 
+                    type="text"
+                    value={serviceFormName}
+                    onChange={e => setServiceFormName(e.target.value)}
+                    placeholder="Ex: Corte Degradê Navalhado"
+                    className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-blue-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-blue-300 uppercase tracking-wider">
+                      Preço (R$) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                      <input 
+                        type="number"
+                        step="0.50"
+                        value={serviceFormPrice}
+                        onChange={e => setServiceFormPrice(e.target.value)}
+                        placeholder="35.00"
+                        className="w-full bg-[#040e24] text-white border border-blue-900/40 rounded-xl pl-9 pr-3 py-2.5 text-xs font-medium focus:outline-none focus:border-blue-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-blue-300 uppercase tracking-wider">
+                      Duração Estimada
+                    </label>
+                    <div className="flex items-center bg-[#040e24] border border-blue-900/40 rounded-xl px-3">
+                      <Clock className="w-4 h-4 text-blue-400 mr-2 shrink-0" />
+                      <input 
+                        type="number"
+                        value={serviceFormDuration}
+                        onChange={e => setServiceFormDuration(e.target.value)}
+                        placeholder="30"
+                        className="w-full bg-transparent text-white py-2.5 text-xs font-medium focus:outline-none"
+                      />
+                      <span className="text-xs text-gray-400 font-bold ml-1">min</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-blue-900/40 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowServiceModal(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-gray-400 hover:text-white rounded-xl hover:bg-blue-950 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveService}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-6 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/30 flex items-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{serviceModalMode === 'edit' ? 'Atualizar Serviço' : 'Adicionar Serviço'}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* STICKY BOTTOM SAVE ACTION BAR (SEMPRE VISÍVEL MESMO ROLANDO A TELA) */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#071739]/95 backdrop-blur-md border-t border-blue-900/80 py-3.5 px-4 sm:px-8 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="hidden sm:flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-black text-white uppercase tracking-wider">
+                {logoText || 'Vitrine da Barbearia'}
+              </p>
+              <p className="text-[11px] text-gray-400">
+                {saveSuccess ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    Alterações salvas e sincronizadas!
+                  </span>
+                ) : (
+                  'Todas as alterações são salvas e publicadas em tempo real'
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${window.location.origin}/?v=${linkPersonalizado || 'minhabarbearia'}`;
+                window.open(url, '_blank');
+              }}
+              className="px-4 py-3 rounded-2xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Ver Online</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 sm:flex-initial bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black px-6 sm:px-10 py-3.5 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/30 cursor-pointer disabled:opacity-50"
+              id="btn-save-sticky"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-black border-t-transparent animate-spin rounded-full" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
