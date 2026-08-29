@@ -121,7 +121,7 @@ export default function AdminSubscriptionManager({
   const [draftSecondaryColor, setDraftSecondaryColor] = useState('#2563eb');
   const [draftGradientEnabled, setDraftGradientEnabled] = useState(true);
   const [draftTemplate, setDraftTemplate] = useState<'modelo1' | 'modelo2'>('modelo1');
-  const [draftModoAcao, setDraftModoAcao] = useState<'agendamento' | 'whatsapp'>('agendamento');
+  const [draftModoAcao, setDraftModoAcao] = useState<'agendamento' | 'whatsapp' | 'ambos'>('agendamento');
   const [draftGaleria, setDraftGaleria] = useState<string[]>([]);
   const [draftNewGalleryUrl, setDraftNewGalleryUrl] = useState('');
   const [draftServicos, setDraftServicos] = useState<Array<{ name: string; price: number; durationMin: number }>>([
@@ -149,7 +149,7 @@ export default function AdminSubscriptionManager({
   const [editSecondaryColor, setEditSecondaryColor] = useState('#2563eb');
   const [editGradientEnabled, setEditGradientEnabled] = useState(true);
   const [editTemplate, setEditTemplate] = useState<'modelo1' | 'modelo2'>('modelo1');
-  const [editModoAcao, setEditModoAcao] = useState<'agendamento' | 'whatsapp'>('agendamento');
+  const [editModoAcao, setEditModoAcao] = useState<'agendamento' | 'whatsapp' | 'ambos'>('agendamento');
   const [editServicos, setEditServicos] = useState<Array<{ name: string; price: number; durationMin: number }>>([]);
   const [editNewSvcName, setEditNewSvcName] = useState('');
   const [editNewSvcPrice, setEditNewSvcPrice] = useState('');

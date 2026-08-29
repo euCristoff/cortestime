@@ -127,7 +127,7 @@ export interface MerchantUser {
   vitrineAvaliacoes?: { id: string; author: string; rating: number; comment: string; timeAgo?: string; date?: string }[];
   
   // Vitrine Action Mode & WhatsApp Direct Configuration
-  vitrineModoAcao?: 'agendamento' | 'whatsapp';
+  vitrineModoAcao?: 'agendamento' | 'whatsapp' | 'ambos';
   vitrineMensagemWhatsApp?: string;
   vitrineMensagemWhatsAppPersonalizada?: string;
   vitrineMensagemWhatsAppAgendamento?: string;
@@ -333,7 +333,7 @@ export interface DraftVitrine {
   secondaryColor?: string;
   gradientEnabled?: boolean;
   template?: 'modelo1' | 'modelo2';
-  modoAcao?: 'agendamento' | 'whatsapp';
+  modoAcao?: 'agendamento' | 'whatsapp' | 'ambos';
   usado: boolean;
   resgatadoPorEmail?: string;
   resgatadoPorUid?: string;

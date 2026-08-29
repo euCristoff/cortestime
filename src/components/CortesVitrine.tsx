@@ -7,6 +7,7 @@ import {
   Clock, 
   Instagram, 
   MessageSquare, 
+  MessageCircle,
   QrCode, 
   Globe, 
   Plus, 
@@ -30,6 +31,7 @@ import {
   ShieldCheck,
   X,
   Calendar,
+  CalendarRange,
   User,
   UserCheck,
   AlertTriangle,
@@ -41,6 +43,8 @@ import {
   Radio,
   CheckCircle2,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Info,
   Palette,
   Layout,
@@ -53,7 +57,11 @@ import {
   PlayCircle,
   Gift,
   Ticket,
-  Building2
+  Building2,
+  Link2,
+  Edit3,
+  Eye,
+  Maximize2
 } from 'lucide-react';
 import { MerchantUser, Service, Barber, Appointment, AppNotification, QueueItem, VitrineHorarioHoje, DraftVitrine } from '../types';
 import { firebaseService } from '../services/firebaseService';
@@ -208,9 +216,9 @@ export default function CortesVitrine({
   const [whatsapp, setWhatsapp] = useState(merchant.vitrineWhatsApp || merchant.whatsapp || '');
   const [permitirWhatsApp, setPermitirWhatsApp] = useState<boolean>(merchant.vitrinePermitirAgendamentoWhatsApp ?? true);
   
-  // Modo de Ação da Vitrine: 'agendamento' (fluxo no sistema) ou 'whatsapp' (direto para o WhatsApp)
-  const [modoAcao, setModoAcao] = useState<'agendamento' | 'whatsapp'>(
-    merchant.vitrineModoAcao || 'agendamento'
+  // Modo de Ação da Vitrine: 'agendamento' (fluxo no sistema), 'whatsapp' (direto para o WhatsApp) ou 'ambos'
+  const [modoAcao, setModoAcao] = useState<'agendamento' | 'whatsapp' | 'ambos'>(
+    (merchant.vitrineModoAcao as any) || 'agendamento'
   );
   // Mensagens personalizadas para o WhatsApp
   const [mensagemWhatsAppAgendamento, setMensagemWhatsAppAgendamento] = useState<string>(
@@ -232,6 +240,13 @@ export default function CortesVitrine({
     (merchant.vitrineModoAcao === 'whatsapp' || (merchant as any).modoAcao === 'whatsapp') ? 'ordem_chegada' : 'agendamento'
   );
   const [showVarsGuide, setShowVarsGuide] = useState<boolean>(true);
+
+  // States para a nova tela de personalização da vitrine (screenshot)
+  const [msgConfirmacaoAtiva, setMsgConfirmacaoAtiva] = useState<boolean>(true);
+  const [msgOrdemChegadaAtiva, setMsgOrdemChegadaAtiva] = useState<boolean>(true);
+  const [showEditMessageModal, setShowEditMessageModal] = useState<boolean>(false);
+  const [editingMsgType, setEditingMsgType] = useState<'agendamento' | 'ordem_chegada'>('agendamento');
+  const [showAdvancedEditor, setShowAdvancedEditor] = useState<boolean>(false);
 
   // Usar saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite)
   const [usarSaudacaoHorario, setUsarSaudacaoHorario] = useState<boolean>(
@@ -3396,745 +3411,461 @@ export default function CortesVitrine({
           {/* EDITOR COLUMN */}
           <div className={`lg:col-span-7 space-y-6 ${activeSubTab === 'editor' ? 'block' : 'hidden lg:block'}`}>
             
-            {/* EXPLAINER CARD */}
-            <div className="bg-[#09224f]/90 border border-white/10 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-brand-lime/5 rounded-full blur-2xl pointer-events-none" />
-              <div className="flex gap-4 items-start text-left">
-                <div className="p-3 bg-brand-lime/20 text-brand-lime rounded-2xl shrink-0">
-                  <Sparkles className="w-5 h-5" />
+            {/* CARD 1: COMO FUNCIONA O CORTES VITRINE? */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden text-left">
+              <div className="flex items-start gap-3.5 sm:gap-4">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <Scissors className="w-5 h-5" />
                 </div>
-                <div className="space-y-1">
-                  <h3 className="font-bold text-sm text-white uppercase tracking-wider">Como funciona o Cortes Vitrine?</h3>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <h3 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Como funciona o Cortes Vitrine?
+                  </h3>
                   <p className="text-xs text-gray-300 leading-relaxed">
-                    Este é um mini-site promocional totalmente gratuito gerado para divulgar os produtos e cortes da sua barbearia. Preencha as informações abaixo para manter seu portfólio impecável nas redes sociais!
+                    Crie e um mini site promocional totalmente gratuito gerado para divulgar os produtos e serviços da sua barbearia. Preencha as informações abaixo para manter seu perfil público e acessível nas redes sociais!
                   </p>
-                  <div className="pt-2 flex items-center gap-1.5 text-xs text-brand-lime font-bold">
-                    <Globe className="w-3.5 h-3.5" />
-                    <span className="truncate">Seu link público: {displayUrl}</span>
+                  
+                  {/* Public Link Display Pill */}
+                  <div className="pt-2">
+                    <div className="bg-[#040e24] border border-blue-900/50 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+                        <span className="text-xs text-gray-300 font-medium truncate">
+                          Seu link público: <strong className="text-white font-bold">{displayUrl}</strong>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className="text-xs font-bold text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-600 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        title="Copiar link da vitrine"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copied ? 'Copiado!' : 'Copiar'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* PREMIUM UPGRADE CARD */}
-            {merchant.plano === 'vitrine' && (
-              <div className="bg-gradient-to-br from-[#072456] to-[#0d3472] border border-amber-400/35 rounded-3xl p-6 shadow-xl relative overflow-hidden text-left space-y-4">
-                <div className="absolute top-0 right-0 w-36 h-36 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
-                
-                <div className="flex items-center justify-between">
-                  <span className="bg-amber-400 text-[#051b42] text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
-                    ⭐ Upgrade Premium • Cortestime Pro
-                  </span>
+            {/* CARD 2: DADOS DE IDENTIDADE */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <User className="w-5 h-5" />
                 </div>
-
-                <div className="space-y-2">
-                  <h3 className="font-sans font-extrabold text-lg text-white">
-                    Desbloqueie todo o potencial da sua barbearia!
-                  </h3>
-                  <p className="text-xs text-gray-300 leading-relaxed">
-                    Migre para o plano Pro do Cortestime e tenha o controle absoluto do seu negócio. Ganhe agilidade e aumente o seu faturamento com recursos profissionais exclusivos:
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Dados de Identidade
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Informações básicas da sua barbearia
                   </p>
                 </div>
-
-                {/* Benefits grid */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-gray-300">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Agendamentos</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Cadastro de clientes</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Controle financeiro</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Funcionários</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Relatórios</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Notificações automáticas</span>
-                  </div>
-                  <div className="flex items-center gap-2 col-span-2">
-                    <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Dashboard completo</span>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button 
-                    onClick={() => setShowUpgradePlans(true)}
-                    className="w-full bg-amber-400 hover:bg-amber-500 text-[#051b42] font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/10 cursor-pointer flex items-center justify-center gap-2 border border-amber-300/20"
-                    id="btn-vitrine-upgrade-pro"
-                  >
-                    <Star className="w-4 h-4 fill-current text-[#051b42]" />
-                    <span>Conhecer Planos de Assinatura</span>
-                  </button>
-                </div>
               </div>
-            )}
 
-            {/* FORM CARD */}
-            <div className="bg-[#09224f]/40 border border-white/5 rounded-3xl p-6 md:p-8 shadow-xl space-y-6 text-left">
-              
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-lime border-b border-white/10 pb-3 flex items-center gap-2">
-                <Award className="w-4 h-4" />
-                <span>Dados de Identidade</span>
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Nome de Exibição da Vitrine</label>
+                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
+                    Nome de Exibição da Vitrine
+                  </label>
                   <input 
                     type="text" 
                     value={logoText}
                     onChange={e => setLogoText(e.target.value)}
-                    placeholder="Ex: Barber Style Club"
-                    className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
+                    placeholder="Ex: Barbearia Cortes Time"
+                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Usuário do Instagram</label>
-                  <div className="flex items-center bg-[#051b42] border border-white/10 rounded-2xl px-4">
-                    <span className="text-gray-500 text-xs font-mono mr-1">@</span>
+                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">
+                    Usuário do Instagram
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">@</span>
                     <input 
                       type="text" 
-                      value={instagram.replace('@', '')}
-                      onChange={e => setInstagram(`@${e.target.value}`)}
+                      value={instagram.replace(/^@/, '')}
+                      onChange={e => setInstagram(e.target.value.startsWith('@') ? e.target.value : `@${e.target.value}`)}
                       placeholder="cortestime_barber"
-                      className="w-full bg-transparent text-white border-none focus:outline-none py-4 text-xs font-medium"
+                      className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl pl-8 pr-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
                     />
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Foto / Imagem da Logo */}
-              <div className="space-y-3 bg-[#051b42]/60 p-4 rounded-2xl border border-white/10">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-brand-lime" />
-                    <span>Foto / Imagem da Logo da Vitrine</span>
-                  </label>
-                  {logoImage && (
-                    <button 
-                      type="button"
-                      onClick={() => setLogoImage('')}
-                      className="text-[11px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Remover Foto</span>
-                    </button>
+            {/* CARD 3: LOGO DA VITRINE */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Logo da Vitrine
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Adicione a logo da sua barbearia
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
+                {/* Logo Preview Circle */}
+                <div className="w-20 h-20 rounded-full bg-white border-2 border-white/20 overflow-hidden flex items-center justify-center shadow-lg shrink-0">
+                  {logoImage ? (
+                    <img 
+                      src={logoImage} 
+                      alt="Logo preview" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="font-black text-2xl text-blue-950 uppercase">
+                      {logoText ? logoText.charAt(0) : 'B'}
+                    </span>
                   )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {/* Preview Circular Avatar */}
-                  <div className="w-16 h-16 rounded-full bg-[#051b42] text-[#bffd32] border-2 border-brand-lime/40 flex items-center justify-center font-sans font-black text-xl shrink-0 overflow-hidden shadow-md">
-                    {logoImage ? (
-                      <img src={logoImage} alt="Preview logo" className="w-full h-full object-cover" />
-                    ) : (
-                      logoText.charAt(0).toUpperCase()
-                    )}
+                {/* Upload Box */}
+                <label className="flex-1 w-full border-2 border-dashed border-white/20 hover:border-blue-400/60 rounded-2xl p-4 flex items-center gap-3 bg-[#040e24]/60 cursor-pointer transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                    <Upload className="w-5 h-5" />
                   </div>
-
-                  <div className="flex-1 w-full space-y-2">
-                    <div className="flex items-center gap-2">
-                      <label className="bg-brand-lime hover:bg-lime-400 text-[#051b42] font-black py-2.5 px-4 rounded-xl text-xs cursor-pointer inline-flex items-center gap-1.5 transition-all shadow-sm">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Carregar Foto da Logo</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleLogoFileUpload} 
-                          className="hidden" 
-                        />
-                      </label>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-gray-400 font-bold uppercase">Ou insira o link direto da foto (URL):</span>
-                    </div>
-                    <input 
-                      type="text" 
-                      value={logoImage}
-                      onChange={e => setLogoImage(e.target.value)}
-                      placeholder="Ex: https://exemplo.com/logo-barbearia.png"
-                      className="w-full bg-[#051b42] text-white border border-white/10 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
-                    />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white">Trocar logo</p>
+                    <p className="text-[10px] text-gray-400">PNG ou JPG. Máx. 2MB</p>
                   </div>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleLogoFileUpload} 
+                    className="hidden" 
+                  />
+                </label>
+              </div>
+
+              {/* URL Direta Opcional */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                  URL Direta da Logo (Opcional)
+                </label>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={logoImage}
+                    onChange={e => setLogoImage(e.target.value)}
+                    placeholder="https://exemplo.com/minha-logo.png"
+                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
+                  />
+                  {logoImage && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoImage('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 text-xs cursor-pointer"
+                      title="Remover link"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 4: CONTATO E LINKS */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Contato e Links
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Facilite o contato e acesso às suas redes
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">WhatsApp de Contato</label>
+                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone className="w-3 h-3 text-emerald-400" />
+                    <span>WhatsApp de Contato</span>
+                  </label>
                   <input 
                     type="text" 
                     value={whatsapp}
                     onChange={e => setWhatsapp(e.target.value)}
                     placeholder="Ex: (82) 99122-3344"
-                    className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
+                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Link para Bio do Instagram</label>
+                  <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Instagram className="w-3 h-3 text-pink-400" />
+                    <span>Link para Bio do Instagram</span>
+                  </label>
                   <input 
                     type="text" 
                     value={linkBio}
                     onChange={e => setLinkBio(e.target.value)}
                     placeholder="Ex: linktr.ee/cortestime_barber"
-                    className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
+                    className="w-full bg-[#040e24] text-white border border-white/10 rounded-2xl px-4 py-3.5 text-xs font-medium focus:outline-none focus:border-blue-500 transition-all placeholder-gray-500"
                   />
                 </div>
               </div>
 
-              {/* MODO DE ATENDIMENTO DA VITRINE (AGENDAMENTO VS WHATSAPP DIRETO) */}
-              <div className="bg-[#051b42] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
-                  <div>
-                    <h4 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-emerald-400" />
-                      <span>Modo de Atendimento da Vitrine</span>
-                    </h4>
-                    <p className="text-[11px] text-gray-300 mt-0.5">
-                      Escolha como o cliente interage ao clicar nos botões e serviços da sua vitrine
-                    </p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border self-start sm:self-center ${
-                    modoAcao === 'whatsapp' 
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
-                      : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                  }`}>
-                    {modoAcao === 'whatsapp' ? '💬 Direto pro WhatsApp / Ordem de Chegada' : '📅 Agenda no Sistema'}
-                  </span>
-                </div>
-
-                {/* Opções de Modo em Cards Selecionáveis */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Card 1: Agendamento no Sistema */}
-                  <div
-                    onClick={() => {
-                      setModoAcao('agendamento');
-                      setActiveMsgTab('agendamento');
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 relative ${
-                      modoAcao === 'agendamento'
-                        ? 'bg-[#092861] border-blue-400 ring-2 ring-blue-400/20 shadow-lg'
-                        : 'bg-[#041533] border-white/10 hover:border-white/20 opacity-80 hover:opacity-100'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                          modoAcao === 'agendamento' ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'
-                        }`}>
-                          <Calendar className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-extrabold text-white">Agendamento no Sistema</p>
-                          <p className="text-[10px] text-blue-300 font-medium">Fluxo de agenda online completo</p>
-                        </div>
-                      </div>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        modoAcao === 'agendamento' ? 'border-blue-400 bg-blue-400' : 'border-gray-500'
-                      }`}>
-                        {modoAcao === 'agendamento' && <div className="w-1.5 h-1.5 rounded-full bg-[#051b42]" />}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-gray-300 leading-relaxed">
-                      O cliente escolhe serviço, barbeiro, data e horário diretamente na página da vitrine.
-                    </p>
-                  </div>
-
-                  {/* Card 2: Direto para o WhatsApp */}
-                  <div
-                    onClick={() => {
-                      setModoAcao('whatsapp');
-                      setActiveMsgTab('ordem_chegada');
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 relative ${
-                      modoAcao === 'whatsapp'
-                        ? 'bg-emerald-950/40 border-emerald-400 ring-2 ring-emerald-400/20 shadow-lg shadow-emerald-950/50'
-                        : 'bg-[#041533] border-white/10 hover:border-white/20 opacity-80 hover:opacity-100'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                          modoAcao === 'whatsapp' ? 'bg-emerald-500 text-emerald-950' : 'bg-white/10 text-gray-400'
-                        }`}>
-                          <Phone className="w-5 h-5 fill-current" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-extrabold text-white">Direto pro WhatsApp / Ordem de Chegada</p>
-                          <p className="text-[10px] text-emerald-400 font-medium">Atendimento rápido por mensagem</p>
-                        </div>
-                      </div>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        modoAcao === 'whatsapp' ? 'border-emerald-400 bg-emerald-400' : 'border-gray-500'
-                      }`}>
-                        {modoAcao === 'whatsapp' && <div className="w-1.5 h-1.5 rounded-full bg-[#051b42]" />}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-gray-300 leading-relaxed">
-                      Ao clicar nos botões ou serviços, o cliente abre o WhatsApp com mensagem pronta perguntando sobre horário, se está aberto ou confirmando o corte.
-                    </p>
-                  </div>
-                </div>
-
-                {/* PAINEL COMPLETO DE PERSONALIZAÇÃO DA MENSAGEM AUTOMÁTICA DO WHATSAPP */}
-                <div className="bg-gradient-to-br from-[#062438] via-[#041d2f] to-[#031522] p-4 sm:p-5 rounded-2xl border border-emerald-500/30 space-y-5">
-                  
-                  {/* Cabeçalho do Personalizador */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                        <MessageSquare className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h5 className="text-xs font-black text-white uppercase tracking-wider">
-                          Personalização da Mensagem Automática (WhatsApp)
-                        </h5>
-                        <p className="text-[11px] text-emerald-300/80">
-                          Personalize o texto que o cliente envia no WhatsApp ao agendar ou consultar a barbearia.
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowVarsGuide(!showVarsGuide)}
-                      className="text-[10px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 self-start sm:self-auto"
-                    >
-                      <Sparkles className="w-3 h-3 text-emerald-400" />
-                      <span>{showVarsGuide ? 'Ocultar Guia de Variáveis' : 'Ver Guia de Variáveis'}</span>
-                    </button>
-                  </div>
-
-                  {/* Abas / Switcher de Situação da Mensagem */}
-                  <div className="flex flex-wrap gap-2 p-1 bg-[#020e17]/80 rounded-xl border border-white/5">
-                    <button
-                      type="button"
-                      onClick={() => setActiveMsgTab('agendamento')}
-                      className={`flex-1 min-w-[200px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                        activeMsgTab === 'agendamento'
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>📅 Mensagem de Agendamento Confirmado</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveMsgTab('ordem_chegada')}
-                      className={`flex-1 min-w-[200px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                        activeMsgTab === 'ordem_chegada'
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>🟢 Ordem de Chegada & Está Aberto Hoje</span>
-                    </button>
-                  </div>
-
-                  {/* Saudação Inteligente por Horário */}
-                  <div className="bg-[#020e17]/90 p-3.5 rounded-xl border border-emerald-500/20 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-                        <div>
-                          <p className="text-xs font-bold text-white">Saudação Automática conforme o Horário ({'{saudacao}'})</p>
-                          <p className="text-[10px] text-gray-300">
-                            Substitui automaticamente por <strong>Bom dia</strong>, <strong>Boa tarde</strong> ou <strong>Boa noite</strong> de acordo com a hora em que o cliente abre o WhatsApp.
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setUsarSaudacaoHorario(!usarSaudacaoHorario)}
-                        className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                          usarSaudacaoHorario ? 'bg-emerald-400' : 'bg-gray-700'
-                        }`}
-                      >
-                        <div
-                          className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                            usarSaudacaoHorario ? 'translate-x-5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="pt-2 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px]">
-                      <div className="flex flex-wrap items-center gap-1.5 text-gray-400">
-                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌅 05h-12h: Bom dia</span>
-                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">☀️ 12h-18h: Boa tarde</span>
-                        <span className="bg-white/5 px-2 py-0.5 rounded-md border border-white/5">🌙 18h-05h: Boa noite</span>
-                      </div>
-                      <span className="font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                        Saudação agora: "{getSaudacaoHorario()}"
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* GUIA EXPLICATIVO DAS VARIÁVEIS DISPONÍVEIS */}
-                  {showVarsGuide && (
-                    <div className="bg-[#02101b] p-3.5 rounded-xl border border-blue-500/30 space-y-2 text-left animate-fade-in">
-                      <div className="flex items-center gap-2 text-blue-300 text-xs font-bold border-b border-blue-500/20 pb-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Variáveis Disponíveis para Usar na Mensagem</span>
-                      </div>
-                      <p className="text-[11px] text-gray-300 leading-normal">
-                        Ao digitar ou clicar nos botões abaixo, as palavras entre chaves como <code className="text-blue-300 bg-blue-950/60 px-1 py-0.5 rounded font-mono text-[10px]">{'{barbeiro}'}</code> serão trocadas automaticamente pelos dados reais do cliente e da barbearia!
-                      </p>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-amber-300 block mb-0.5">{'{saudacao}'}</span>
-                          <span className="text-gray-300">"Bom dia", "Boa tarde" ou "Boa noite" conforme o horário.</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-blue-300 block mb-0.5">{'{barbeiro}'}</span>
-                          <span className="text-gray-300">Nome do barbeiro ou responsável ({getNomeBarbeiro()}).</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-emerald-300 block mb-0.5">{'{barbearia}'}</span>
-                          <span className="text-gray-300">Nome da barbearia ({getNomeBarbearia()}).</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-purple-300 block mb-0.5">{'{servico}'}</span>
-                          <span className="text-gray-300">Nome do serviço escolhido (ex: Corte Degradê).</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-pink-300 block mb-0.5">{'{data}'}</span>
-                          <span className="text-gray-300">Data do agendamento escolhida pelo cliente (ex: 24/10).</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-cyan-300 block mb-0.5">{'{horario}'}</span>
-                          <span className="text-gray-300">Horário agendado (ex: 15:30).</span>
-                        </div>
-                        <div className="bg-white/5 p-2 rounded-lg border border-white/5 text-[10px]">
-                          <span className="font-mono font-bold text-indigo-300 block mb-0.5">{'{cliente}'}</span>
-                          <span className="text-gray-300">Nome completo do cliente que está agendando.</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CAMPO DE EDIÇÃO DA MENSAGEM COM BOTÕES DE INSERÇÃO RÁPIDA */}
-                  <div className="space-y-2 text-left">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>
-                          {activeMsgTab === 'agendamento' 
-                            ? 'Texto da Mensagem de Agendamento' 
-                            : 'Texto da Mensagem de Ordem de Chegada & Aberto Hoje'}
-                        </span>
-                      </label>
-                      
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (activeMsgTab === 'agendamento') {
-                            setMensagemWhatsAppAgendamento('Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️');
-                          } else {
-                            setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈');
-                          }
-                        }}
-                        className="text-[10px] text-gray-400 hover:text-white transition-colors cursor-pointer underline"
-                      >
-                        Restaurar mensagem padrão
-                      </button>
-                    </div>
-
-                    {activeMsgTab === 'agendamento' ? (
-                      <textarea
-                        rows={3}
-                        value={mensagemWhatsAppAgendamento}
-                        onChange={e => setMensagemWhatsAppAgendamento(e.target.value)}
-                        placeholder="Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️"
-                        className="w-full bg-[#020e17] text-white border border-blue-500/30 focus:border-blue-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
-                      />
-                    ) : (
-                      <textarea
-                        rows={3}
-                        value={mensagemWhatsAppOrdemChegada}
-                        onChange={e => setMensagemWhatsAppOrdemChegada(e.target.value)}
-                        placeholder="Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈"
-                        className="w-full bg-[#020e17] text-white border border-emerald-500/30 focus:border-emerald-400 rounded-xl p-3 text-xs font-medium focus:outline-none transition-all leading-relaxed"
-                      />
-                    )}
-
-                    {/* Botões de Inserção Rápida de Variáveis */}
-                    <div className="space-y-1 pt-1">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                        Clique para inserir a variável no texto:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeMsgTab === 'agendamento') {
-                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {saudacao}` : '{saudacao}');
-                            } else {
-                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {saudacao}` : '{saudacao}');
-                            }
-                          }}
-                          className="bg-white/5 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                        >
-                          + {'{saudacao}'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeMsgTab === 'agendamento') {
-                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {barbeiro}` : '{barbeiro}');
-                            } else {
-                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {barbeiro}` : '{barbeiro}');
-                            }
-                          }}
-                          className="bg-white/5 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                        >
-                          + {'{barbeiro}'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeMsgTab === 'agendamento') {
-                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {barbearia}` : '{barbearia}');
-                            } else {
-                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {barbearia}` : '{barbearia}');
-                            }
-                          }}
-                          className="bg-white/5 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                        >
-                          + {'{barbearia}'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeMsgTab === 'agendamento') {
-                              setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {servico}` : '{servico}');
-                            } else {
-                              setMensagemWhatsAppOrdemChegada(prev => prev ? `${prev} {servico}` : '{servico}');
-                            }
-                          }}
-                          className="bg-white/5 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                        >
-                          + {'{servico}'}
-                        </button>
-
-                        {activeMsgTab === 'agendamento' && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {data}` : '{data}')}
-                              className="bg-white/5 hover:bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            >
-                              + {'{data}'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {horario}` : '{horario}')}
-                              className="bg-white/5 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            >
-                              + {'{horario}'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMensagemWhatsAppAgendamento(prev => prev ? `${prev} {cliente}` : '{cliente}')}
-                              className="bg-white/5 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                            >
-                              + {'{cliente}'}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Modelos Prontos (Presets) */}
-                    <div className="pt-2 space-y-1.5 border-t border-white/5">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                        Ou escolha um modelo pronto para usar:
-                      </span>
-                      
-                      {activeMsgTab === 'agendamento' ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppAgendamento('Olá {barbeiro}, {saudacao}! Meu agendamento de {servico} na {barbearia} foi solicitado para o dia {data} às {horario}. Aguardo confirmação! ✂️')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">✂️ Padrão Completo</span>
-                            "Meu agendamento de {'{servico}'} foi solicitado para {'{data}'} às {'{horario}'}..."
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppAgendamento('{saudacao}, {barbeiro}! Quero confirmar meu horário de {servico} para {data} às {horario}. Até lá!')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">⚡ Direto & Rápido</span>
-                            "Quero confirmar meu horário de {'{servico}'} para {'{data}'} às {'{horario}'}..."
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppAgendamento('Fala {barbeiro}, {saudacao}! Agendei {servico} no dia {data} às {horario}. Valeu!')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">🤝 Descontraído</span>
-                            "Fala {'{barbeiro}'}, {'{saudacao}'}! Agendei {'{servico}'}..."
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! A {barbearia} está aberta hoje? Gostaria de saber se posso ir cortar {servico} por ordem de chegada! ✂️💈')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">🟢 Aberto Hoje? + Corte</span>
-                            "A {'{barbearia}'} está aberta hoje? Gostaria de saber se posso ir cortar {'{servico}'}..."
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('Olá {barbeiro}, {saudacao}! Vi a vitrine da {barbearia}. Vocês estão atendendo por ordem de chegada agora? Tem muita fila para {servico}? 💈')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">💈 Ordem de Chegada & Fila</span>
-                            "O atendimento hoje é por ordem de chegada? Tem muita fila para {'{servico}'}..."
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMensagemWhatsAppOrdemChegada('{saudacao}, {barbeiro}! A {barbearia} está aberta agora? Tem vaga livre hoje para fazer {servico}? ⏰')}
-                            className="bg-white/5 hover:bg-white/10 text-left p-2.5 rounded-xl text-[10px] text-gray-300 border border-white/5 transition-all cursor-pointer leading-tight"
-                          >
-                            <span className="font-bold text-white block mb-0.5">⏰ Aberto Agora & Vaga</span>
-                            "A {'{barbearia}'} está aberta agora? Tem vaga livre hoje para fazer {'{servico}'}?..."
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* PRÉVIA VISUAL DO WHATSAPP (SIMULAÇÃO REALISTA EM TEMPO REAL) */}
-                  <div className="bg-[#0b141a] p-4 rounded-2xl border border-white/10 space-y-2.5 text-left">
-                    <div className="flex items-center justify-between text-[10px] text-gray-400 border-b border-white/10 pb-2">
-                      <span className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
-                        <Phone className="w-3.5 h-3.5 fill-current" />
-                        <span>Pré-visualização: como a mensagem chega para você no WhatsApp:</span>
-                      </span>
-                      <span className="text-[9px] text-gray-400 bg-white/5 px-2 py-0.5 rounded">
-                        Simulação com dados reais
-                      </span>
-                    </div>
-
-                    {/* Balão do WhatsApp */}
-                    <div className="flex justify-end pt-1">
-                      <div className="max-w-[92%] sm:max-w-[80%] bg-[#005c4b] text-white p-3.5 rounded-2xl rounded-tr-none shadow-lg text-xs leading-relaxed relative">
-                        <p className="font-normal whitespace-pre-wrap">
-                          {getMensagemWhatsAppGerada({
-                            servico: 'Degradê Navalhado & Barba',
-                            data: new Date().toLocaleDateString('pt-BR'),
-                            horario: '15:30',
-                            cliente: 'Lucas Silva',
-                            contexto: activeMsgTab
-                          })}
-                        </p>
-                        <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-200 mt-1.5">
-                          <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span className="text-cyan-300 font-bold">✓✓</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Botão de Testar Envio */}
-                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2">
-                      <span className="text-[10px] text-gray-400">
-                        Número destino: <strong className="text-white">{whatsapp || merchant.whatsapp || 'Não configurado'}</strong>
-                      </span>
-                      <a
-                        href={getWhatsAppLink(
-                          'Degradê Navalhado & Barba',
-                          activeMsgTab,
-                          { data: new Date().toLocaleDateString('pt-BR'), horario: '15:30', cliente: 'Cliente Teste' }
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-4 rounded-xl transition-all flex items-center gap-1.5 shadow-md cursor-pointer w-full sm:w-auto justify-center"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Testar envio no WhatsApp</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Switch para Permitir botão flutuante de WhatsApp na vitrine */}
-                  {modoAcao === 'agendamento' && (
-                    <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-bold text-white">Exibir também botão direto do WhatsApp na vitrine</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          Permite que os clientes que preferirem mandar mensagem diretamente cliquem no botão flutuante do WhatsApp.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPermitirWhatsApp(!permitirWhatsApp)}
-                        className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors shrink-0 ${
-                          permitirWhatsApp ? 'bg-[#d4ff5e]' : 'bg-gray-700'
-                        }`}
-                      >
-                        <div
-                          className={`bg-[#051b42] w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                            permitirWhatsApp ? 'translate-x-6' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Slogan da Barbearia</label>
+              {/* Link da Vitrine Field */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Link da Vitrine</span>
+                </label>
+                <div className="relative flex items-center">
                   <input 
                     type="text" 
-                    value={slogan}
-                    onChange={e => setSlogan(e.target.value)}
-                    placeholder="Ex: Corte, Barba & Estilo de Alto Padrão"
-                    className="w-full bg-[#051b42] text-white border border-white/10 rounded-2xl p-4 text-xs font-medium focus:outline-none focus:border-brand-lime transition-all"
+                    readOnly
+                    value={displayUrl}
+                    className="w-full bg-[#040e24] text-gray-300 border border-white/10 rounded-2xl pl-4 pr-24 py-3.5 text-xs font-medium select-all"
                   />
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copied ? 'Copiado' : 'Copiar'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 5: MODO DE ATENDIMENTO */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Modo de Atendimento
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Escolha como os clientes irão agendar ou ser atendidos
+                  </p>
+                </div>
+              </div>
+
+              {/* 3 Selectable Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                
+                {/* Option 1: Agendamento Online */}
+                <div
+                  onClick={() => setModoAcao('agendamento')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 relative ${
+                    modoAcao === 'agendamento'
+                      ? 'bg-[#09224f] border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/40'
+                      : 'bg-[#040e24] border-white/10 hover:border-white/20 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      modoAcao === 'agendamento' ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'
+                    }`}>
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      modoAcao === 'agendamento' ? 'border-blue-400 bg-blue-500 text-white' : 'border-gray-500'
+                    }`}>
+                      {modoAcao === 'agendamento' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-white">Agendamento Online</p>
+                    <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                      Cliente agenda data e horário diretamente pela sua vitrine.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Link Personalizado (Slug)</label>
-                  <div className="flex items-center bg-[#051b42] border border-white/10 rounded-2xl px-4">
-                    <span className="text-gray-500 text-xs font-mono mr-1">/vitrine/</span>
-                    <input 
-                      type="text" 
-                      value={linkPersonalizado}
-                      onChange={e => setLinkPersonalizado(e.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase())}
-                      placeholder="minha-barbearia"
-                      className="w-full bg-transparent text-white border-none focus:outline-none py-4 text-xs font-medium"
-                    />
+                {/* Option 2: Ordem de Chegada */}
+                <div
+                  onClick={() => setModoAcao('whatsapp')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 relative ${
+                    modoAcao === 'whatsapp'
+                      ? 'bg-[#09224f] border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/40'
+                      : 'bg-[#040e24] border-white/10 hover:border-white/20 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      modoAcao === 'whatsapp' ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'
+                    }`}>
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      modoAcao === 'whatsapp' ? 'border-blue-400 bg-blue-500 text-white' : 'border-gray-500'
+                    }`}>
+                      {modoAcao === 'whatsapp' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-white">Ordem de Chegada</p>
+                    <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                      Atendimento por ordem de chegada na barbearia.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Option 3: Ambos os Modos */}
+                <div
+                  onClick={() => setModoAcao('ambos')}
+                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 relative ${
+                    modoAcao === 'ambos'
+                      ? 'bg-[#09224f] border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/40'
+                      : 'bg-[#040e24] border-white/10 hover:border-white/20 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      modoAcao === 'ambos' ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-400'
+                    }`}>
+                      <CalendarRange className="w-4 h-4" />
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      modoAcao === 'ambos' ? 'border-blue-400 bg-blue-500 text-white' : 'border-gray-500'
+                    }`}>
+                      {modoAcao === 'ambos' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-white">Ambos os Modos</p>
+                    <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                      Permita agendamento online e também ordem de chegada.
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            {/* CARD 6: PERSONALIZAÇÃO AUTOMÁTICA (WHATSAPP) */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <MessageCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-sans font-black text-sm sm:text-base text-white uppercase tracking-wider">
+                    Personalização Automática (WhatsApp)
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Deixe seus clientes sempre bem informados
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-1">
+                {/* Row 1: Mensagem de confirmação de agendamento */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-white">
+                        Mensagem de confirmação de agendamento
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        Envie mensagem automática quando um agendamento for confirmado.
+                      </p>
+                    </div>
+                    {/* Toggle switch */}
+                    <button
+                      type="button"
+                      onClick={() => setMsgConfirmacaoAtiva(!msgConfirmacaoAtiva)}
+                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                        msgConfirmacaoAtiva ? 'bg-blue-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span className={`block w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                        msgConfirmacaoAtiva ? 'right-1' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Bubble Preview */}
+                  <div className="bg-[#030e20] border border-blue-500/20 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <span className="text-sm">💬</span>
+                      <p className="text-xs text-gray-200 line-clamp-2 leading-relaxed">
+                        {mensagemWhatsAppAgendamento || '✅ Seu agendamento foi confirmado! Nos vemos em breve. Qualquer dúvida, é só chamar. 💈'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMsgType('agendamento');
+                        setShowEditMessageModal(true);
+                      }}
+                      className="text-xs font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar mensagem</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Ordem de chegada aberta */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-white">
+                        Ordem de chegada aberta
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        Informe quando a barbearia estiver aceitando clientes por ordem de chegada.
+                      </p>
+                    </div>
+                    {/* Toggle switch */}
+                    <button
+                      type="button"
+                      onClick={() => setMsgOrdemChegadaAtiva(!msgOrdemChegadaAtiva)}
+                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                        msgOrdemChegadaAtiva ? 'bg-blue-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span className={`block w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                        msgOrdemChegadaAtiva ? 'right-1' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Bubble Preview */}
+                  <div className="bg-[#030e20] border border-blue-500/20 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <span className="text-sm">💬</span>
+                      <p className="text-xs text-gray-200 line-clamp-2 leading-relaxed">
+                        {mensagemWhatsAppOrdemChegada || 'Olá! A barbearia está aberta hoje para atendimento por ordem de chegada! ✂️💈'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMsgType('ordem_chegada');
+                        setShowEditMessageModal(true);
+                      }}
+                      className="text-xs font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar mensagem</span>
+                    </button>
                   </div>
                 </div>
               </div>
+            </div>
 
               {/* ATENDIMENTO DE HOJE (RECURSO DINÂMICO E ÁGIL) */}
               <div className="bg-gradient-to-br from-[#092352] via-[#051b42] to-[#041533] p-4 sm:p-5 rounded-3xl border-2 border-emerald-500/40 shadow-xl space-y-4 text-left relative overflow-hidden">
@@ -5115,32 +4846,41 @@ export default function CortesVitrine({
                 </div>
               </div>
 
-              {/* SAVE ACTION */}
-              <div className="pt-6 border-t border-white/10 flex items-center justify-between gap-4">
-                <div className="text-left">
-                  {saveSuccess && (
-                    <span className="text-emerald-400 text-xs font-bold flex items-center gap-1 animate-fade-in">
-                      <Check className="w-4 h-4" />
+            {/* CARD 8: SALVAR ALTERAÇÕES (FOOTER / ACTION BAR) */}
+            <div className="bg-[#071739] border border-blue-900/40 rounded-3xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+              <div>
+                <h4 className="font-sans font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                  <Check className="w-4 h-4 text-blue-400" />
+                  <span>Pronto para Publicar?</span>
+                </h4>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {saveSuccess ? (
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
                       Alterações salvas com sucesso no Firebase!
                     </span>
+                  ) : (
+                    'Salve suas edições para atualizar a vitrine oficial dos seus clientes.'
                   )}
-                </div>
-                
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
+                  type="button"
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark px-6 py-3.5 rounded-2xl font-extrabold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-xl shadow-brand-lime/10 cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 active:scale-95"
                   id="btn-save-vitrine"
                 >
                   {isSaving ? (
-                    <div className="w-4 h-4 border-2 border-brand-dark border-t-transparent animate-spin rounded-full"></div>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full" />
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{isSaving ? 'Salvando...' : 'Salvar Vitrine'}</span>
+                  <span>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</span>
                 </button>
               </div>
-
             </div>
 
           </div>
