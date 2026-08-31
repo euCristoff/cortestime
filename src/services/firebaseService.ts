@@ -550,6 +550,88 @@ export const firebaseService = {
     }
   },
 
+  async deleteMerchantAccount(uid: string): Promise<void> {
+    if (!uid) return;
+
+    // 1. Delete from Firestore users collection
+    try {
+      await deleteDoc(doc(db, "users", uid));
+    } catch (e) {
+      console.warn("Error deleting user doc from Firestore:", e);
+    }
+
+    // 2. Delete related records where ownerId == uid
+    const collectionsToClean = [
+      COLL_SERVICES,
+      COLL_BARBERS,
+      COLL_CLIENTS,
+      COLL_APPOINTMENTS,
+      COLL_QUEUE,
+      COLL_NOTIFICATIONS
+    ];
+
+    for (const collName of collectionsToClean) {
+      try {
+        const q = query(collection(db, collName), where("ownerId", "==", uid));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          await deleteDoc(d.ref).catch(() => {});
+        }
+      } catch (err) {
+        console.warn(`Error deleting documents from ${collName} for owner ${uid}:`, err);
+      }
+    }
+
+    // 3. Delete any draft_vitrines for this merchant if any
+    try {
+      const qDrafts = query(collection(db, COLL_DRAFT_VITRINES), where("ownerId", "==", uid));
+      const snapDrafts = await getDocs(qDrafts);
+      for (const d of snapDrafts.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    } catch (_) {}
+
+    // 4. Clean localStorage caches
+    try {
+      const cached = localStorage.getItem('cortestime_merchant_session');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.uid === uid) {
+          localStorage.removeItem('cortestime_merchant_session');
+          localStorage.removeItem('cortestime_merchant_profile');
+        }
+      }
+
+      localStorage.removeItem(`cortestime_merchant_${uid}`);
+      localStorage.removeItem(`cortestime_services_${uid}`);
+      localStorage.removeItem(`cortestime_barbers_${uid}`);
+      localStorage.removeItem(`cortestime_clients_${uid}`);
+      localStorage.removeItem(`cortestime_appointments_${uid}`);
+      localStorage.removeItem(`cortestime_queue_${uid}`);
+      localStorage.removeItem(`cortestime_notifications_${uid}`);
+
+      const rawAll = localStorage.getItem('cortestime_merchants');
+      if (rawAll) {
+        const list: MerchantUser[] = JSON.parse(rawAll);
+        const filtered = list.filter((x) => x.uid !== uid);
+        localStorage.setItem('cortestime_merchants', JSON.stringify(filtered));
+      }
+    } catch (localErr) {
+      console.warn("Error cleaning local storage in deleteMerchantAccount:", localErr);
+    }
+
+    // 5. If this is the current auth user, attempt auth cleanup / signout
+    try {
+      if (auth.currentUser && auth.currentUser.uid === uid) {
+        try {
+          await auth.currentUser.delete();
+        } catch (_) {
+          await fbSignOut(auth).catch(() => {});
+        }
+      }
+    } catch (_) {}
+  },
+
   async getMerchantBySlug(slug: string): Promise<MerchantUser | null> {
     if (!slug) return null;
     

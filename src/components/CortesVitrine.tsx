@@ -3437,13 +3437,13 @@ export default function CortesVitrine({
               <div className="space-y-1.5">
                 <h4 className="font-sans font-extrabold text-sm uppercase tracking-wider">
                   {downgradeNotice === 'trial_expired' 
-                    ? 'Seu período de teste grátis terminou' 
+                    ? 'Seu período promocional Pro terminou' 
                     : 'Sua assinatura Pro expirou ou foi cancelada'}
                 </h4>
                 <p className="text-xs leading-relaxed font-medium">
                   {downgradeNotice === 'trial_expired' 
-                    ? 'Seu período de teste grátis do Cortestime Pro chegou ao fim. Para que você continue divulgando seus serviços, sua conta foi alterada automaticamente para o plano gratuito Cortes Vitrine.' 
-                    : 'Sua assinatura Pro venceu ou foi cancelada. Para garantir que seus clientes continuem visualizando sua barbearia, sua conta retornou automaticamente para o plano gratuito Cortes Vitrine.'}
+                    ? 'Seu período promocional do Cortestime Pro chegou ao fim. Para que você continue divulgando seus serviços, sua conta foi alterada automaticamente para o plano Cortes Vitrine.' 
+                    : 'Sua assinatura Pro venceu ou foi cancelada. Para garantir que seus clientes continuem visualizando sua barbearia, sua conta retornou automaticamente para o plano Cortes Vitrine.'}
                 </p>
                 <p className="text-xs font-bold underline">
                   Não se preocupe: todos os seus agendamentos, clientes e dados de profissionais estão salvos com segurança absoluta e sem nenhuma perda!

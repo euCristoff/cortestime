@@ -345,9 +345,9 @@ export default function App() {
         console.log("Google redirect result processed at root:", redirectResult);
         let m: MerchantUser;
         if (redirectResult.merchant) {
-          m = { ...redirectResult.merchant, onboardingCompleted: true };
+          m = redirectResult.merchant;
         } else {
-          // Auto-create or repair profile for Google user
+          // Auto-create profile for new Google user with onboardingCompleted: false
           const today = new Date();
           const formatDate = (d: Date) => {
             const dd = String(d.getDate()).padStart(2, '0');
@@ -369,7 +369,7 @@ export default function App() {
             trialFim: formatDate(expiry),
             status: 'ativo',
             criadoEm: new Date().toISOString(),
-            onboardingCompleted: true
+            onboardingCompleted: false
           };
 
           try {
@@ -378,80 +378,58 @@ export default function App() {
             console.warn("Error saving redirect merchant profile:", e);
           }
         }
+        
         setCurrentMerchant(m);
-        localStorage.setItem('cortestime_merchant_session', JSON.stringify(m));
         setIsLoading(false);
-        setViewMode('dashboard');
+
+        if (m.onboardingCompleted) {
+          localStorage.setItem('cortestime_merchant_session', JSON.stringify(m));
+          setViewMode('dashboard');
+        } else {
+          // Send to auth page so they complete the Quiz
+          setViewMode('auth');
+        }
       }
     }).catch(err => {
       console.warn("handleRedirectResult error in App startup:", err);
     });
 
-    const unsubscribe = firebaseService.onAuthChanged((fbUser) => {
+    const unsubscribe = firebaseService.onAuthChanged(async (fbUser) => {
       try {
         if (fbUser) {
           setFirebaseConnected(true);
           setIsLoading(false);
 
-          // 1. Immediately resolve session or construct optimistic profile
+          // 1. Read cached session
           const cachedSession = localStorage.getItem('cortestime_merchant_session');
           let currentSessionMerchant: MerchantUser | null = null;
           if (cachedSession) {
             try {
-              const parsed = JSON.parse(cachedSession) as MerchantUser;
-              if (parsed.uid === fbUser.uid) {
-                currentSessionMerchant = { ...parsed, onboardingCompleted: true };
-              }
+              currentSessionMerchant = JSON.parse(cachedSession) as MerchantUser;
             } catch (e) {}
           }
 
-          if (!currentSessionMerchant) {
-            const today = new Date();
-            const formatDate = (d: Date) => {
-              const dd = String(d.getDate()).padStart(2, '0');
-              const mm = String(d.getMonth() + 1).padStart(2, '0');
-              const yyyy = d.getFullYear();
-              return `${dd}/${mm}/${yyyy}`;
-            };
-            const expiry = new Date();
-            expiry.setDate(today.getDate() + 7);
-
-            currentSessionMerchant = {
-              uid: fbUser.uid,
-              nomeBarbearia: fbUser.displayName ? `Barbearia de ${fbUser.displayName}` : 'Minha Barbearia',
-              nomeProprietario: fbUser.displayName || fbUser.email?.split('@')[0] || 'Proprietário',
-              email: fbUser.email || '',
-              whatsapp: '',
-              plano: 'pro_trial',
-              trialInicio: formatDate(today),
-              trialFim: formatDate(expiry),
-              status: 'ativo',
-              criadoEm: new Date().toISOString(),
-              onboardingCompleted: true
-            };
+          // 2. Fetch fresh Firestore profile
+          let freshMerchant: MerchantUser | null = null;
+          try {
+            freshMerchant = await firebaseService.getMerchant(fbUser.uid);
+            if (!freshMerchant && fbUser.email) {
+              freshMerchant = await firebaseService.getMerchantByEmail(fbUser.email);
+            }
+          } catch (err) {
+            console.warn("Could not fetch fresh merchant profile:", err);
           }
 
-          // Instantly transition user to dashboard
-          setCurrentMerchant(currentSessionMerchant);
-          localStorage.setItem('cortestime_merchant_session', JSON.stringify(currentSessionMerchant));
-          setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
+          const activeMerchant = freshMerchant || currentSessionMerchant;
 
-          // 2. Asynchronously sync/fetch Firestore data in background without blocking UI
-          firebaseService.getMerchant(fbUser.uid).then(async (freshMerchant) => {
-            let merchant = freshMerchant;
-            if (!merchant && fbUser.email) {
-              merchant = await firebaseService.getMerchantByEmail(fbUser.email);
+          if (activeMerchant) {
+            setCurrentMerchant(activeMerchant);
+            // Only auto-navigate to dashboard if onboarding was already completed AND we're not currently on auth page
+            if (activeMerchant.onboardingCompleted) {
+              localStorage.setItem('cortestime_merchant_session', JSON.stringify(activeMerchant));
+              setViewMode(prev => (prev === 'landing' || prev === 'onboarding') ? 'dashboard' : prev);
             }
-            if (merchant) {
-              const updated = { ...merchant, uid: fbUser.uid, onboardingCompleted: true };
-              setCurrentMerchant(updated);
-              localStorage.setItem('cortestime_merchant_session', JSON.stringify(updated));
-            } else if (currentSessionMerchant) {
-              firebaseService.saveMerchantProfile(currentSessionMerchant).catch(() => {});
-            }
-          }).catch(err => {
-            console.warn("Background merchant sync failed, using local session:", err);
-          });
+          }
         } else {
           // fbUser is null. Check if we have a persistent fallback session
           const saved = localStorage.getItem('cortestime_merchant_session');
@@ -461,7 +439,9 @@ export default function App() {
               setCurrentMerchant(merchant);
               setFirebaseConnected(true);
               setIsLoading(false);
-              setViewMode(prev => (prev === 'landing' || prev === 'auth' || prev === 'onboarding') ? 'dashboard' : prev);
+              if (merchant.onboardingCompleted) {
+                setViewMode(prev => (prev === 'landing' || prev === 'onboarding') ? 'dashboard' : prev);
+              }
             } catch (e) {
               setCurrentMerchant(null);
               setIsLoading(false);

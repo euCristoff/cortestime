@@ -103,6 +103,11 @@ export default function AdminSubscriptionManager({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [previewDraft, setPreviewDraft] = useState<DraftVitrine | null>(null);
 
+  // Delete Merchant Account Modal state
+  const [merchantToDelete, setMerchantToDelete] = useState<MerchantUser | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>('');
+  const [isDeletingMerchant, setIsDeletingMerchant] = useState<boolean>(false);
+
   // Draft Creation Modal state
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
   const [draftNomeBarbearia, setDraftNomeBarbearia] = useState('');
@@ -314,6 +319,42 @@ export default function AdminSubscriptionManager({
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (e: any) {
       alert(`Erro ao extender teste: ${e?.message || 'Tente novamente'}`);
+    }
+  };
+
+  const handleConfirmDeleteMerchant = async () => {
+    if (!merchantToDelete) return;
+    if (deleteConfirmInput.trim().toUpperCase() !== 'EXCLUIR') {
+      alert('Por favor, digite EXCLUIR para confirmar a exclusão permanente.');
+      return;
+    }
+
+    setIsDeletingMerchant(true);
+    try {
+      const targetName = merchantToDelete.nomeBarbearia || 'Barbearia';
+      const targetUid = merchantToDelete.uid;
+
+      await firebaseService.deleteMerchantAccount(targetUid);
+
+      setMerchants(prev => prev.filter(m => m.uid !== targetUid));
+      setActionSuccess(`Conta de "${targetName}" e todos os dados foram permanentemente apagados!`);
+      setTimeout(() => setActionSuccess(null), 5000);
+
+      // If the admin deleted their own account for testing
+      if (currentAdmin.uid === targetUid) {
+        alert(`Sua conta de teste "${targetName}" foi apagada com sucesso. A página será reiniciada para você testar um novo cadastro.`);
+        localStorage.clear();
+        window.location.href = window.location.origin;
+        return;
+      }
+
+      setMerchantToDelete(null);
+      setDeleteConfirmInput('');
+    } catch (e: any) {
+      console.error("Error deleting merchant account:", e);
+      alert(`Erro ao excluir conta: ${e?.message || 'Tente novamente'}`);
+    } finally {
+      setIsDeletingMerchant(false);
     }
   };
 
@@ -1049,6 +1090,19 @@ export default function AdminSubscriptionManager({
                               <span>Cancelar Pro</span>
                             </button>
                           )}
+
+                          {/* 5. APAGAR CONTA (DELETE MERCHANT) */}
+                          <button
+                            onClick={() => {
+                              setMerchantToDelete(merchant);
+                              setDeleteConfirmInput('');
+                            }}
+                            className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-red-200 hover:border-red-600 shadow-sm group"
+                            title="Apagar permanentemente a conta, serviços, clientes e agendamentos deste barbeiro"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-600 group-hover:text-white transition-colors" />
+                            <span>Apagar Conta</span>
+                          </button>
                         </div>
                       </div>
                     );
@@ -2507,6 +2561,89 @@ export default function AdminSubscriptionManager({
             </motion.div>
           </div>
         )}
+
+        {/* MODAL DE CONFIRMAÇÃO PARA APAGAR CONTA DE BARBEARIA */}
+        <AnimatePresence>
+          {merchantToDelete && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-3xl max-w-md w-full p-6 text-left space-y-4 shadow-2xl relative border border-red-100"
+              >
+                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                  <h3 className="font-extrabold text-base text-red-600 flex items-center gap-2">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                    <span>Apagar Conta Definitivamente</span>
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      setMerchantToDelete(null);
+                      setDeleteConfirmInput('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs text-gray-600">
+                  <div className="bg-red-50 p-3 rounded-2xl border border-red-200 text-red-900 space-y-1">
+                    <p className="font-bold text-sm">
+                      Barbearia: {merchantToDelete.nomeBarbearia || 'Sem Nome'}
+                    </p>
+                    <p className="text-[11px] text-red-700">
+                      Proprietário: {merchantToDelete.nomeProprietario || 'Não informado'} • {merchantToDelete.email}
+                    </p>
+                  </div>
+
+                  <p className="leading-relaxed">
+                    Esta ação apagará <strong>todos os dados</strong> do Firebase: serviços, agendamentos, lista de clientes, fila virtual, vitrine pública e cadastro. 
+                  </p>
+                  <p className="text-gray-500 italic">
+                    💡 Ideal para testes: ao apagar, o email e WhatsApp ficam 100% livres para você criar um novo cadastro do zero e testar o onboarding novamente.
+                  </p>
+
+                  <div className="pt-1">
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                      Para confirmar, digite <span className="text-red-600 font-extrabold underline">EXCLUIR</span>:
+                    </label>
+                    <input 
+                      type="text" 
+                      value={deleteConfirmInput}
+                      onChange={e => setDeleteConfirmInput(e.target.value)}
+                      placeholder="EXCLUIR"
+                      className="w-full p-3 bg-red-50/50 border border-red-200 rounded-xl font-mono text-center text-sm font-bold text-red-800 focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setMerchantToDelete(null);
+                      setDeleteConfirmInput('');
+                    }}
+                    className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleConfirmDeleteMerchant}
+                    disabled={isDeletingMerchant || deleteConfirmInput.trim().toUpperCase() !== 'EXCLUIR'}
+                    className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-3 rounded-xl transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-md shadow-red-600/20"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{isDeletingMerchant ? 'Apagando dados...' : 'Apagar Tudo'}</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* FOOTER */}
         <div className="flex justify-between items-center pt-3 border-t border-gray-100 text-xs text-gray-400 shrink-0">

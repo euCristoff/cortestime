@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import { firebaseService } from '../services/firebaseService';
 import LogoIcon from './LogoIcon';
 import InstallCortestimeStep from './InstallCortestimeStep';
-import { Mail, Lock, Building2, User, Phone, Eye, EyeOff, Sparkles, ArrowLeft, BadgeAlert, Ticket, CheckCircle2, Gift, Star, Award, Check } from 'lucide-react';
+import OnboardingQuizStep from './OnboardingQuizStep';
+import { Mail, Lock, Building2, User, Phone, Eye, EyeOff, Sparkles, ArrowLeft, BadgeAlert, Ticket, CheckCircle2, Gift, Star, Award, Check, Scissors, Layers, Calendar, Users } from 'lucide-react';
 import { MerchantUser } from '../types';
 
 interface AuthPageProps {
@@ -20,7 +21,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
 
-  // New step for PWA Install after registration
+  // Steps after registration: interactive quiz and subscription
+  const [showQuizStep, setShowQuizStep] = useState<boolean>(false);
   const [showInstallStep, setShowInstallStep] = useState<boolean>(false);
   const [createdMerchant, setCreatedMerchant] = useState<MerchantUser | null>(null);
 
@@ -193,13 +195,41 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         const result = await firebaseService.handleRedirectResult();
         if (!result || !isMounted) return;
         
-        if (result.isNew) {
-          // New user! Transition to complete profile state
-          setGoogleUser(result.user);
-          setNomeProprietario(result.user.displayName || "");
-          setIsCompletingGoogleSignUp(true);
-        } else if (result.merchant) {
-          // Existing user, sign in successfully
+        if (result.isNew || (result.merchant && !result.merchant.onboardingCompleted)) {
+          const today = new Date();
+          const formatDate = (d: Date) => {
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+          };
+          const expiry = new Date();
+          expiry.setDate(today.getDate() + (trialDays || 7));
+
+          const newMerchant: MerchantUser = result.merchant || {
+            uid: result.user.uid,
+            nomeBarbearia: result.user.displayName ? `Barbearia de ${result.user.displayName}` : 'Minha Barbearia',
+            nomeProprietario: result.user.displayName || result.user.email?.split('@')[0] || 'Proprietário',
+            email: result.user.email || '',
+            whatsapp: '',
+            plano: 'pro_trial',
+            trialInicio: formatDate(today),
+            trialFim: formatDate(expiry),
+            status: 'ativo',
+            criadoEm: new Date().toISOString(),
+            onboardingCompleted: false
+          };
+
+          if (!result.merchant) {
+            firebaseService.saveMerchantProfile(newMerchant).catch(saveErr => {
+              console.warn("Erro ao salvar perfil do Google no redirect:", saveErr);
+            });
+          }
+
+          setCreatedMerchant(newMerchant);
+          setShowQuizStep(true);
+        } else if (result.merchant && result.merchant.onboardingCompleted) {
+          // Existing user with completed onboarding, sign in successfully
           onAuthSuccess(result.merchant);
         }
       } catch (err: any) {
@@ -215,7 +245,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     return () => {
       isMounted = false;
     };
-  }, [onAuthSuccess]);
+  }, [onAuthSuccess, trialDays]);
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -224,7 +254,12 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       // 1. Tenta popup diretamente para evitar perda de contexto e de redirecionamento em navegadores móveis (Safari iOS / Vercel)
       const result = await firebaseService.signInWithGooglePopup();
       if (result.merchant) {
-        onAuthSuccess(result.merchant);
+        if (!result.merchant.onboardingCompleted) {
+          setCreatedMerchant(result.merchant);
+          setShowQuizStep(true);
+        } else {
+          onAuthSuccess(result.merchant);
+        }
       } else if (result.user) {
         const today = new Date();
         const formatDate = (d: Date) => {
@@ -234,7 +269,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
           return `${dd}/${mm}/${yyyy}`;
         };
         const expiry = new Date();
-        expiry.setDate(today.getDate() + 7);
+        expiry.setDate(today.getDate() + (trialDays || 7));
 
         const newMerchant: MerchantUser = {
           uid: result.user.uid,
@@ -247,25 +282,39 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
           trialFim: formatDate(expiry),
           status: 'ativo',
           criadoEm: new Date().toISOString(),
-          onboardingCompleted: true
+          onboardingCompleted: false
         };
 
-        firebaseService.saveMerchantProfile(newMerchant).catch(saveErr => {
+        try {
+          await firebaseService.saveMerchantProfile(newMerchant);
+        } catch (saveErr) {
           console.warn("Erro ao salvar perfil do Google no popup:", saveErr);
-        });
-        onAuthSuccess(newMerchant);
+        }
+        
+        setCreatedMerchant(newMerchant);
+        setShowQuizStep(true);
       }
     } catch (err: any) {
+      const isPopupClosedByUser = 
+        err?.code === "auth/popup-closed-by-user" || 
+        err?.code === "auth/cancelled-popup-request" ||
+        (err?.message && err.message.includes("popup-closed-by-user")) ||
+        (err?.message && err.message.includes("cancelled-popup-request"));
+
+      if (isPopupClosedByUser) {
+        // Usuário apenas fechou ou cancelou o popup do Google voluntariamente. Não exibe erro na interface.
+        return;
+      }
+
       console.error("Google Auth error:", err);
-      let friendlyMessage = err.message || "Erro ao iniciar o login com o Google.";
+      let friendlyMessage = err?.message || "Erro ao iniciar o login com o Google.";
       
       if (
-        err.code === "auth/popup-blocked" || 
-        err.code === "auth/popup-closed-by-user" || 
-        (err.message && err.message.includes("popup-closed-by-user"))
+        err?.code === "auth/popup-blocked" || 
+        (err?.message && err.message.includes("popup-blocked"))
       ) {
         const isIframe = window.self !== window.top;
-        // Se falhou por popup bloqueado e não estamos dentro do iframe do editor, usa redirect como fallback
+        // Se falhou especificamente por popup bloqueado pelo navegador e não estamos dentro do iframe, tenta redirect
         if (!isIframe) {
           try {
             await firebaseService.signInWithGoogle();
@@ -274,8 +323,8 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
             console.error("Redirect fallback error:", redirectErr);
           }
         }
-        friendlyMessage = "O popup do Google foi fechado ou bloqueado pelo seu navegador. Tente novamente ou entre com E-mail e Senha.";
-      } else if (err.code === "auth/unauthorized-domain" || (err.message && err.message.includes("unauthorized-domain"))) {
+        friendlyMessage = "O popup do Google foi bloqueado pelo seu navegador. Por favor, permita popups para este site ou entre com E-mail e Senha.";
+      } else if (err?.code === "auth/unauthorized-domain" || (err?.message && err.message.includes("unauthorized-domain"))) {
         friendlyMessage = `unauthorized-domain:${window.location.hostname}`;
       }
       setError(friendlyMessage);
@@ -303,7 +352,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         trialDays
       );
       setCreatedMerchant(merchant);
-      setShowInstallStep(true);
+      setShowQuizStep(true);
     } catch (err: any) {
       console.error("Google save profile error:", err);
       setError(err.message || "Ocorreu um erro ao salvar seu perfil.");
@@ -316,9 +365,18 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
     setIsLoading(true);
     setError(null);
     try {
-      const merchant = await firebaseService.signUp(email, senha, nomeBarbearia, nomeProprietario, whatsapp, codigoConvite, trialDays);
+      const finalShopName = nomeBarbearia.trim() || draftVitrineInfo?.nomeBarbearia || 'Minha Barbearia';
+      const merchant = await firebaseService.signUp(
+        email, 
+        senha, 
+        finalShopName, 
+        nomeProprietario, 
+        whatsapp, 
+        codigoConvite, 
+        trialDays
+      );
       setCreatedMerchant(merchant);
-      setShowInstallStep(true);
+      setShowQuizStep(true);
     } catch (err: any) {
       console.error("SignUp error:", err);
       let friendlyMessage = err.message || "Ocorreu um erro ao realizar o cadastro.";
@@ -343,10 +401,15 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
         }
         setIsLoading(true);
         const merchant = await firebaseService.signIn(email, senha);
-        onAuthSuccess(merchant);
+        if (!merchant.onboardingCompleted) {
+          setCreatedMerchant(merchant);
+          setShowQuizStep(true);
+        } else {
+          onAuthSuccess(merchant);
+        }
       } else {
-        if (!email || !senha || !nomeBarbearia || !nomeProprietario || !whatsapp) {
-          throw new Error("Por favor, preencha todos os campos.");
+        if (!email || !senha || !nomeProprietario || !whatsapp) {
+          throw new Error("Por favor, preencha seu nome, WhatsApp, e-mail e senha.");
         }
         if (senha.length < 6) {
           throw new Error("A senha deve conter no mínimo 6 caracteres.");
@@ -383,6 +446,19 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
       if (isLogin) setIsLoading(false);
     }
   };
+
+  // If user completed initial registration, render the interactive quiz session
+  if (showQuizStep && createdMerchant) {
+    return (
+      <OnboardingQuizStep 
+        merchant={createdMerchant}
+        onComplete={(updated) => {
+          onAuthSuccess(updated);
+        }}
+        onBackToLanding={onBackToLanding}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-brand-dark flex flex-col justify-between py-6 px-4 relative overflow-hidden">
@@ -527,7 +603,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                   {isLogin ? 'Acesse sua barbearia' : 'Cadastre sua barbearia'}
                 </h2>
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mt-1.5">
-                  {isLogin ? 'Pronto para começar?' : `Teste grátis por ${trialDays} dias`}
+                  {isLogin ? 'Pronto para começar?' : 'Configure sua barbearia em poucos minutos'}
                 </p>
               </div>
 
@@ -536,27 +612,9 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                 {/* SIGNUP SPECIFIC FIELDS */}
                 {!isLogin && (
                   <>
-                    {/* Nome da barbearia */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-600">Nome da barbearia</label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
-                          <Building2 className="w-4 h-4" />
-                        </span>
-                        <input 
-                          type="text" 
-                          required
-                          value={nomeBarbearia}
-                          onChange={e => setNomeBarbearia(e.target.value)}
-                          placeholder="Ex: Barbearia do Bosque"
-                          className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-blue focus:outline-none transition-colors text-sm bg-gray-50"
-                        />
-                      </div>
-                    </div>
-
                     {/* Nome do proprietário */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-600">Nome do proprietário</label>
+                      <label className="text-xs font-bold text-gray-600">Seu Nome Completo</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
                           <User className="w-4 h-4" />
@@ -574,7 +632,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
 
                     {/* WhatsApp */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-600">WhatsApp</label>
+                      <label className="text-xs font-bold text-gray-600">WhatsApp / Celular</label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
                           <Phone className="w-4 h-4" />
@@ -685,7 +743,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
                   ) : (
                     <>
                       {!isLogin && <Sparkles className="w-4 h-4 text-brand-lime" />}
-                      <span>{isLogin ? 'Entrar no Sistema' : 'Criar minha conta'}</span>
+                      <span>{isLogin ? 'Entrar no Sistema' : 'Continuar para o Quiz →'}</span>
                     </>
                   )}
                 </button>
@@ -785,7 +843,7 @@ export default function AuthPage({ onAuthSuccess, onBackToLanding, initialMode =
               <ul className="space-y-2.5 text-xs text-gray-700 font-semibold">
                 <li className="flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span><strong>7 dias</strong> de Agenda Pro (Cortestime)</span>
+                  <span>Acesso completo à <strong>Agenda Pro (Cortestime)</strong></span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />

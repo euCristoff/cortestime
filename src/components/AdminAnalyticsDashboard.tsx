@@ -47,7 +47,8 @@ import {
   MessageCircle,
   Tag,
   Share2,
-  Compass
+  Compass,
+  Trash2
 } from 'lucide-react';
 import { 
   MerchantUser, 
@@ -107,6 +108,11 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
 
   // Individual Merchant View Modal
   const [selectedMerchantSummary, setSelectedMerchantSummary] = useState<MerchantAnalyticsSummary | null>(null);
+
+  // Delete Merchant Account Modal State
+  const [merchantToDelete, setMerchantToDelete] = useState<MerchantUser | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>('');
+  const [isDeletingMerchant, setIsDeletingMerchant] = useState<boolean>(false);
 
   // Super Admin Email Check
   const isSuperAdminEmail = (email?: string): boolean => {
@@ -223,6 +229,46 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
       sessionStorage.setItem('cortestime_admin_verified', 'true');
     } else {
       setAuthError('Senha de administrador incorreta. Acesso não autorizado.');
+    }
+  };
+
+  const handleConfirmDeleteMerchant = async () => {
+    if (!merchantToDelete) return;
+    if (deleteConfirmInput.trim().toUpperCase() !== 'EXCLUIR') {
+      alert('Por favor, digite EXCLUIR para confirmar a exclusão permanente.');
+      return;
+    }
+
+    setIsDeletingMerchant(true);
+    try {
+      const targetName = merchantToDelete.nomeBarbearia || 'Barbearia';
+      const targetUid = merchantToDelete.uid;
+
+      await firebaseService.deleteMerchantAccount(targetUid);
+
+      setMerchants(prev => prev.filter(m => m.uid !== targetUid));
+      if (selectedMerchantSummary?.merchant.uid === targetUid) {
+        setSelectedMerchantSummary(null);
+      }
+
+      alert(`Conta de "${targetName}" e todos os seus dados foram permanentemente apagados do Firebase!`);
+
+      // If the admin deleted their own account for testing
+      if (currentMerchant?.uid === targetUid) {
+        alert(`Sua conta de teste foi apagada com sucesso. A página será reiniciada.`);
+        localStorage.clear();
+        window.location.href = window.location.origin;
+        return;
+      }
+
+      setMerchantToDelete(null);
+      setDeleteConfirmInput('');
+      loadData();
+    } catch (e: any) {
+      console.error("Error deleting merchant in analytics dashboard:", e);
+      alert(`Erro ao excluir conta: ${e?.message || 'Tente novamente'}`);
+    } finally {
+      setIsDeletingMerchant(false);
     }
   };
 
@@ -1278,15 +1324,29 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
                           </span>
                         </td>
 
-                        {/* Ações: Ver Raio-X */}
+                        {/* Ações: Ver Raio-X & Apagar */}
                         <td className="py-3.5 px-4 text-center">
-                          <button
-                            onClick={() => setSelectedMerchantSummary(summary)}
-                            className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 mx-auto active:scale-95"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            Raio-X
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setSelectedMerchantSummary(summary)}
+                              className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                              title="Ver Raio-X de Atividade"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Raio-X</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMerchantToDelete(m);
+                                setDeleteConfirmInput('');
+                              }}
+                              className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                              title="Apagar permanentemente a conta e dados desta barbearia"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Apagar</span>
+                            </button>
+                          </div>
                         </td>
 
                       </tr>
@@ -1452,15 +1512,111 @@ export default function AdminAnalyticsDashboard({ currentMerchant, onClose }: Ad
               </div>
 
               {/* Modal Footer */}
-              <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end">
+              <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    if (selectedMerchantSummary) {
+                      setMerchantToDelete(selectedMerchantSummary.merchant);
+                      setDeleteConfirmInput('');
+                    }
+                  }}
+                  className="px-4 py-2 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Apagar Barbearia</span>
+                </button>
+
                 <button
                   onClick={() => setSelectedMerchantSummary(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
                   Fechar Raio-X
                 </button>
               </div>
 
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 7. MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE CONTA */}
+      <AnimatePresence>
+        {merchantToDelete && (
+          <div id="analytics-delete-merchant-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-900 border border-red-500/40 rounded-2xl w-full max-w-md shadow-2xl p-6 text-slate-100 space-y-4"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 className="text-base font-extrabold text-red-400 flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-red-500" />
+                  <span>Apagar Barbearia do Firebase</span>
+                </h3>
+                <button
+                  onClick={() => {
+                    setMerchantToDelete(null);
+                    setDeleteConfirmInput('');
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-white bg-slate-800 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-slate-300">
+                <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-3 space-y-1">
+                  <p className="font-bold text-white text-sm">
+                    {merchantToDelete.nomeBarbearia || 'Sem Nome'}
+                  </p>
+                  <p className="text-[11px] text-red-300">
+                    Proprietário: {merchantToDelete.nomeProprietario || 'N/I'} • {merchantToDelete.email}
+                  </p>
+                </div>
+
+                <p className="leading-relaxed">
+                  Esta ação excluirá <strong>permanentemente todos os registros</strong> associados (serviços, agendamentos, clientes, fila e vitrine) do banco de dados.
+                </p>
+                <p className="text-slate-400 italic">
+                  💡 Liberará o e-mail e dados para você poder refazer o cadastro do zero e testar o sistema.
+                </p>
+
+                <div className="pt-2">
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    Para confirmar, digite <span className="text-red-400 font-black underline">EXCLUIR</span> abaixo:
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmInput}
+                    onChange={e => setDeleteConfirmInput(e.target.value)}
+                    placeholder="EXCLUIR"
+                    className="w-full p-3 bg-slate-950 border border-red-500/50 rounded-xl font-mono text-center text-sm font-bold text-red-400 focus:outline-none focus:border-red-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMerchantToDelete(null);
+                    setDeleteConfirmInput('');
+                  }}
+                  className="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs py-3 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteMerchant}
+                  disabled={isDeletingMerchant || deleteConfirmInput.trim().toUpperCase() !== 'EXCLUIR'}
+                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-3 rounded-xl transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-lg shadow-red-900/30"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isDeletingMerchant ? 'Apagando...' : 'Apagar Tudo'}</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

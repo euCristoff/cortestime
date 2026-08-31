@@ -27,7 +27,7 @@ interface LandingPageProps {
   trialDays?: number;
 }
 
-export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, currentMerchant, trialDays = 7 }: LandingPageProps) {
+export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, currentMerchant }: LandingPageProps) {
   return (
     <div id="landing-page" className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1E1E1E] overflow-x-hidden">
       
@@ -80,9 +80,9 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
                 whileTap={{ scale: 0.96 }}
                 onClick={onStartTrial}
                 className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-xs md:text-sm px-5 py-2.5 rounded-full transition-colors uppercase tracking-wider cursor-pointer shadow-sm relative overflow-hidden"
-                id="btn-landing-teste-gratis"
+                id="btn-landing-cadastrar"
               >
-                Teste Grátis
+                Cadastrar Barbearia
               </motion.button>
             </>
           )}
@@ -120,7 +120,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
             transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col sm:flex-row gap-4 mt-2 relative inline-flex items-start"
           >
-            {/* Ambient Pulsing Glow Animation around the 7-day Button */}
+            {/* Ambient Pulsing Glow Animation around the CTA Button */}
             <motion.div 
               animate={{ 
                 scale: [1, 1.06, 1],
@@ -147,6 +147,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
               whileTap={{ scale: 0.96 }}
               onClick={currentMerchant ? onLogin : onStartTrial}
               className="bg-brand-lime hover:bg-brand-lime-dark text-brand-dark font-extrabold text-sm sm:text-base px-8 py-4 rounded-full shadow-xl shadow-brand-lime/30 hover:shadow-brand-lime/50 transition-all text-center uppercase tracking-wide cursor-pointer flex items-center justify-center gap-2 relative overflow-hidden group border border-brand-lime-dark/20"
+              id="btn-hero-cta"
             >
               {/* Sweeping light shimmer wave animation */}
               <motion.div 
@@ -161,7 +162,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
                   <span>Acessar Meu Painel</span>
                 </>
               ) : (
-                <span className="relative z-10">{`Teste Grátis por ${trialDays} dias`}</span>
+                <span className="relative z-10">Cadastrar Minha Barbearia</span>
               )}
             </motion.button>
           </motion.div>
@@ -565,7 +566,7 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
             Pronto para transformar a gestão da sua barbearia?
           </h3>
           <p className="text-gray-400 text-xs sm:text-sm max-w-lg mx-auto">
-            Cadastre sua barbearia hoje mesmo. Não precisa de cartão de crédito. Teste grátis com acesso a todos os recursos.
+            Cadastre sua barbearia hoje mesmo. Sistema completo para gerenciar agendamentos, clientes e finanças.
           </p>
           <div>
             <motion.button 
@@ -573,8 +574,9 @@ export default function LandingPage({ onStartTrial, onLogin, firebaseConnected, 
               whileTap={{ scale: 0.96 }}
               onClick={onStartTrial}
               className="bg-brand-blue hover:bg-brand-blue-light text-white font-bold text-sm px-8 py-3.5 rounded-full transition-colors uppercase tracking-wider cursor-pointer shadow-lg shadow-brand-blue/20"
+              id="btn-footer-cadastrar"
             >
-              Começar Teste de {trialDays} Dias
+              Começar Agora
             </motion.button>
           </div>
           <div className="pt-6 border-t border-gray-800 text-[11px] text-gray-500">

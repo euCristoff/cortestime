@@ -1323,10 +1323,11 @@ export default function MerchantDashboard({
     setIsDeletingAccount(true);
     try {
       if (merchant?.uid) {
-        await firebaseService.updateMerchantProfile(merchant.uid, { status: 'inativo' });
+        await firebaseService.deleteMerchantAccount(merchant.uid);
       }
-      alert('Sua conta foi desativada com sucesso.');
+      alert('Sua conta e todos os dados foram apagados com sucesso. Você pode criar um novo cadastro.');
       setShowDeleteAccountModal(false);
+      localStorage.clear();
       onLogout();
     } catch (err) {
       alert('Erro ao excluir conta.');
@@ -1700,8 +1701,8 @@ export default function MerchantDashboard({
               </span>
               <span className="text-xs">
                 {getTrialDaysLeft() >= 6 
-                  ? 'Bem-vindo ao Cortestime! Seu período de teste de 7 dias grátis começou hoje. Aproveite!'
-                  : `Teste Grátis Ativo: Você possui ${getTrialDaysLeft()} dias restantes para testar todos os recursos do sistema.`
+                  ? 'Bem-vindo ao Cortestime! Sua conta e sua agenda estão prontas para turbinar sua barbearia.'
+                  : `Plano Pro Ativo: Você possui ${getTrialDaysLeft()} dias restantes no seu ciclo atual.`
                 }
               </span>
             </div>
@@ -1735,10 +1736,10 @@ export default function MerchantDashboard({
                 </h2>
                 <p className="text-xs text-gray-400">
                   {merchant?.whatsapp 
-                    ? `WhatsApp: ${merchant.whatsapp} • Plano: ${merchant.plano === 'pro' ? 'Premium 💎' : `Teste Grátis (${getTrialDaysLeft()} dias restantes)`}` 
+                    ? `WhatsApp: ${merchant.whatsapp} • Plano: ${merchant.plano === 'pro' ? 'Premium 💎' : merchant.plano === 'vitrine' ? 'Cortes Vitrine' : 'Cortestime Pro'}` 
                     : (onboardingData.cep && onboardingData.street)
                     ? `CEP: ${onboardingData.cep} • ${onboardingData.street}${onboardingData.number ? `, ${onboardingData.number}` : ''}` 
-                    : `Plano: ${merchant?.plano === 'pro' ? 'Premium 💎' : `Teste Grátis (${getTrialDaysLeft()} dias restantes)`}`
+                    : `Plano: ${merchant?.plano === 'pro' ? 'Premium 💎' : merchant?.plano === 'vitrine' ? 'Cortes Vitrine' : 'Cortestime Pro'}`
                   }
                 </p>
               </div>
@@ -4455,12 +4456,14 @@ export default function MerchantDashboard({
                     Plano Ativo
                   </span>
                   <h3 className="font-display font-extrabold text-2xl text-white mt-2">
-                    {merchant?.plano === 'pro' ? 'Cortestime Pro 💎' : 'Período de Teste Grátis (Agenda Pro)'}
+                    {merchant?.plano === 'pro' ? 'Cortestime Pro 💎' : merchant?.plano === 'vitrine' ? 'Cortes Vitrine Gratuita' : 'Cortestime Pro'}
                   </h3>
                   <p className="text-xs text-gray-300 mt-1">
                     {merchant?.plano === 'pro' 
                       ? 'Sua assinatura inclui agenda ilimitada, vitrine virtual e suporte VIP.' 
-                      : `Faltam ${getTrialDaysLeft()} dias para o término do seu teste grátis.`
+                      : merchant?.plano === 'vitrine'
+                      ? 'Sua vitrine online com cardápio de serviços e link direto para agendamento no WhatsApp.'
+                      : `Acesso ativo aos recursos avançados de agendamento online.`
                     }
                   </p>
                 </div>
@@ -5843,7 +5846,7 @@ export default function MerchantDashboard({
                 <ul className="space-y-2 text-xs text-gray-700 font-semibold">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span><strong>7 dias</strong> de Agenda Pro (Cortestime)</span>
+                    <span>Acesso completo à <strong>Agenda Pro (Cortestime)</strong></span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
